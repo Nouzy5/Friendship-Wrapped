@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { Avatar } from "../components/ui/Avatar";
 import { Card } from "../components/ui/Card";
 import { SettingsIcon } from "../components/ui/icons";
-import { PageHeader } from "../components/ui/PageHeader";
+import { headerIconLinkClasses, PageHeader } from "../components/ui/PageHeader";
 import { useCurrentUser } from "../features/auth/hooks";
 import { EditProfileForm } from "../features/profile/components/EditProfileForm";
 import { formatMonthYear } from "../lib/format";
@@ -15,11 +15,7 @@ export function ProfilePage() {
       <PageHeader
         title="Profile"
         action={
-          <Link
-            to="/settings"
-            aria-label="Settings"
-            className="-mr-2 grid size-10 place-items-center rounded-full text-ink-200 transition hover:bg-ink-800 hover:text-ink-50"
-          >
+          <Link to="/settings" aria-label="Settings" className={headerIconLinkClasses}>
             <SettingsIcon className="size-5" />
           </Link>
         }

@@ -39,7 +39,12 @@ export function RedirectIfAuthenticated() {
   const location = useLocation();
 
   if (session.isPending) return <FullScreenLoader />;
-  if (session.data) return <Navigate to={postLoginPath(location.state)} replace />;
+
+  if (session.data) {
+    // Brand-new accounts start at onboarding unless they came from somewhere specific.
+    const fallback = location.pathname === "/auth/register" ? "/onboarding" : "/home";
+    return <Navigate to={postLoginPath(location.state, fallback)} replace />;
+  }
 
   return <Outlet />;
 }

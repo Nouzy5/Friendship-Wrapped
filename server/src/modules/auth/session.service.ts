@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { generateToken, sha256Hex } from "../../lib/tokens.js";
 import type { PublicUser } from "../users/user.dto.js";
 import * as sessionRepository from "./session.repository.js";
 
@@ -21,11 +21,11 @@ export type ActiveSession = {
 
 /** Only the hash is stored, so a database leak doesn't expose usable session tokens. */
 export function hashSessionToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
+  return sha256Hex(token);
 }
 
 export async function issueSession(userId: string): Promise<IssuedSession> {
-  const token = randomBytes(32).toString("base64url");
+  const token = generateToken(32);
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
   await sessionRepository.createSession({ id: hashSessionToken(token), userId, expiresAt });
   return { token, expiresAt };

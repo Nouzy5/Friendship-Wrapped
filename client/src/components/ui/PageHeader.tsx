@@ -3,7 +3,8 @@ import { Link } from "react-router";
 import { ChevronLeftIcon } from "./icons";
 
 type PageHeaderProps = {
-  title: string;
+  /** Omit when the page renders its own <h1> (e.g. a hero). */
+  title?: string;
   backTo?: string;
   backLabel?: string;
   /** Optional control on the right, e.g. an icon link. */
@@ -22,8 +23,12 @@ export function PageHeader({ title, backTo, backLabel = "Back", action }: PageHe
           <ChevronLeftIcon className="size-5" />
         </Link>
       )}
-      <h1 className="flex-1 text-2xl font-bold tracking-tight">{title}</h1>
+      {title ? <h1 className="flex-1 text-2xl font-bold tracking-tight">{title}</h1> : <div className="flex-1" />}
       {action}
     </div>
   );
 }
+
+/** Round icon link used in page headers (settings, etc.). */
+export const headerIconLinkClasses =
+  "-mr-2 grid size-10 place-items-center rounded-full text-ink-200 transition hover:bg-ink-800 hover:text-ink-50";

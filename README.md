@@ -10,8 +10,8 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | --- | --- | --- |
 | 1 | Foundation: repo, React/TS/Tailwind, Express, Prisma, MySQL, config, errors | ✅ Done |
 | 2 | Authentication: register, login, logout, sessions, protected routes, profile | ✅ Done |
-| 3 | Groups & invites | ⏳ Next |
-| 4 | Photos (camera, upload, processing, object storage) | — |
+| 3 | Groups & invites: create, invite links, join, leave, members, owner permissions | ✅ Done |
+| 4 | Photos (camera, upload, processing, object storage) | ⏳ Next |
 | 5 | Feed | — |
 | 6 | Reactions, comments, favorites | — |
 | 7 | Memories (timeline, albums, On This Day) | — |
@@ -108,7 +108,7 @@ server/
   prisma.config.ts    Prisma CLI config (connection URL, paths)
   src/
     config/env.ts     Zod-validated environment
-    lib/              prisma client, errors (AppError), logger, password hashing
+    lib/              prisma client + withTransaction, errors (AppError), logger, password hashing, tokens
     middleware/       error handler, 404, request logging, rate limit, same-origin check
     modules/<name>/   .routes → .controller → .service → .repository (+ .schemas for Zod)
     routes/index.ts   Mounts module routers under /api
@@ -148,6 +148,36 @@ server/
 | `GET` | `/api/health` | — | API and database status |
 
 Profile pictures arrive with object storage in Phase 4; until then avatars show initials. Account deletion will be added once photos and comments exist, so its policy can cover them.
+
+## Groups
+
+- **Roles.** `group_members.role` is the single source of truth: each group has exactly one `OWNER`, and everyone else is a `MEMBER`.
+  - **Owner only:** rename the group or change its emoji, remove members, reset invite links.
+  - **Any member:** see members, create invite links, leave.
+- **Privacy.** Every group endpoint checks membership on the server (`requireMembership` / `requireOwner` in `groups.service.ts`). Non-members get a **404**, never a 403, so they can't tell a group exists. New features scoped to a group (photos and so on) must go through the same check.
+- **Invite links.** `/invite/<token>`: 128 random bits, valid for 7 days, and only the token's SHA-256 is stored, so a link can't be shown again later. Members just create a new one. The link is the credential:
+  - Anyone holding it can see a preview (name, emoji, member count) without an account, then sign up or log in and come back to join.
+  - Accepting twice is harmless.
+  - Links stop working if the owner resets them, or if the person who created them leaves or is removed.
+- **Leaving** runs in a serializable transaction (`withTransaction`) so the one-owner rule always holds:
+  - If the owner leaves, ownership passes to the longest-standing member.
+  - If the last member leaves, the group is deleted.
+- **Onboarding.** New accounts land on `/onboarding` to create their first group. People who signed up from an invite link go straight back to it.
+- `GROUPS` is a reserved word in MySQL 8. Prisma quotes it, but write it as `` `groups` `` in any raw SQL.
+
+| Method | Endpoint | Who | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/groups` | signed in | Your groups |
+| `POST` | `/api/groups` | signed in | Create a group (you become owner) |
+| `GET` | `/api/groups/:groupId` | member | Group details + your role |
+| `PATCH` | `/api/groups/:groupId` | owner | Rename / change emoji |
+| `GET` | `/api/groups/:groupId/members` | member | Member list (owner first) |
+| `DELETE` | `/api/groups/:groupId/members/:userId` | owner | Remove a member |
+| `POST` | `/api/groups/:groupId/leave` | member | Leave (returns `{ groupDeleted }`) |
+| `POST` | `/api/groups/:groupId/invites` | member | Create an invite link |
+| `DELETE` | `/api/groups/:groupId/invites` | owner | Reset (revoke) all invite links |
+| `GET` | `/api/invites/:token` | anyone with the link | Preview the group |
+| `POST` | `/api/invites/:token/accept` | signed in | Join the group |
 
 ## Local machine notes
 
