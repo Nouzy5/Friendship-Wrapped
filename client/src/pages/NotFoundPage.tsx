@@ -3,8 +3,9 @@ import { StateMessage } from "../components/ui/StateMessage";
 
 export function NotFoundPage() {
   return (
-    <div className="flex flex-1 items-center justify-center">
+    <main className="flex min-h-dvh items-center justify-center px-4">
       <StateMessage
+        headingLevel="h1"
         emoji="🧭"
         title="Page not found"
         description="This page doesn't exist, or it may have moved."
@@ -14,6 +15,6 @@ export function NotFoundPage() {
           </Link>
         }
       />
-    </div>
+    </main>
   );
 }

@@ -1,5 +1,6 @@
 // Prisma schema for Friendship Wrapped.
 // Connection settings live in ../prisma.config.ts; models are added phase by phase.
+// Tables and columns use snake_case in MySQL; Prisma fields stay camelCase.
 
 generator client {
   provider = "prisma-client"
@@ -8,4 +9,31 @@ generator client {
 
 datasource db {
   provider = "mysql"
+}
+
+model User {
+  /// UUIDv7: time-ordered (InnoDB-friendly) and not guessable/enumerable in URLs.
+  id           String    @id @default(uuid(7)) @db.Char(36)
+  /// Always stored lowercase; uniqueness is enforced by the database.
+  username     String    @unique @db.VarChar(20)
+  displayName  String    @map("display_name") @db.VarChar(40)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  sessions     Session[]
+
+  @@map("users")
+}
+
+model Session {
+  /// SHA-256 (hex) of the session token. The raw token only ever lives in the user's cookie.
+  id        String   @id @db.Char(64)
+  userId    String   @map("user_id") @db.Char(36)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }

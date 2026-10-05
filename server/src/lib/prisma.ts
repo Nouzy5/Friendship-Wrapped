@@ -1,6 +1,6 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { env } from "../config/env.js";
-import { PrismaClient } from "../generated/prisma/client.js";
+import { Prisma, PrismaClient } from "../generated/prisma/client.js";
 
 function createPrismaClient(): PrismaClient {
   const url = new URL(env.DATABASE_URL);
@@ -24,3 +24,8 @@ function createPrismaClient(): PrismaClient {
 }
 
 export const prisma = createPrismaClient();
+
+/** True when a write failed because it would violate a unique index. */
+export function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
