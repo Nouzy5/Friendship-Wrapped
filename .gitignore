@@ -19,9 +19,10 @@ server/src/generated/
 coverage/
 .vite/
 
-# OS / editors
+# OS / editors / local AI tooling
 .DS_Store
 Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+.claude/
