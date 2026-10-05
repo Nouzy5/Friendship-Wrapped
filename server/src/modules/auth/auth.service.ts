@@ -1,7 +1,7 @@
 import { AppError } from "../../lib/errors.js";
 import { hashPassword, verifyDummyPassword, verifyPassword } from "../../lib/password.js";
 import { isUniqueConstraintError } from "../../lib/prisma.js";
-import type { PublicUser } from "../users/user.dto.js";
+import { toPublicUser, type PublicUser } from "../users/user.dto.js";
 import * as usersRepository from "../users/users.repository.js";
 import type { LoginInput, RegisterInput } from "./auth.schemas.js";
 import { issueSession, pruneExpiredSessions, revokeSession, type IssuedSession } from "./session.service.js";
@@ -13,11 +13,13 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
 
   let user: PublicUser;
   try {
-    user = await usersRepository.createUser({
-      username: input.username,
-      displayName: input.displayName,
-      passwordHash,
-    });
+    user = toPublicUser(
+      await usersRepository.createUser({
+        username: input.username,
+        displayName: input.displayName,
+        passwordHash,
+      }),
+    );
   } catch (error) {
     if (isUniqueConstraintError(error)) {
       throw new AppError(409, "USERNAME_TAKEN", "That username is already taken", [
@@ -42,7 +44,8 @@ export async function login(input: LoginInput): Promise<AuthResult> {
     throw new AppError(401, "INVALID_CREDENTIALS", "Incorrect username or password");
   }
 
-  const { passwordHash: _passwordHash, ...user } = credentials;
+  const { passwordHash: _passwordHash, ...row } = credentials;
+  const user = toPublicUser(row);
   await pruneExpiredSessions(user.id);
 
   return { user, session: await issueSession(user.id) };

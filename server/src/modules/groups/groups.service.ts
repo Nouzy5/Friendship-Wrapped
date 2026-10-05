@@ -1,7 +1,9 @@
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { prisma, withTransaction, type DbClient } from "../../lib/prisma.js";
+import * as storage from "../../lib/storage.js";
 import * as invitesRepository from "../invites/invites.repository.js";
-import { toGroupView, type GroupMemberView, type GroupView } from "./group.dto.js";
+import { groupStoragePrefix } from "../photos/photo-keys.js";
+import { toGroupMemberView, toGroupView, type GroupMemberView, type GroupView } from "./group.dto.js";
 import * as groupsRepository from "./groups.repository.js";
 import type { CreateGroupInput, UpdateGroupInput } from "./groups.schemas.js";
 
@@ -45,7 +47,8 @@ export async function updateGroup(groupId: string, userId: string, input: Update
 
 export async function listMembers(groupId: string, userId: string): Promise<GroupMemberView[]> {
   await requireMembership(groupId, userId);
-  return groupsRepository.listMembers(groupId);
+  const members = await groupsRepository.listMembers(groupId);
+  return members.map(toGroupMemberView);
 }
 
 /** Owner-only. Invite links the removed member created stop working too. */
@@ -64,16 +67,17 @@ export async function removeMember(groupId: string, ownerId: string, memberId: s
 
 /**
  * Leaving keeps the "exactly one owner" invariant: an owner's role passes to the
- * longest-standing member, and a group whose last member leaves is deleted.
+ * longest-standing member, and a group whose last member leaves is deleted. Photos
+ * stay with the group when someone leaves; they're deleted only with the group itself.
  */
 export async function leaveGroup(groupId: string, userId: string): Promise<{ groupDeleted: boolean }> {
-  return withTransaction(async (tx) => {
+  const result = await withTransaction(async (tx) => {
     const membership = await requireMembership(groupId, userId, tx);
 
     if (membership.role === "OWNER") {
       const successor = await groupsRepository.findSuccessor(groupId, userId, tx);
       if (!successor) {
-        await groupsRepository.deleteGroup(groupId, tx); // cascades to memberships and invites
+        await groupsRepository.deleteGroup(groupId, tx); // cascades to memberships, invites and photos
         return { groupDeleted: true };
       }
       await groupsRepository.setMemberRole(groupId, successor.userId, "OWNER", tx);
@@ -83,4 +87,8 @@ export async function leaveGroup(groupId: string, userId: string): Promise<{ gro
     await invitesRepository.deleteInvitesCreatedBy(groupId, userId, tx);
     return { groupDeleted: false };
   });
+
+  // The rows are gone; now remove the group's image files.
+  if (result.groupDeleted) await storage.discardPrefix(groupStoragePrefix(groupId));
+  return result;
 }

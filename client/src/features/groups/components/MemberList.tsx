@@ -17,7 +17,7 @@ export function MemberList({ members, currentUserId, onRemove }: MemberListProps
         const isYou = member.user.id === currentUserId;
         return (
           <li key={member.user.id} className="flex items-center gap-3 py-3">
-            <Avatar name={member.user.displayName} seed={member.user.id} />
+            <Avatar name={member.user.displayName} seed={member.user.id} src={member.user.avatarUrl} />
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium text-ink-50">
                 {member.user.displayName}

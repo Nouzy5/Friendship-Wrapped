@@ -6,6 +6,7 @@ export type HealthReport = {
   timestamp: string;
   checks: {
     database: { status: "ok"; latencyMs: number };
+    storage: { status: "ok"; latencyMs: number };
   };
 };
 

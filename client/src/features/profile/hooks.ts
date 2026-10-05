@@ -1,11 +1,37 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { sessionQueryKey } from "../../lib/query-client";
-import { updateProfile } from "./api";
+import type { User } from "../auth/types";
+import { groupKeys } from "../groups/hooks";
+import { photoKeys } from "../photos/hooks";
+import { removeAvatar, updateProfile, uploadAvatar } from "./api";
+
+/** Your name and picture appear in member lists and on photos too, so refresh those. */
+function applyUpdatedUser(queryClient: QueryClient, user: User) {
+  queryClient.setQueryData(sessionQueryKey, user);
+  void queryClient.invalidateQueries({ queryKey: groupKeys.all });
+  void queryClient.invalidateQueries({ queryKey: photoKeys.all });
+}
 
 export function useUpdateProfile() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: updateProfile,
-    onSuccess: (user) => queryClient.setQueryData(sessionQueryKey, user),
+    onSuccess: (user) => applyUpdatedUser(queryClient, user),
+  });
+}
+
+export function useUploadAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: uploadAvatar,
+    onSuccess: (user) => applyUpdatedUser(queryClient, user),
+  });
+}
+
+export function useRemoveAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: removeAvatar,
+    onSuccess: (user) => applyUpdatedUser(queryClient, user),
   });
 }

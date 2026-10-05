@@ -1,18 +1,19 @@
 import { Link } from "react-router";
-import { Card } from "../components/ui/Card";
 import { SettingsIcon } from "../components/ui/icons";
 import { headerIconLinkClasses, PageHeader } from "../components/ui/PageHeader";
-import { StateMessage } from "../components/ui/StateMessage";
 import { GroupEmoji } from "../features/groups/components/GroupEmoji";
 import { useGroupContext } from "../features/groups/components/GroupRoute";
 import { MemberAvatars } from "../features/groups/components/MemberAvatars";
 import { useGroupMembers } from "../features/groups/hooks";
 import { InviteFriendsCard } from "../features/invites/components/InviteFriendsCard";
+import { GroupPhotos } from "../features/photos/components/GroupPhotos";
 import { formatMemberCount } from "../lib/format";
 
 export function GroupPage() {
   const group = useGroupContext();
   const members = useGroupMembers(group.id);
+  const alone = group.memberCount === 1;
+  const invite = <InviteFriendsCard group={group} highlight={alone} />;
 
   return (
     <div className="flex flex-col gap-6 py-2">
@@ -38,11 +39,10 @@ export function GroupPage() {
         </Link>
       </section>
 
-      <InviteFriendsCard group={group} highlight={group.memberCount === 1} />
-
-      <Card>
-        <StateMessage emoji="📸" title="No photos yet" description="Photos shared with this group will show up here." />
-      </Card>
+      {/* Inviting comes first until there's someone to share photos with. */}
+      {alone && invite}
+      <GroupPhotos groupId={group.id} />
+      {!alone && invite}
     </div>
   );
 }

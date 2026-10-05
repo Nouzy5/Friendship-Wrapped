@@ -4,6 +4,7 @@ import { GroupRoute } from "./features/groups/components/GroupRoute";
 import { AppLayout } from "./layouts/AppLayout";
 import { CardLayout } from "./layouts/CardLayout";
 import { RootLayout } from "./layouts/RootLayout";
+import { CameraPage } from "./pages/CameraPage";
 import { GroupMembersPage } from "./pages/GroupMembersPage";
 import { GroupPage } from "./pages/GroupPage";
 import { GroupSettingsPage } from "./pages/GroupSettingsPage";
@@ -13,6 +14,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { NewGroupPage } from "./pages/NewGroupPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
+import { PhotoPage } from "./pages/PhotoPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { RouteErrorPage } from "./pages/RouteErrorPage";
@@ -54,6 +56,8 @@ export const router = createBrowserRouter([
               { path: "onboarding", element: <OnboardingPage /> },
               { path: "profile", element: <ProfilePage /> },
               { path: "settings", element: <SettingsPage /> },
+              { path: "camera", element: <CameraPage /> },
+              { path: "photos/:photoId", element: <PhotoPage /> },
               { path: "groups/new", element: <NewGroupPage /> },
               {
                 path: "groups/:groupId",

@@ -33,6 +33,7 @@ describe("POST /api/auth/register", () => {
         id: expect.any(String),
         username: "alice",
         displayName: "Alice",
+        avatarUrl: null,
         createdAt: expect.any(String),
       },
     });

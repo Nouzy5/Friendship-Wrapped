@@ -1,3 +1,5 @@
+import type { UserSummary } from "../auth/types";
+
 export type GroupRole = "OWNER" | "MEMBER";
 
 /** A group as seen by the signed-in member. */
@@ -11,7 +13,7 @@ export type Group = {
 };
 
 export type GroupMember = {
-  user: { id: string; username: string; displayName: string };
+  user: UserSummary;
   role: GroupRole;
   joinedAt: string;
 };

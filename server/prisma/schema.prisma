@@ -18,11 +18,14 @@ model User {
   username     String    @unique @db.VarChar(20)
   displayName  String    @map("display_name") @db.VarChar(40)
   passwordHash String    @map("password_hash") @db.VarChar(255)
+  /// Object-storage key of the profile picture; null shows initials instead.
+  avatarKey    String?   @map("avatar_key") @db.VarChar(255)
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   sessions     Session[]
   memberships  GroupMember[]
   invites      InviteToken[]
+  photos       Photo[]
 
   @@map("users")
 }
@@ -55,6 +58,7 @@ model Group {
   updatedAt DateTime      @updatedAt @map("updated_at")
   members   GroupMember[]
   invites   InviteToken[]
+  photos    Photo[]
 
   @@map("groups")
 }
@@ -86,4 +90,31 @@ model InviteToken {
   @@index([groupId])
   @@index([createdById])
   @@map("invite_tokens")
+}
+
+/// A photo shared with one group. The image bytes live in object storage; only their keys are stored here.
+model Photo {
+  id           String   @id @default(uuid(7)) @db.Char(36)
+  groupId      String   @map("group_id") @db.Char(36)
+  uploaderId   String   @map("uploader_id") @db.Char(36)
+  caption      String?  @db.VarChar(500)
+  /// Full-size rendition (the original upload is not kept).
+  storageKey   String   @map("storage_key") @db.VarChar(255)
+  mediumKey    String   @map("medium_key") @db.VarChar(255)
+  thumbnailKey String   @map("thumbnail_key") @db.VarChar(255)
+  /// Pixel size of the full-size rendition.
+  width        Int
+  height       Int
+  /// Byte size of the full-size rendition.
+  sizeBytes    Int      @map("size_bytes")
+  /// Upload time.
+  createdAt    DateTime @default(now()) @map("created_at")
+  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  /// Restrict: what happens to someone's photos when they delete their account is decided with that feature.
+  uploader     User     @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
+
+  /// Newest-first group listing with a (createdAt, id) keyset cursor.
+  @@index([groupId, createdAt, id])
+  @@index([uploaderId, createdAt])
+  @@map("photos")
 }

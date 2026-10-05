@@ -10,16 +10,17 @@ afterAll(async () => {
 });
 
 describe("GET /api/health", () => {
-  it("reports the API and database as healthy", async () => {
+  it("reports the API, database and object storage as healthy", async () => {
     const res = await request(app).get("/api/health");
 
     expect(res.status).toBe(200);
     expect(res.headers["cache-control"]).toBe("no-store");
     expect(res.body).toMatchObject({
       status: "ok",
-      checks: { database: { status: "ok" } },
+      checks: { database: { status: "ok" }, storage: { status: "ok" } },
     });
     expect(res.body.checks.database.latencyMs).toEqual(expect.any(Number));
+    expect(res.body.checks.storage.latencyMs).toEqual(expect.any(Number));
     expect(Date.parse(res.body.timestamp)).not.toBeNaN();
   });
 

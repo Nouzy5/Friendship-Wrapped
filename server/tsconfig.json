@@ -16,5 +16,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "test", "prisma.config.ts", "vitest.config.ts"]
+  "include": ["src", "test", "scripts", "prisma.config.ts", "vitest.config.ts"]
 }

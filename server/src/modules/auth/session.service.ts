@@ -1,5 +1,5 @@
 import { generateToken, sha256Hex } from "../../lib/tokens.js";
-import type { PublicUser } from "../users/user.dto.js";
+import { toPublicUser, type PublicUser } from "../users/user.dto.js";
 import * as sessionRepository from "./session.repository.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -47,13 +47,15 @@ export async function resolveSession(token: string): Promise<ActiveSession | nul
     return null;
   }
 
+  const user = toPublicUser(session.user);
+
   if (remaining < RENEW_WHEN_REMAINING_MS) {
     const expiresAt = new Date(now + SESSION_TTL_MS);
     await sessionRepository.updateSessionExpiry(id, expiresAt);
-    return { token, user: session.user, expiresAt, renewed: true };
+    return { token, user, expiresAt, renewed: true };
   }
 
-  return { token, user: session.user, expiresAt: session.expiresAt, renewed: false };
+  return { token, user, expiresAt: session.expiresAt, renewed: false };
 }
 
 export async function revokeSession(token: string): Promise<void> {

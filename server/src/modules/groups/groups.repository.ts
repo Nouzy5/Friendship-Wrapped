@@ -61,6 +61,15 @@ export function setMemberRole(groupId: string, userId: string, role: GroupRole, 
   return db.groupMember.update({ where: { groupId_userId: { groupId, userId } }, data: { role } });
 }
 
+/** True when both users are members of at least one common group. */
+export async function shareAGroup(userId: string, otherUserId: string, db: DbClient = prisma): Promise<boolean> {
+  const shared = await db.groupMember.findFirst({
+    where: { userId, group: { members: { some: { userId: otherUserId } } } },
+    select: { groupId: true },
+  });
+  return shared !== null;
+}
+
 /** The longest-standing member other than `excludeUserId`, who inherits ownership. */
 export function findSuccessor(groupId: string, excludeUserId: string, db: DbClient = prisma) {
   return db.groupMember.findFirst({

@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 type AvatarSize = "sm" | "md" | "lg" | "xl";
 
 const sizeClasses: Record<AvatarSize, string> = {
@@ -34,17 +36,26 @@ type AvatarProps = {
   name: string;
   /** Usually the user id. */
   seed: string;
+  /** Profile picture URL; falls back to initials when missing or broken. */
+  src?: string | null;
   size?: AvatarSize;
 };
 
-/** Initials avatar. Decorative: always render the person's name next to it or label its container. */
-export function Avatar({ name, seed, size = "md" }: AvatarProps) {
+/** Profile picture or initials. Decorative: always render the person's name next to it or label its container. */
+export function Avatar({ name, seed, src, size = "md" }: AvatarProps) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const showImage = src && src !== failedSrc;
+
   return (
     <span
       aria-hidden
-      className={`inline-grid shrink-0 place-items-center rounded-full bg-linear-to-br font-bold text-ink-950 select-none ${sizeClasses[size]} ${gradientFor(seed)}`}
+      className={`inline-grid shrink-0 place-items-center overflow-hidden rounded-full bg-linear-to-br font-bold text-ink-950 select-none ${sizeClasses[size]} ${gradientFor(seed)}`}
     >
-      {initialsOf(name)}
+      {showImage ? (
+        <img src={src} alt="" decoding="async" className="size-full object-cover" onError={() => setFailedSrc(src)} />
+      ) : (
+        initialsOf(name)
+      )}
     </span>
   );
 }

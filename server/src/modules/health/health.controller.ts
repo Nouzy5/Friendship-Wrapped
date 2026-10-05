@@ -8,6 +8,9 @@ export const getHealth: RequestHandler = async (_req, res) => {
   if (report.checks.database.status !== "ok") {
     throw serviceUnavailable("DATABASE_UNAVAILABLE", "The database is unreachable");
   }
+  if (report.checks.storage.status !== "ok") {
+    throw serviceUnavailable("STORAGE_UNAVAILABLE", "Photo storage is unreachable");
+  }
 
   res.json(report);
 };
