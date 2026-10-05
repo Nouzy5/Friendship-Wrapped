@@ -16,6 +16,16 @@ const envSchema = z.object({
   DATABASE_URL: z
     .string()
     .startsWith("mysql://", { message: "DATABASE_URL must be a mysql:// connection string" }),
+
+  // Object storage, spoken to over the S3 API: MinIO locally, any S3-compatible
+  // service (AWS S3, Cloudflare R2, …) in production. Omit S3_ENDPOINT for AWS.
+  S3_ENDPOINT: z.url().optional(),
+  S3_REGION: z.string().min(1).default("us-east-1"),
+  S3_BUCKET: z.string().min(3).max(63),
+  S3_ACCESS_KEY_ID: z.string().min(1),
+  S3_SECRET_ACCESS_KEY: z.string().min(1),
+  /** MinIO needs path-style URLs (http://host/bucket/key); most hosted services don't. */
+  S3_FORCE_PATH_STYLE: z.stringbool().default(false),
 });
 
 const parsed = envSchema.safeParse(process.env);

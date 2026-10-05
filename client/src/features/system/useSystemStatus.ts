@@ -5,34 +5,44 @@ import { fetchHealth, type HealthReport } from "./api";
 
 export type ServiceStatus = { status: Status; detail?: string };
 
-export type SystemStatus = {
-  api: ServiceStatus;
-  database: ServiceStatus;
+type ServiceStatuses = { api: ServiceStatus; database: ServiceStatus; storage: ServiceStatus };
+
+export type SystemStatus = ServiceStatuses & {
   isChecking: boolean;
   recheck: () => void;
 };
 
-function deriveStatus(data: HealthReport | undefined, error: Error | null, isPending: boolean) {
+function deriveStatus(data: HealthReport | undefined, error: Error | null, isPending: boolean): ServiceStatuses {
   if (isPending) {
-    return { api: { status: "checking" }, database: { status: "checking" } } as const;
+    return { api: { status: "checking" }, database: { status: "checking" }, storage: { status: "checking" } };
   }
 
   if (data) {
     return {
       api: { status: "ok", detail: `up ${formatUptime(data.uptimeSeconds)}` },
       database: { status: "ok", detail: `${data.checks.database.latencyMs} ms` },
-    } as const;
+      storage: { status: "ok", detail: `${data.checks.storage.latencyMs} ms` },
+    };
   }
 
-  // The API answered but told us the database is down.
+  // The API answered but told us what's down. The database is checked first, so when
+  // storage is reported down the database was fine.
   if (error instanceof ApiError && error.code === "DATABASE_UNAVAILABLE") {
-    return { api: { status: "ok" }, database: { status: "down", detail: error.message } } as const;
+    return {
+      api: { status: "ok" },
+      database: { status: "down", detail: error.message },
+      storage: { status: "unknown" },
+    };
+  }
+  if (error instanceof ApiError && error.code === "STORAGE_UNAVAILABLE") {
+    return { api: { status: "ok" }, database: { status: "ok" }, storage: { status: "down", detail: error.message } };
   }
 
   return {
     api: { status: "down", detail: error?.message },
     database: { status: "unknown" },
-  } as const;
+    storage: { status: "unknown" },
+  };
 }
 
 function formatUptime(seconds: number): string {

@@ -16,8 +16,8 @@ function StatusRow({ name, service }: { name: string; service: ServiceStatus }) 
 }
 
 export function SystemStatusCard() {
-  const { api, database, isChecking, recheck } = useSystemStatus();
-  const allOk = api.status === "ok" && database.status === "ok";
+  const { api, database, storage, isChecking, recheck } = useSystemStatus();
+  const allOk = api.status === "ok" && database.status === "ok" && storage.status === "ok";
 
   return (
     <Card aria-labelledby="system-status-heading" aria-busy={isChecking}>
@@ -33,6 +33,7 @@ export function SystemStatusCard() {
       <ul className="mt-2 divide-y divide-ink-700/70">
         <StatusRow name="API server" service={api} />
         <StatusRow name="Database" service={database} />
+        <StatusRow name="Photo storage" service={storage} />
       </ul>
 
       <p role="status" className="mt-3 text-xs text-ink-400">

@@ -11,8 +11,8 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 1 | Foundation: repo, React/TS/Tailwind, Express, Prisma, MySQL, config, errors | ✅ Done |
 | 2 | Authentication: register, login, logout, sessions, protected routes, profile | ✅ Done |
 | 3 | Groups & invites: create, invite links, join, leave, members, owner permissions | ✅ Done |
-| 4 | Photos (camera, upload, processing, object storage) | ⏳ Next |
-| 5 | Feed | — |
+| 4 | Photos: in-app camera, gallery upload, processing, thumbnails, object storage, captions, deletion, profile pictures | ✅ Done |
+| 5 | Feed | ⏳ Next |
 | 6 | Reactions, comments, favorites | — |
 | 7 | Memories (timeline, albums, On This Day) | — |
 | 8 | Analytics | — |
@@ -27,11 +27,11 @@ React 19 + Vite + Tailwind 4 (client/)
 Node 24 + Express 5 (server/)
         ↓  Prisma 7 + MariaDB driver adapter
 MySQL 8.4
-        ↓  (Phase 4)
-Object storage
+        ↓  S3 API (@aws-sdk/client-s3)
+Object storage: MinIO locally, any S3-compatible bucket in production
 ```
 
-Also used: TypeScript 7, React Router 8, TanStack Query 5, Zod 4, Vitest 5 + Supertest.
+Also used: TypeScript 7, React Router 8, TanStack Query 5, Zod 4, sharp (image processing), multer (uploads), Vitest 5 + Supertest.
 
 ## Getting started
 
@@ -39,6 +39,11 @@ Also used: TypeScript 7, React Router 8, TanStack Query 5, Zod 4, Vitest 5 + Sup
 
 - Node.js 22.12+ (developed on 24 LTS)
 - MySQL 8.4
+- MinIO, the local S3-compatible object storage. Since 2025 MinIO only publishes source code for its free edition, so build it with Go (1.24+):
+  ```bash
+  go install github.com/minio/minio@latest
+  ```
+  This puts `minio` in Go's bin folder (`%USERPROFILE%\go\bin` on Windows), which the Go installer adds to `PATH`. You don't run it yourself: `npm run dev` and `npm test` start it. To use a binary somewhere else, set `MINIO_BIN`.
 
 ### Database
 
@@ -62,6 +67,8 @@ cp server/.env.example server/.env.test   # then point DATABASE_URL at friendshi
 
 The server validates its environment at startup and refuses to boot with a clear message if anything is missing. Server variables are namespaced (`API_PORT`, `API_HOST`) so a generic `PORT` exported by other tools can't hijack the API.
 
+Pick your own `S3_SECRET_ACCESS_KEY` (8+ characters). For local MinIO the `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` pair becomes MinIO's root login. Use the same pair in `.env.test`, with `S3_BUCKET=friendship-wrapped-test`. Buckets are created automatically.
+
 ### Run
 
 ```bash
@@ -71,8 +78,11 @@ npm run dev
 
 - Client: http://localhost:5173
 - API: http://127.0.0.1:4000 (the client reaches it via `/api`)
+- MinIO: http://127.0.0.1:9000 (S3 API), with a bucket browser at http://127.0.0.1:9001 (log in with the S3 key pair). Data lives in `.local/minio/`.
 
-Create an account at `/auth/register`. **Settings** shows a live System status card that confirms the client → API → database chain.
+Create an account at `/auth/register`. **Settings** shows a live System status card that confirms the client → API → database and storage chain.
+
+The live camera needs a secure context: `localhost` counts, but opening the dev server from a phone over your LAN IP (`http://192.168…`) doesn't. There, the Camera page falls back to the phone's own camera app and the gallery.
 
 ### Migrations
 
@@ -84,8 +94,8 @@ Run these from the repo root:
 
 | Script | What it does |
 | --- | --- |
-| `npm run dev` | API (auto-restart on change) and Vite dev server together |
-| `npm test` | Server integration tests against the real test database |
+| `npm run dev` | MinIO, the API (auto-restart on change) and the Vite dev server together |
+| `npm test` | Server integration tests against the real test database and test bucket (starts MinIO if it isn't running) |
 | `npm run typecheck` | Type-check server and client |
 | `npm run build` | Compile the server to `server/dist`, build the client to `client/dist` |
 | `npm run db:migrate` | Create/apply a migration in development (`prisma migrate dev`) |
@@ -106,9 +116,11 @@ client/src/
 server/
   prisma/             schema.prisma and migrations
   prisma.config.ts    Prisma CLI config (connection URL, paths)
+  scripts/            Local MinIO for dev and tests (never used in production)
   src/
     config/env.ts     Zod-validated environment
-    lib/              prisma client + withTransaction, errors (AppError), logger, password hashing, tokens
+    lib/              prisma client + withTransaction, errors (AppError), logger, password hashing, tokens,
+                      storage (S3), images (sharp), upload (multer), send-image
     middleware/       error handler, 404, request logging, rate limit, same-origin check
     modules/<name>/   .routes → .controller → .service → .repository (+ .schemas for Zod)
     routes/index.ts   Mounts module routers under /api
@@ -128,7 +140,7 @@ server/
   ```
   Unexpected errors become a generic 500 and are logged server-side. The client's `apiRequest` turns these into a typed `ApiError`.
 - **Validation.** All input is validated server-side with Zod. A thrown `ZodError` becomes a 400 `VALIDATION_ERROR`.
-- **Images.** Image binaries never go in MySQL. The database stores object-storage keys only (from Phase 4).
+- **Images.** Image binaries never go in MySQL. The database stores object-storage keys only, and those keys never leave the server. See [Photos](#photos).
 
 ## Authentication
 
@@ -145,9 +157,12 @@ server/
 | `POST` | `/api/auth/logout` | — | Revoke the current session |
 | `GET` | `/api/auth/session` | — | Current user, or `{ "user": null }` |
 | `PATCH` | `/api/users/me` | ✅ | Update display name |
-| `GET` | `/api/health` | — | API and database status |
+| `PUT` | `/api/users/me/avatar` | ✅ | Upload a profile picture (multipart field `avatar`) |
+| `DELETE` | `/api/users/me/avatar` | ✅ | Remove it (back to initials) |
+| `GET` | `/api/users/:userId/avatar` | ✅ | The picture; only for the person and people who share a group with them |
+| `GET` | `/api/health` | — | API, database and storage status |
 
-Profile pictures arrive with object storage in Phase 4; until then avatars show initials. Account deletion will be added once photos and comments exist, so its policy can cover them.
+Users come back with an `avatarUrl` (or `null`). The URL changes whenever the picture does, so browsers can cache it. Account deletion will be added once photos and comments exist, so its policy can cover them. Until then, `photos.uploader_id` is `ON DELETE RESTRICT`.
 
 ## Groups
 
@@ -179,9 +194,50 @@ Profile pictures arrive with object storage in Phase 4; until then avatars show 
 | `GET` | `/api/invites/:token` | anyone with the link | Preview the group |
 | `POST` | `/api/invites/:token/accept` | signed in | Join the group |
 
+## Photos
+
+- **Capture.** `/camera` uses the browser's live camera (`getUserMedia`): take photo → preview → caption → post. There's a front/back switch, and front-camera shots are saved as previewed (mirrored). Without a live camera (no device, permission blocked, or not HTTPS), the page offers the phone's own camera app (`<input capture>`) and the gallery. Camera access is released as soon as a photo is taken.
+- **Upload.** `POST /api/groups/:groupId/photos` as `multipart/form-data`, with `photo` (one file, ≤ 20 MB) and an optional `caption` (≤ 500 characters; line breaks allowed). Membership is checked *before* the body is read, so non-members can't push large uploads.
+- **Validation.** By content, never by file name or the browser's MIME type:
+  - **Accepted formats:** JPEG, PNG, WebP and AVIF.
+  - **Rejected:** HEIC gets a clear message. On iPhones the picker converts photos to JPEG anyway, because the client lists the accepted types explicitly.
+  - **Size limit:** images over 64 megapixels are rejected before decoding.
+- **Processing** (`lib/images.ts`, sharp). Each photo is stored as three WebP renditions, and the original upload is not kept. Re-encoding applies the EXIF orientation and strips all metadata, including GPS location.
+
+  | Rendition | Size | Column | Used for |
+  | --- | --- | --- | --- |
+  | `full` | ≤ 2560 px on the long edge | `storage_key` | Downloads and zoom (later phases) |
+  | `medium` | ≤ 1280 px | `medium_key` | Photo page and feed |
+  | `thumbnail` | 480×480, centre-cropped | `thumbnail_key` | Grids |
+
+  Small photos are never enlarged.
+- **Storage keys.** Everything is under `groups/<groupId>/photos/<random>/…` and `users/<userId>/avatars/<random>.webp`.
+  - The random part makes keys unguessable.
+  - The group prefix lets a deleted group's files be removed in one sweep.
+  - If the database write fails after an upload, the stored files are removed again.
+- **Privacy.**
+  - **Who can see a photo:** its uploader and members of its group (`visibleTo` in `photos.repository.ts`). Everyone else gets 404.
+  - **No public URLs:** the bucket stays private, and images are streamed through `GET /api/photos/:id/images/:variant`, which checks the session and access on every request. Responses are `Cache-Control: private`, so shared proxies never keep them.
+  - **Leaving a group:** photos stay with the group, and the uploader can still open their own.
+- **Deleting.**
+  - **A photo:** only its uploader can delete it (others get 403). Its files are deleted after its row.
+  - **A group:** when the last member leaves, all of its photos and files go with it.
+- **Listing.** Photos are listed newest first with a keyset cursor (`?cursor=…&limit=…`, at most 50), backed by the `(group_id, created_at, id)` index. For now, the group page shows the newest 24; the scrolling feed comes in Phase 5.
+
+| Method | Endpoint | Who | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/api/groups/:groupId/photos` | member | Post a photo |
+| `GET` | `/api/groups/:groupId/photos` | member | Newest first: `{ photos, nextCursor }` |
+| `GET` | `/api/photos/:photoId` | uploader or member | Photo details (+ its group) |
+| `GET` | `/api/photos/:photoId/images/:variant` | uploader or member | `thumbnail`, `medium` or `full` (WebP) |
+| `DELETE` | `/api/photos/:photoId` | uploader | Delete the photo and its files |
+
 ## Local machine notes
 
 - MySQL runs as the Windows service `MySQL84`, bound to `127.0.0.1` only.
 - Local secrets (the MySQL root password, dev test-account logins) live in `.local/`, which is gitignored.
 - npm 11 only runs install scripts for packages listed under `allowScripts` in `package.json` (Prisma's engines, esbuild).
-- The API dev watcher is `node --watch --import tsx` rather than `tsx watch`, because `tsx watch` hangs on Windows when run under `concurrently`.
+- The API dev watcher is `node --watch-path=./src --import tsx` rather than `tsx watch`, because `tsx watch` hangs on Windows when run under `concurrently`.
+  - It watches only `src/`: plain `--watch` on Windows treated a dependency file loaded for the first time as a change, and restarted the API mid-request.
+  - After `npm install`, restart `npm run dev` yourself.
+- MinIO was built from source with Go 1.27 (`go install github.com/minio/minio@latest`), because the winget package's download is gone (HTTP 410). The binary is `%USERPROFILE%\go\bin\minio.exe`.

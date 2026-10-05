@@ -3,11 +3,9 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { sha256Hex } from "../src/lib/tokens.js";
-import { resetDatabase, signUp } from "./helpers.js";
+import { createGroup, createInvite, groupWith as sharedGroupWith, resetDatabase, signUp } from "./helpers.js";
 
 const app = createApp();
-
-type Agent = ReturnType<typeof request.agent>;
 
 beforeEach(resetDatabase);
 
@@ -16,33 +14,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-async function createGroup(agent: Agent, body: object = { name: "The Boys", emoji: "🍻" }) {
-  const res = await agent.post("/api/groups").send(body);
-  expect(res.status).toBe(201);
-  return res.body.group as { id: string };
-}
-
-async function createInvite(agent: Agent, groupId: string): Promise<string> {
-  const res = await agent.post(`/api/groups/${groupId}/invites`);
-  expect(res.status).toBe(201);
-  return res.body.invite.token;
-}
-
-/** Owner creates "The Boys" and each other user joins through an invite, in order. */
-async function groupWith(...usernames: string[]) {
-  const [ownerName, ...memberNames] = usernames;
-  const owner = await signUp(app, ownerName!);
-  const group = await createGroup(owner.agent);
-  const token = await createInvite(owner.agent, group.id);
-
-  const members = [];
-  for (const name of memberNames) {
-    const member = await signUp(app, name);
-    expect((await member.agent.post(`/api/invites/${token}/accept`)).status).toBe(200);
-    members.push(member);
-  }
-  return { owner, members, group, token };
-}
+const groupWith = (...usernames: string[]) => sharedGroupWith(app, ...usernames);
 
 describe("definition of done: two accounts share a private group", () => {
   it("lets A create a group and invite B, and both see the same members", async () => {

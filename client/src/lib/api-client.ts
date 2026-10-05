@@ -24,6 +24,7 @@ export class ApiError extends Error {
 
 type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  /** Sent as JSON, except FormData (file uploads), which is sent as multipart/form-data. */
   body?: unknown;
   signal?: AbortSignal;
 };
@@ -42,15 +43,17 @@ async function readJson(res: Response): Promise<unknown> {
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, signal } = options;
 
+  const isFormData = body instanceof FormData;
   const headers: Record<string, string> = { Accept: "application/json" };
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  // For FormData the browser sets the multipart Content-Type, including its boundary.
+  if (body !== undefined && !isFormData) headers["Content-Type"] = "application/json";
 
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isFormData ? body : JSON.stringify(body),
       credentials: "same-origin",
       signal,
     });

@@ -1,4 +1,5 @@
 import type { GroupRole, Prisma } from "../../generated/prisma/client.js";
+import { toUserSummary, userSummarySelect, type UserSummary } from "../users/user.dto.js";
 
 export const groupSummarySelect = {
   id: true,
@@ -34,7 +35,13 @@ export function toGroupView(group: GroupSummaryRow, myRole: GroupRole): GroupVie
 export const groupMemberSelect = {
   role: true,
   joinedAt: true,
-  user: { select: { id: true, username: true, displayName: true } },
+  user: { select: userSummarySelect },
 } satisfies Prisma.GroupMemberSelect;
 
-export type GroupMemberView = Prisma.GroupMemberGetPayload<{ select: typeof groupMemberSelect }>;
+type GroupMemberRow = Prisma.GroupMemberGetPayload<{ select: typeof groupMemberSelect }>;
+
+export type GroupMemberView = { role: GroupRole; joinedAt: Date; user: UserSummary };
+
+export function toGroupMemberView({ role, joinedAt, user }: GroupMemberRow): GroupMemberView {
+  return { role, joinedAt, user: toUserSummary(user) };
+}

@@ -12,7 +12,7 @@ export function MemberAvatars({ members }: { members: GroupMember[] }) {
     <div aria-hidden className="flex -space-x-2">
       {shown.map((member) => (
         <span key={member.user.id} className="rounded-full ring-2 ring-ink-950">
-          <Avatar name={member.user.displayName} seed={member.user.id} size="sm" />
+          <Avatar name={member.user.displayName} seed={member.user.id} src={member.user.avatarUrl} size="sm" />
         </span>
       ))}
       {hidden > 0 && (

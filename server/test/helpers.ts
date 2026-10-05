@@ -1,9 +1,13 @@
 import type { Express } from "express";
+import sharp from "sharp";
 import request, { type Response } from "supertest";
+import { expect } from "vitest";
 import { prisma } from "../src/lib/prisma.js";
+import { deletePrefix } from "../src/lib/storage.js";
 
 /** Deletes all rows, children before parents. */
 export async function resetDatabase(): Promise<void> {
+  await prisma.photo.deleteMany();
   await prisma.inviteToken.deleteMany();
   await prisma.groupMember.deleteMany();
   await prisma.group.deleteMany();
@@ -29,6 +33,65 @@ export async function signUp(app: Express, username: string) {
   });
   if (res.status !== 201) throw new Error(`signUp(${username}) failed: ${res.status} ${JSON.stringify(res.body)}`);
   return { agent, user: res.body.user as TestUser };
+}
+
+export type Agent = ReturnType<typeof request.agent>;
+
+export async function createGroup(agent: Agent, body: object = { name: "The Boys", emoji: "🍻" }) {
+  const res = await agent.post("/api/groups").send(body);
+  expect(res.status).toBe(201);
+  return res.body.group as { id: string };
+}
+
+export async function createInvite(agent: Agent, groupId: string): Promise<string> {
+  const res = await agent.post(`/api/groups/${groupId}/invites`);
+  expect(res.status).toBe(201);
+  return res.body.invite.token;
+}
+
+/** The first user creates "The Boys" and each other user joins through an invite, in order. */
+export async function groupWith(app: Express, ...usernames: string[]) {
+  const [ownerName, ...memberNames] = usernames;
+  const owner = await signUp(app, ownerName!);
+  const group = await createGroup(owner.agent);
+  const token = await createInvite(owner.agent, group.id);
+
+  const members = [];
+  for (const name of memberNames) {
+    const member = await signUp(app, name);
+    expect((await member.agent.post(`/api/invites/${token}/accept`)).status).toBe(200);
+    members.push(member);
+  }
+  return { owner, members, group, token };
+}
+
+/** Empties the test bucket (every key lives under one of these prefixes). */
+export async function resetStorage(): Promise<void> {
+  await deletePrefix("groups/");
+  await deletePrefix("users/");
+}
+
+type ImageOptions = {
+  width?: number;
+  height?: number;
+  format?: "jpeg" | "png" | "webp" | "avif";
+  /** EXIF orientation tag (1–8) to embed. */
+  orientation?: number;
+  /** EXIF IFD0 tags to embed, e.g. { Artist: "…" }. */
+  exif?: Record<string, string>;
+};
+
+/** A real, encoded image (a solid colour), as a phone or browser would upload it. */
+export function makeImage({ width = 64, height = 48, format = "jpeg", orientation, exif }: ImageOptions = {}) {
+  let image = sharp({ create: { width, height, channels: 3, background: { r: 255, g: 61, b: 127 } } });
+  if (exif) image = image.withExif({ IFD0: exif });
+  if (orientation) image = image.withMetadata({ orientation });
+  return image.toFormat(format).toBuffer();
+}
+
+/** Decodes an image response, for asserting on what the server actually stored. */
+export function imageInfo(data: Buffer) {
+  return sharp(data).metadata();
 }
 
 /** The full `Set-Cookie` header for the session cookie, if the response set one. */
