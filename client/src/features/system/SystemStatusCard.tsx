@@ -39,8 +39,8 @@ export function SystemStatusCard() {
         {isChecking
           ? "Running checks…"
           : allOk
-            ? "Everything is connected. Ready for the next phase."
-            : "Something isn't connected yet. See the README for setup steps."}
+            ? "All systems connected."
+            : "Something isn't connected right now, so some features may not work."}
       </p>
     </Card>
   );

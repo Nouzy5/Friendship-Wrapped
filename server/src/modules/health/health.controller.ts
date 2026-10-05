@@ -9,5 +9,5 @@ export const getHealth: RequestHandler = async (_req, res) => {
     throw serviceUnavailable("DATABASE_UNAVAILABLE", "The database is unreachable");
   }
 
-  res.set("Cache-Control", "no-store").json(report);
+  res.json(report);
 };

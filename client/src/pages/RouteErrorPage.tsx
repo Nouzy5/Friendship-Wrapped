@@ -14,6 +14,7 @@ export function RouteErrorPage() {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-ink-950">
       <StateMessage
+        headingLevel="h1"
         emoji="😵"
         title="Something went wrong"
         description={description}

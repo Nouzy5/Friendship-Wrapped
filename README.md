@@ -9,8 +9,8 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 1 | Foundation: repo, React/TS/Tailwind, Express, Prisma, MySQL, config, errors | ✅ Done |
-| 2 | Authentication | ⏳ Next |
-| 3 | Groups & invites | — |
+| 2 | Authentication: register, login, logout, sessions, protected routes, profile | ✅ Done |
+| 3 | Groups & invites | ⏳ Next |
 | 4 | Photos (camera, upload, processing, object storage) | — |
 | 5 | Feed | — |
 | 6 | Reactions, comments, favorites | — |
@@ -72,7 +72,11 @@ npm run dev
 - Client: http://localhost:5173
 - API: http://127.0.0.1:4000 (the client reaches it via `/api`)
 
-The home page shows a live **System status** card confirming the client → API → database chain.
+Create an account at `/auth/register`. **Settings** shows a live System status card that confirms the client → API → database chain.
+
+### Migrations
+
+`npm run db:migrate` applies new migrations to the dev database. `npm test` applies them to the test database automatically before running.
 
 ## Scripts
 
@@ -104,10 +108,11 @@ server/
   prisma.config.ts    Prisma CLI config (connection URL, paths)
   src/
     config/env.ts     Zod-validated environment
-    lib/              prisma client, errors (AppError), logger
-    middleware/       error handler, 404, request logging
-    modules/<name>/   <name>.routes.ts → .controller.ts → .service.ts
+    lib/              prisma client, errors (AppError), logger, password hashing
+    middleware/       error handler, 404, request logging, rate limit, same-origin check
+    modules/<name>/   .routes → .controller → .service → .repository (+ .schemas for Zod)
     routes/index.ts   Mounts module routers under /api
+    types/            Express request augmentation (req.user)
     app.ts            Express app factory (used by tests)
     index.ts          Process entry: listen + graceful shutdown
   test/               Vitest + Supertest
@@ -115,7 +120,8 @@ server/
 
 ## Conventions
 
-- **Layering.** Routes only wire URLs to controllers. Controllers handle HTTP (parse input, choose status codes). Services hold business logic and all database access. React components stay presentational, with logic in feature hooks.
+- **Layering.** Routes only wire URLs to controllers. Controllers handle HTTP (parse input, choose status codes). Services hold business logic. Repositories are the only code that talks to Prisma. React components stay presentational, with logic in feature hooks.
+- **Never leak secrets.** Return users through `publicUserSelect` (in `user.dto.ts`). The password hash is read only by the login query.
 - **Errors.** Throw an `AppError` (or a helper such as `notFound()`) for expected failures. Every error response has the same shape:
   ```json
   { "error": { "code": "NOT_FOUND", "message": "…", "details": "optional" } }
@@ -124,9 +130,28 @@ server/
 - **Validation.** All input is validated server-side with Zod. A thrown `ZodError` becomes a 400 `VALIDATION_ERROR`.
 - **Images.** Image binaries never go in MySQL. The database stores object-storage keys only (from Phase 4).
 
+## Authentication
+
+- **Accounts.** Username (stored lowercase) + display name + password. Passwords are hashed with Node's built-in scrypt (N=2¹⁵, r=8, p=3). The parameters are stored with each hash so they can be raised later.
+- **Sessions.** Server-side rows in `sessions`. The browser gets a random 256-bit token in an `HttpOnly`, `SameSite=Lax` cookie (`__Host-` prefixed and `Secure` in production). Only the token's SHA-256 is stored, so a database leak can't be replayed. Sessions last 30 days and slide forward while in use. Logout deletes the row.
+- **Protecting an endpoint.** Add `requireAuth` to the route and read the user with `currentUser(req)` in the controller. Never take a user id from the request body.
+- **Hardening.** Login is rate-limited (10 attempts / 15 min per IP + username). Unknown usernames take the same time and get the same response as wrong passwords. State-changing requests from another origin are rejected (CSRF defence in depth). All API responses are `Cache-Control: no-store`.
+- **Client.** `useSession()` holds the signed-in user (or `null`). `<RequireAuth>` and `<RedirectIfAuthenticated>` guard routes, and send people back to the page they wanted after login. Any `401 UNAUTHORIZED` response signs the client out.
+
+| Method | Endpoint | Auth | Purpose |
+| --- | --- | --- | --- |
+| `POST` | `/api/auth/register` | — | Create an account and sign in |
+| `POST` | `/api/auth/login` | — | Sign in |
+| `POST` | `/api/auth/logout` | — | Revoke the current session |
+| `GET` | `/api/auth/session` | — | Current user, or `{ "user": null }` |
+| `PATCH` | `/api/users/me` | ✅ | Update display name |
+| `GET` | `/api/health` | — | API and database status |
+
+Profile pictures arrive with object storage in Phase 4; until then avatars show initials. Account deletion will be added once photos and comments exist, so its policy can cover them.
+
 ## Local machine notes
 
 - MySQL runs as the Windows service `MySQL84`, bound to `127.0.0.1` only.
-- Local secrets (the MySQL root password) live in `.local/`, which is gitignored.
+- Local secrets (the MySQL root password, dev test-account logins) live in `.local/`, which is gitignored.
 - npm 11 only runs install scripts for packages listed under `allowScripts` in `package.json` (Prisma's engines, esbuild).
 - The API dev watcher is `node --watch --import tsx` rather than `tsx watch`, because `tsx watch` hangs on Windows when run under `concurrently`.
