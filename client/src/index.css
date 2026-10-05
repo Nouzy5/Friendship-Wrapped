@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans",
+    sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+
+  /* Surfaces: a warm near-black so photos and gradients pop. */
+  --color-ink-950: #0c0a14;
+  --color-ink-900: #15121f;
+  --color-ink-800: #1e1a2b;
+  --color-ink-700: #2c2640;
+  --color-ink-400: #8d87a3;
+  --color-ink-200: #cfcbe0;
+  --color-ink-50: #f7f5fc;
+
+  /* Brand: the "Wrapped" sunset gradient. */
+  --color-brand-rose: #ff3d7f;
+  --color-brand-orange: #ff8a3d;
+  --color-brand-gold: #ffc93d;
+
+  --color-success: #3ddc97;
+  --color-danger: #ff5c6c;
+  --color-warning: #ffc93d;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply min-h-dvh bg-ink-950 font-sans text-ink-50 antialiased;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand-orange;
+  }
+}

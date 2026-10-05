@@ -1,0 +1,29 @@
+{
+  "name": "friendship-wrapped",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "concurrently --names server,client --prefix-colors blue,magenta --kill-others-on-fail \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w server && npm run build -w client",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
+    "test": "npm run test -w server",
+    "db:generate": "npm run db:generate -w server",
+    "db:migrate": "npm run db:migrate -w server",
+    "db:studio": "npm run db:studio -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  },
+  "allowScripts": {
+    "prisma@7.10.0": true,
+    "@prisma/engines@7.10.0": true,
+    "esbuild@0.28.2": true
+  }
+}

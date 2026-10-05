@@ -1,0 +1,11 @@
+// Prisma schema for Friendship Wrapped.
+// Connection settings live in ../prisma.config.ts; models are added phase by phase.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
