@@ -21,6 +21,8 @@ model User {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
   sessions     Session[]
+  memberships  GroupMember[]
+  invites      InviteToken[]
 
   @@map("users")
 }
@@ -36,4 +38,52 @@ model Session {
   @@index([userId])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+enum GroupRole {
+  OWNER
+  MEMBER
+}
+
+/// Note: GROUPS is a reserved word in MySQL 8; always backtick `groups` in raw SQL.
+model Group {
+  id        String        @id @default(uuid(7)) @db.Char(36)
+  name      String        @db.VarChar(50)
+  /// A single emoji grapheme (may be several code points, e.g. flags or ZWJ sequences).
+  emoji     String        @db.VarChar(16)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  members   GroupMember[]
+  invites   InviteToken[]
+
+  @@map("groups")
+}
+
+/// Membership is the single source of truth for roles: each group has exactly one OWNER.
+model GroupMember {
+  groupId  String    @map("group_id") @db.Char(36)
+  userId   String    @map("user_id") @db.Char(36)
+  role     GroupRole @default(MEMBER)
+  joinedAt DateTime  @default(now()) @map("joined_at")
+  group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@index([userId])
+  @@map("group_members")
+}
+
+model InviteToken {
+  /// SHA-256 (hex) of the invite token. The raw token only exists in the shared link.
+  id          String   @id @db.Char(64)
+  groupId     String   @map("group_id") @db.Char(36)
+  createdById String   @map("created_by_id") @db.Char(36)
+  expiresAt   DateTime @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([createdById])
+  @@map("invite_tokens")
 }

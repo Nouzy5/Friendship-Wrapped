@@ -2,7 +2,8 @@ import { Outlet } from "react-router";
 import { Wordmark } from "../components/Wordmark";
 import { Card } from "../components/ui/Card";
 
-export function AuthLayout() {
+/** Brand header above a single centered card: login, register and invite pages. */
+export function CardLayout() {
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-8 px-4 pt-[max(env(safe-area-inset-top),2.5rem)] pb-[max(env(safe-area-inset-bottom),2.5rem)]">
       <div className="text-center">

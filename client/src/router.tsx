@@ -1,11 +1,18 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { RedirectIfAuthenticated, RequireAuth } from "./features/auth/components/AuthGuards";
+import { GroupRoute } from "./features/groups/components/GroupRoute";
 import { AppLayout } from "./layouts/AppLayout";
-import { AuthLayout } from "./layouts/AuthLayout";
+import { CardLayout } from "./layouts/CardLayout";
 import { RootLayout } from "./layouts/RootLayout";
+import { GroupMembersPage } from "./pages/GroupMembersPage";
+import { GroupPage } from "./pages/GroupPage";
+import { GroupSettingsPage } from "./pages/GroupSettingsPage";
 import { HomePage } from "./pages/HomePage";
+import { InvitePage } from "./pages/InvitePage";
 import { LoginPage } from "./pages/LoginPage";
+import { NewGroupPage } from "./pages/NewGroupPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { OnboardingPage } from "./pages/OnboardingPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { RouteErrorPage } from "./pages/RouteErrorPage";
@@ -24,7 +31,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="login" replace /> },
           {
-            element: <AuthLayout />,
+            element: <CardLayout />,
             children: [
               { path: "login", element: <LoginPage /> },
               { path: "register", element: <RegisterPage /> },
@@ -33,14 +40,30 @@ export const router = createBrowserRouter([
         ],
       },
       {
+        // Public: signed-out visitors see a preview and can sign up from here.
+        element: <CardLayout />,
+        children: [{ path: "invite/:token", element: <InvitePage /> }],
+      },
+      {
         element: <RequireAuth />,
         children: [
           {
             element: <AppLayout />,
             children: [
               { path: "home", element: <HomePage /> },
+              { path: "onboarding", element: <OnboardingPage /> },
               { path: "profile", element: <ProfilePage /> },
               { path: "settings", element: <SettingsPage /> },
+              { path: "groups/new", element: <NewGroupPage /> },
+              {
+                path: "groups/:groupId",
+                element: <GroupRoute />,
+                children: [
+                  { index: true, element: <GroupPage /> },
+                  { path: "members", element: <GroupMembersPage /> },
+                  { path: "settings", element: <GroupSettingsPage /> },
+                ],
+              },
             ],
           },
         ],
