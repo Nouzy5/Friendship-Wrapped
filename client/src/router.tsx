@@ -10,7 +10,9 @@ import { GroupPage } from "./pages/GroupPage";
 import { GroupSettingsPage } from "./pages/GroupSettingsPage";
 import { HomePage } from "./pages/HomePage";
 import { InvitePage } from "./pages/InvitePage";
+import { AlbumPage } from "./pages/AlbumPage";
 import { LoginPage } from "./pages/LoginPage";
+import { MemoriesPage } from "./pages/MemoriesPage";
 import { NewGroupPage } from "./pages/NewGroupPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
@@ -58,6 +60,8 @@ export const router = createBrowserRouter([
               { path: "settings", element: <SettingsPage /> },
               { path: "camera", element: <CameraPage /> },
               { path: "photos/:photoId", element: <PhotoPage /> },
+              { path: "memories", element: <MemoriesPage /> },
+              { path: "memories/albums/:albumId", element: <AlbumPage /> },
               { path: "groups/new", element: <NewGroupPage /> },
               {
                 path: "groups/:groupId",

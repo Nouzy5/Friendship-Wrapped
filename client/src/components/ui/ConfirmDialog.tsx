@@ -1,7 +1,7 @@
-import { useId, type ReactNode } from "react";
-import { useModal } from "../../lib/useModal";
+import type { ReactNode } from "react";
 import { Alert } from "./Alert";
 import { Button } from "./Button";
+import { Dialog } from "./Dialog";
 
 type ConfirmDialogProps = {
   open: boolean;
@@ -16,7 +16,7 @@ type ConfirmDialogProps = {
   onClose: () => void;
 };
 
-/** Modal confirmation built on <dialog>, which provides focus trapping and Escape-to-close. */
+/** "Are you sure?" before something that can't be undone. */
 export function ConfirmDialog({
   open,
   title,
@@ -29,19 +29,8 @@ export function ConfirmDialog({
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
-  const ref = useModal(open);
-  const titleId = useId();
-
   return (
-    <dialog
-      ref={ref}
-      aria-labelledby={titleId}
-      onClose={onClose}
-      className="m-auto w-[min(calc(100%-2rem),24rem)] rounded-3xl border border-ink-700 bg-ink-900 p-6 text-ink-50 shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm"
-    >
-      <h2 id={titleId} className="text-lg font-bold">
-        {title}
-      </h2>
+    <Dialog open={open} onClose={onClose} title={title}>
       <div className="mt-2 text-sm text-ink-200">{description}</div>
 
       {error && (
@@ -58,6 +47,6 @@ export function ConfirmDialog({
           {isPending ? pendingLabel : confirmLabel}
         </Button>
       </div>
-    </dialog>
+    </Dialog>
   );
 }

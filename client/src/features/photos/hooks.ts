@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { deletePhoto, fetchGroupPhotos, fetchPhoto, uploadPhoto } from "./api";
+import { deletePhoto, fetchGroupPhotos, fetchPhoto, uploadPhoto, type GroupPhotosFilter } from "./api";
 import { photoKeys, updateCachedFeed, type FeedData } from "./cache";
 import type { Photo } from "./types";
 
@@ -9,12 +9,21 @@ const FEED_PAGE_SIZE = 24;
 
 const allPhotos = (feed: FeedData): Photo[] => feed.pages.flatMap((page) => page.photos);
 
-/** A group's photos, newest first, one page at a time: `data` is every photo loaded so far. */
-export function useGroupFeed(groupId: string) {
+function groupPhotosKey(groupId: string, { before, favorites }: GroupPhotosFilter) {
+  if (favorites) return photoKeys.favorites(groupId);
+  if (before) return photoKeys.groupFrom(groupId, before);
+  return photoKeys.group(groupId);
+}
+
+/**
+ * A group's photos, newest first, one page at a time: `data` is every photo loaded so
+ * far. Without a filter this is the feed, and the timeline shares its cache.
+ */
+export function useGroupFeed(groupId: string, filter: GroupPhotosFilter = {}) {
   return useInfiniteQuery({
-    queryKey: photoKeys.group(groupId),
+    queryKey: groupPhotosKey(groupId, filter),
     queryFn: ({ pageParam, signal }) =>
-      fetchGroupPhotos(groupId, { cursor: pageParam, limit: FEED_PAGE_SIZE }, signal),
+      fetchGroupPhotos(groupId, { cursor: pageParam, limit: FEED_PAGE_SIZE, ...filter }, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     select: allPhotos,
@@ -71,6 +80,8 @@ export function useDeletePhoto(photo: Pick<Photo, "id" | "groupId">) {
         pages.map((page) => ({ ...page, photos: page.photos.filter(({ id }) => id !== photo.id) })),
       );
       void queryClient.invalidateQueries({ queryKey: photoKeys.group(photo.groupId) });
+      // Album counts and covers may have included it.
+      void queryClient.invalidateQueries({ queryKey: ["albums"] });
     },
   });
 }

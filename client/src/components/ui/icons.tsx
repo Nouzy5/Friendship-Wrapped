@@ -86,6 +86,43 @@ export function TrashIcon(props: IconProps) {
   );
 }
 
+/** A stack of photos: the Memories tab. */
+export function MemoriesIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="7" width="14" height="14" rx="2" />
+      <path d="M7 3h12a2 2 0 0 1 2 2v12" />
+      <path d="m3 17 4-4 4 4 2-2 4 4" />
+    </Icon>
+  );
+}
+
+export function AlbumIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M9 3v8l2.5-1.5L14 11V3" />
+    </Icon>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m5 12.5 4.5 4.5L19 7.5" />
+    </Icon>
+  );
+}
+
+export function PencilIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 20h4L19 9l-4-4L4 16z" />
+      <path d="m13.5 6.5 4 4" />
+    </Icon>
+  );
+}
+
 /** Pass `fill="currentColor"` for the filled (selected) star. */
 export function StarIcon(props: IconProps) {
   return (

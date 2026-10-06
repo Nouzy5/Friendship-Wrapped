@@ -1,8 +1,7 @@
-import { useId } from "react";
 import { Avatar } from "../../../components/ui/Avatar";
 import { Button } from "../../../components/ui/Button";
+import { Dialog } from "../../../components/ui/Dialog";
 import { Spinner } from "../../../components/ui/Spinner";
-import { useModal } from "../../../lib/useModal";
 import { useReactionList } from "../hooks";
 import { reactionByType } from "../reactions";
 
@@ -10,8 +9,6 @@ type ReactionsDialogProps = { photoId: string; open: boolean; onClose: () => voi
 
 /** Who reacted to a photo, and with what. */
 export function ReactionsDialog({ photoId, open, onClose }: ReactionsDialogProps) {
-  const ref = useModal(open);
-  const titleId = useId();
   const reactions = useReactionList(photoId, open);
 
   let content;
@@ -42,19 +39,11 @@ export function ReactionsDialog({ photoId, open, onClose }: ReactionsDialogProps
   }
 
   return (
-    <dialog
-      ref={ref}
-      aria-labelledby={titleId}
-      onClose={onClose}
-      className="m-auto max-h-[70dvh] w-[min(calc(100%-2rem),24rem)] rounded-3xl border border-ink-700 bg-ink-900 p-6 text-ink-50 shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm"
-    >
-      <h2 id={titleId} className="text-lg font-bold">
-        Reactions
-      </h2>
-      <div className="mt-2">{content}</div>
+    <Dialog open={open} onClose={onClose} title="Reactions">
+      <div className="mt-2 min-h-0 overflow-y-auto">{content}</div>
       <Button variant="secondary" className="mt-4 w-full" onClick={onClose}>
         Close
       </Button>
-    </dialog>
+    </Dialog>
   );
 }

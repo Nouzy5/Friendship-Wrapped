@@ -4,14 +4,24 @@ import type { NewPhoto, Photo, PhotoDetail, PhotoPage } from "./types";
 const photoPath = (photoId: string) => `/photos/${encodeURIComponent(photoId)}`;
 const groupPhotosPath = (groupId: string) => `/groups/${encodeURIComponent(groupId)}/photos`;
 
+/** Which of a group's photos to list (all of them by default). */
+export type GroupPhotosFilter = {
+  /** Start from photos posted before this ISO instant (the timeline jumping to a month). */
+  before?: string;
+  /** Only your favorites. */
+  favorites?: boolean;
+};
+
 /** One page of a group's photos, newest first. Pass the previous page's `nextCursor` to continue. */
 export function fetchGroupPhotos(
   groupId: string,
-  page: { cursor: string | null; limit: number },
+  page: { cursor: string | null; limit: number } & GroupPhotosFilter,
   signal?: AbortSignal,
 ): Promise<PhotoPage> {
   const query = new URLSearchParams({ limit: String(page.limit) });
   if (page.cursor) query.set("cursor", page.cursor);
+  if (page.before) query.set("before", page.before);
+  if (page.favorites) query.set("favorites", "true");
   return apiRequest<PhotoPage>(`${groupPhotosPath(groupId)}?${query}`, { signal });
 }
 

@@ -14,8 +14,8 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 4 | Photos: in-app camera, gallery upload, processing, thumbnails, object storage, captions, deletion, profile pictures | ✅ Done |
 | 5 | Feed: group feed and grid, infinite scroll, lazy images, photo viewer (swipe, full screen), upload flow | ✅ Done |
 | 6 | Social: five reactions, comments, private favorites | ✅ Done |
-| 7 | Memories (timeline, albums, On This Day) | ⏳ Next |
-| 8 | Analytics | — |
+| 7 | Memories: On This Day, timeline by month, shared albums, favorites | ✅ Done |
+| 8 | Analytics | ⏳ Next |
 | 9 | Wrapped | — |
 | 10 | Polish | — |
 
@@ -121,7 +121,8 @@ server/
     config/env.ts     Zod-validated environment
     lib/              prisma client + withTransaction, errors (AppError), logger, password hashing, tokens,
                       storage (S3), images (sharp), upload (multer), send-image,
-                      pagination (keyset cursors), user-text (caption/comment validation)
+                      pagination (keyset cursors), user-text (caption/comment validation),
+                      time-zone (local calendar days for On This Day)
     middleware/       error handler, 404, request logging, rate limit, same-origin check
     modules/<name>/   .routes → .controller → .service → .repository (+ .schemas for Zod)
     routes/index.ts   Mounts module routers under /api
@@ -228,7 +229,7 @@ Users come back with an `avatarUrl` (or `null`). The URL changes whenever the pi
 | Method | Endpoint | Who | Purpose |
 | --- | --- | --- | --- |
 | `POST` | `/api/groups/:groupId/photos` | member | Post a photo |
-| `GET` | `/api/groups/:groupId/photos` | member | Newest first: `{ photos, nextCursor }` |
+| `GET` | `/api/groups/:groupId/photos` | member | Newest first: `{ photos, nextCursor }`. Optional `before` (ISO instant) and `favorites=true` |
 | `GET` | `/api/photos/:photoId` | uploader or member | Photo details, its group, and its neighbours in the feed (`feed`) |
 | `GET` | `/api/photos/:photoId/images/:variant` | uploader or member | `thumbnail`, `medium` or `full` (WebP) |
 | `DELETE` | `/api/photos/:photoId` | uploader | Delete the photo and its files |
@@ -263,7 +264,7 @@ Every photo comes back with `reactions: { counts, total, mine }`, `commentCount`
   - **Order:** oldest first, 30 per page.
   - **Deleting:** only the author can delete a comment, not the uploader or the group owner. Editing isn't supported (optional in the spec).
   - **Linking:** a feed post's comment count links to `/photos/:id#comments`.
-- **Favorites.** Private bookmarks: only you can see that you favorited a photo. Browsing them comes with Memories (Phase 7).
+- **Favorites.** Private bookmarks: only you can see that you favorited a photo. Browse them under [Memories](#memories).
 - **Who can do what.**
   - **Reacting and commenting:** current members of the photo's group only.
   - **Seeing reactions and comments:** anyone who can see the photo.
@@ -295,6 +296,41 @@ Every photo comes back with `reactions: { counts, total, mine }`, `commentCount`
 | `DELETE` | `/api/comments/:commentId` | author | Delete your comment |
 | `PUT` | `/api/photos/:photoId/favorite` | can see photo | Favorite (idempotent) |
 | `DELETE` | `/api/photos/:photoId/favorite` | you | Unfavorite (idempotent) |
+
+## Memories
+
+`/memories` (in the bottom navigation) is a group's archive. With more than one group, chips at the top switch between them. The group, tab and month are kept in the URL (`?group=…&tab=…&month=YYYY-MM`), so coming back from a photo lands in the same place.
+
+- **On This Day.** Photos from today's date in earlier years, newest year first, with "1 year ago" headings. When there are none yet, an empty state says so.
+  - **Your own calendar:** days are counted in the viewer's time zone. The browser sends its IANA zone (`tz=Europe/Bratislava`), and the server works out each year's local midnight-to-midnight range (`lib/time-zone.ts`). A photo taken at 00:30 local time counts for that day, even though in UTC it's the previous one.
+  - **Range:** only years since the group was created are searched, and 29 February only comes back in leap years.
+- **Timeline.** Every photo in the group, newest first, under sticky month headings, loading more as you scroll.
+  - **Jump to a month:** pick a month and year (from when the group began until now). The list then starts at the end of that month in your time zone (`?before=`) and continues back in time. **Back to the latest** returns to the top.
+  - **Shared cache:** from the latest photos, the timeline shares the group feed's cache.
+- **Albums.** Shared by the whole group (`albums` + `photo_albums`).
+  - **Anyone in the group can:** create an album (name up to 60 characters), add photos (from the album page's picker, up to 100 at a time), and take them out. A photo can be in several albums, but only in albums of its own group.
+  - **Only the creator or the group owner can:** rename or delete an album. Deleting an album keeps its photos.
+  - **Album pages** (`/memories/albums/:id`) list photos oldest first, so an album reads like the story of the event. The cover is the photo most recently added.
+  - **From the photo viewer:** the album button opens a checklist of the group's albums, with a box to start a new album containing that photo.
+  - **Deleting:** a deleted photo leaves every album it was in. A group's albums go with the group.
+  - **Account deletion (later):** `albums.created_by_id` is `SET NULL`, because an album belongs to the group, not to its creator.
+- **Favorites.** The photos you've starred in the group, newest first. Only you see them.
+- **Performance.** Measured on a local MySQL with 10,000 photos over three years, 40 favorites, and 20 albums of 100 photos. Favorites, a timeline jump, On This Day and an album page each take about 5–7 ms. The album list with counts and covers takes about 7 ms.
+  - The cover is the most recently added photo: one lookup per album on the `(album_id, added_at)` index.
+  - Picking the album's newest photo by date meant sorting every photo in every album instead: about 26 ms for the same 20 albums, and growing.
+
+| Method | Endpoint | Who | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/groups/:groupId/photos/on-this-day?tz=…&date=YYYY-MM-DD` | member | `{ date, years: [{ year, photos }] }`. `date` defaults to today in `tz` |
+| `GET` | `/api/groups/:groupId/albums` | member | The group's albums (newest first), with `photoCount`, `cover`, `canManage` |
+| `POST` | `/api/groups/:groupId/albums` | member | `{ name }`: create an album |
+| `GET` | `/api/albums/:albumId` | member | One album |
+| `PATCH` | `/api/albums/:albumId` | creator or owner | `{ name }`: rename |
+| `DELETE` | `/api/albums/:albumId` | creator or owner | Delete the album (not its photos) |
+| `GET` | `/api/albums/:albumId/photos` | member | Oldest first: `{ photos, nextCursor }` |
+| `POST` | `/api/albums/:albumId/photos` | member | `{ photoIds }` (1–100, from the same group): add. Returns `{ album }` |
+| `DELETE` | `/api/albums/:albumId/photos/:photoId` | member | Take a photo out. Returns `{ album }` |
+| `GET` | `/api/photos/:photoId/albums` | member | `{ albumIds }`: the albums a photo is in |
 
 ## Local machine notes
 

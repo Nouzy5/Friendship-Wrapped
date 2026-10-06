@@ -1,10 +1,11 @@
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { IMAGE_CONTENT_TYPE, PHOTO_VARIANTS, processPhoto, type PhotoVariant } from "../../lib/images.js";
 import { logger } from "../../lib/logger.js";
-import { toPage } from "../../lib/pagination.js";
+import { toPage, type Cursor } from "../../lib/pagination.js";
 import { withTransaction } from "../../lib/prisma.js";
 import * as storage from "../../lib/storage.js";
-import { isMember, requireMembership } from "../groups/groups.service.js";
+import { dayRangeIn, isRealDate, todayIn, type CalendarDate } from "../../lib/time-zone.js";
+import { getGroup, isMember, requireMembership } from "../groups/groups.service.js";
 import * as commentsRepository from "../comments/comments.repository.js";
 import * as reactionsRepository from "../reactions/reactions.repository.js";
 import { newPhotoKeys } from "./photo-keys.js";
@@ -12,11 +13,12 @@ import {
   toPhotoDetailView,
   toPhotoView,
   type PhotoDetailView,
+  type PhotoRow,
   type PhotoView,
   type ViewContext,
 } from "./photo.dto.js";
 import * as photosRepository from "./photos.repository.js";
-import type { ListPhotosQuery } from "./photos.schemas.js";
+import type { ListPhotosQuery, OnThisDayQuery } from "./photos.schemas.js";
 
 const VARIANTS = Object.keys(PHOTO_VARIANTS) as PhotoVariant[];
 
@@ -30,6 +32,19 @@ async function loadCounts(photoIds: string[]) {
     reactionCounts: reactions.get(photoId),
     commentCount: comments.get(photoId) ?? 0,
   });
+}
+
+/** Views for photos listed to a member (so they can join in). */
+async function toViews(rows: PhotoRow[], viewerId: string): Promise<PhotoView[]> {
+  const countsOf = await loadCounts(rows.map((photo) => photo.id));
+  return rows.map((photo) => toPhotoView(photo, { viewerId, canInteract: true, ...countsOf(photo.id) }));
+}
+
+type PhotoPage = { photos: PhotoView[]; nextCursor: string | null };
+
+async function toPageOfViews(rows: PhotoRow[], limit: number, viewerId: string): Promise<PhotoPage> {
+  const { items, nextCursor } = toPage(rows, limit);
+  return { photos: await toViews(items, viewerId), nextCursor };
 }
 
 /** Only members can post to a group. Checked before the upload body is even read. */
@@ -83,21 +98,68 @@ export async function createPhoto(
   }
 }
 
+/** Newest first: the feed, the timeline (optionally from a given point) and your favorites. */
 export async function listGroupPhotos(
   groupId: string,
   viewerId: string,
-  { cursor, limit }: ListPhotosQuery,
-): Promise<{ photos: PhotoView[]; nextCursor: string | null }> {
+  { cursor, limit, before, favorites }: ListPhotosQuery,
+): Promise<PhotoPage> {
   await requireMembership(groupId, viewerId);
+  const rows = await photosRepository.listGroupPhotos(groupId, viewerId, {
+    cursor,
+    startBefore: before,
+    onlyFavorites: favorites,
+    take: limit + 1,
+  });
+  return toPageOfViews(rows, limit, viewerId);
+}
 
-  const rows = await photosRepository.listGroupPhotos(groupId, viewerId, { cursor, take: limit + 1 });
-  const { items, nextCursor } = toPage(rows, limit);
-  const countsOf = await loadCounts(items.map((photo) => photo.id));
+/** Oldest first. Callers check access to the album (and so its group) first. */
+export async function listAlbumPhotos(
+  albumId: string,
+  viewerId: string,
+  { cursor, limit }: { cursor?: Cursor; limit: number },
+): Promise<PhotoPage> {
+  const rows = await photosRepository.listAlbumPhotos(albumId, viewerId, { cursor, take: limit + 1 });
+  return toPageOfViews(rows, limit, viewerId);
+}
 
-  return {
-    photos: items.map((photo) => toPhotoView(photo, { viewerId, canInteract: true, ...countsOf(photo.id) })),
-    nextCursor,
-  };
+/** At most this many photos for On This Day, across all years. */
+const ON_THIS_DAY_LIMIT = 100;
+
+const isoDate = ({ year, month, day }: CalendarDate) =>
+  [String(year).padStart(4, "0"), String(month).padStart(2, "0"), String(day).padStart(2, "0")].join("-");
+
+/**
+ * Photos from the same calendar day in earlier years, newest year first. Days are the
+ * viewer's own (their time zone), and only years since the group began are searched.
+ */
+export async function listOnThisDay(
+  groupId: string,
+  viewerId: string,
+  { tz, date }: OnThisDayQuery,
+): Promise<{ date: string; years: { year: number; photos: PhotoView[] }[] }> {
+  const group = await getGroup(groupId, viewerId);
+  const today = date ?? todayIn(tz);
+  const firstYear = todayIn(tz, group.createdAt).year;
+
+  const ranges = [];
+  for (let year = today.year - 1; year >= firstYear; year--) {
+    const day = { ...today, year };
+    // 29 February only comes back in leap years.
+    if (isRealDate(day)) ranges.push({ year, ...dayRangeIn(day, tz) });
+  }
+  if (ranges.length === 0) return { date: isoDate(today), years: [] };
+
+  const rows = await photosRepository.listPhotosInRanges(groupId, viewerId, ranges, ON_THIS_DAY_LIMIT);
+  const photos = await toViews(rows, viewerId);
+  const years = ranges
+    .map(({ year, from, to }) => ({
+      year,
+      photos: photos.filter(({ createdAt }) => createdAt >= from && createdAt < to),
+    }))
+    .filter((entry) => entry.photos.length > 0);
+  return { date: isoDate(today), years };
 }
 
 /** 404 (never 403) for photos the viewer can't see, so their existence isn't revealed. */

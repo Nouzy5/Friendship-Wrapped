@@ -1,10 +1,11 @@
 import { useEffect, useEffectEvent, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { ConfirmDialog } from "../../../components/ui/ConfirmDialog";
-import { ChevronLeftIcon, ChevronRightIcon, TrashIcon } from "../../../components/ui/icons";
+import { AlbumIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon } from "../../../components/ui/icons";
 import { headerIconClasses, PageHeader } from "../../../components/ui/PageHeader";
 import { getFormError } from "../../../lib/form-errors";
 import { useSwipe } from "../../../lib/useSwipe";
+import { PhotoAlbumsDialog } from "../../albums/components/PhotoAlbumsDialog";
 import { CommentsSection } from "../../comments/components/CommentsSection";
 import { FavoriteButton } from "../../favorites/components/FavoriteButton";
 import { ReactionBar } from "../../reactions/components/ReactionBar";
@@ -36,6 +37,7 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [showingReactions, setShowingReactions] = useState(false);
+  const [choosingAlbums, setChoosingAlbums] = useState(false);
 
   const fromFeed = cameFromFeed(location.state);
   // Without the feed (you posted this, then left the group), there's no group page to return to.
@@ -60,7 +62,7 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
-    if (confirmingDelete || fullscreen || showingReactions || isTypingOrInDialog(event.target)) return;
+    if (confirmingDelete || fullscreen || showingReactions || choosingAlbums || isTypingOrInDialog(event.target)) return;
     if (event.key === "ArrowLeft") showPhoto(newerId);
     if (event.key === "ArrowRight") showPhoto(olderId);
   });
@@ -79,6 +81,17 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
         action={
           // Pulled to the edge as a pair, so the last glyph lines up with the content.
           <div className="-mr-2 flex items-center">
+            {photo.canInteract && (
+              <button
+                type="button"
+                aria-label="Albums"
+                title="Add to an album"
+                className={headerIconClasses}
+                onClick={() => setChoosingAlbums(true)}
+              >
+                <AlbumIcon className="size-5" />
+              </button>
+            )}
             <FavoriteButton photo={photo} />
             {photo.canDelete && (
               <button
@@ -153,6 +166,7 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
       <CommentsSection photo={photo} />
 
       <ReactionsDialog photoId={photo.id} open={showingReactions} onClose={() => setShowingReactions(false)} />
+      <PhotoAlbumsDialog photo={photo} open={choosingAlbums} onClose={() => setChoosingAlbums(false)} />
 
       <FullscreenPhoto photo={photo} open={fullscreen} onClose={() => setFullscreen(false)} />
 
