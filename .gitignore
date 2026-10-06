@@ -26,3 +26,9 @@ Thumbs.db
 !.vscode/extensions.json
 .idea/
 .claude/
+
+# iOS (the Xcode project is generated from ios/project.yml by XcodeGen)
+ios/*.xcodeproj/
+xcuserdata/
+DerivedData/
+*.xcarchive
