@@ -8,10 +8,13 @@ import {
   groupWith,
   imageInfo,
   makeImage,
+  postPhoto,
   resetDatabase,
   resetStorage,
   signUp,
+  uploadPhoto,
   type Agent,
+  type PhotoBody,
 } from "./helpers.js";
 
 const app = createApp();
@@ -26,28 +29,6 @@ afterAll(async () => {
   await resetStorage();
   await prisma.$disconnect();
 });
-
-type PhotoBody = {
-  id: string;
-  caption: string | null;
-  width: number;
-  height: number;
-  imageUrls: { full: string; medium: string; thumbnail: string };
-  canDelete: boolean;
-};
-
-function postPhoto(agent: Agent, groupId: string, image?: Buffer, fields: Record<string, string> = {}) {
-  const req = agent.post(`/api/groups/${groupId}/photos`);
-  for (const [name, value] of Object.entries(fields)) req.field(name, value);
-  if (image) req.attach("photo", image, { filename: "photo.jpg", contentType: "image/jpeg" });
-  return req;
-}
-
-async function uploadPhoto(agent: Agent, groupId: string, image?: Buffer, caption?: string) {
-  const res = await postPhoto(agent, groupId, image ?? (await makeImage()), caption ? { caption } : {});
-  expect(res.status).toBe(201);
-  return res.body.photo as PhotoBody;
-}
 
 /** superagent buffers image/* responses, so `body` is the image's bytes. */
 async function getImage(agent: Agent, url: string) {

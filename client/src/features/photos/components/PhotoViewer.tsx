@@ -2,9 +2,13 @@ import { useEffect, useEffectEvent, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { ConfirmDialog } from "../../../components/ui/ConfirmDialog";
 import { ChevronLeftIcon, ChevronRightIcon, TrashIcon } from "../../../components/ui/icons";
-import { headerIconLinkClasses, PageHeader } from "../../../components/ui/PageHeader";
+import { headerIconClasses, PageHeader } from "../../../components/ui/PageHeader";
 import { getFormError } from "../../../lib/form-errors";
 import { useSwipe } from "../../../lib/useSwipe";
+import { CommentsSection } from "../../comments/components/CommentsSection";
+import { FavoriteButton } from "../../favorites/components/FavoriteButton";
+import { ReactionBar } from "../../reactions/components/ReactionBar";
+import { ReactionsDialog } from "../../reactions/components/ReactionsDialog";
 import { useDeletePhoto, usePrefetchPhoto } from "../hooks";
 import type { PhotoDetail } from "../types";
 import { cameFromFeed, photoPath } from "../viewer-link";
@@ -15,10 +19,15 @@ import { PhotoImage } from "./PhotoImage";
 const stepButtonClasses =
   "absolute top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-black/50 text-ink-50 backdrop-blur transition hover:bg-black/70";
 
+/** Arrow keys belong to whatever has focus when it's a text field or a dialog. */
+function isTypingOrInDialog(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest("input, textarea, select, [contenteditable], dialog") !== null;
+}
+
 /**
- * One photo, large, with who posted it, when, and its caption. Swiping, the arrow
- * buttons or the arrow keys step through the group's feed (left = newer, as if
- * scrolling the feed up). Tapping the photo shows it full size.
+ * One photo, large, with who posted it, when, its caption, reactions and comments.
+ * Swiping, the arrow buttons or the arrow keys step through the group's feed
+ * (left = newer, as if scrolling the feed up). Tapping the photo shows it full size.
  */
 export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
   const navigate = useNavigate();
@@ -26,6 +35,7 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
   const remove = useDeletePhoto(photo);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [showingReactions, setShowingReactions] = useState(false);
 
   const fromFeed = cameFromFeed(location.state);
   // Without the feed (you posted this, then left the group), there's no group page to return to.
@@ -49,7 +59,8 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
   const swipe = useSwipe({ onSwipeLeft: () => showPhoto(olderId), onSwipeRight: () => showPhoto(newerId) });
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (confirmingDelete || fullscreen || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (confirmingDelete || fullscreen || showingReactions || isTypingOrInDialog(event.target)) return;
     if (event.key === "ArrowLeft") showPhoto(newerId);
     if (event.key === "ArrowRight") showPhoto(olderId);
   });
@@ -66,16 +77,20 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
         onBack={fromFeed ? goBack : undefined}
         backLabel={photo.feed ? `Back to ${photo.group.name}` : "Back to home"}
         action={
-          photo.canDelete && (
-            <button
-              type="button"
-              aria-label="Delete photo"
-              className={headerIconLinkClasses}
-              onClick={() => setConfirmingDelete(true)}
-            >
-              <TrashIcon className="size-5" />
-            </button>
-          )
+          // Pulled to the edge as a pair, so the last glyph lines up with the content.
+          <div className="-mr-2 flex items-center">
+            <FavoriteButton photo={photo} />
+            {photo.canDelete && (
+              <button
+                type="button"
+                aria-label="Delete photo"
+                className={headerIconClasses}
+                onClick={() => setConfirmingDelete(true)}
+              >
+                <TrashIcon className="size-5" />
+              </button>
+            )}
+          </div>
         }
       />
 
@@ -121,6 +136,23 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
       <PhotoAttribution photo={photo} group={photo.feed ? photo.group : undefined} exactTime />
 
       {photo.caption && <p className="break-words whitespace-pre-line text-ink-50">{photo.caption}</p>}
+
+      <div className="flex flex-col items-start gap-2">
+        <ReactionBar photo={photo} />
+        {photo.reactions.total > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowingReactions(true)}
+            className="text-sm text-ink-400 underline-offset-2 hover:text-ink-200 hover:underline"
+          >
+            {photo.reactions.total === 1 ? "1 reaction" : `${photo.reactions.total} reactions`} · see who
+          </button>
+        )}
+      </div>
+
+      <CommentsSection photo={photo} />
+
+      <ReactionsDialog photoId={photo.id} open={showingReactions} onClose={() => setShowingReactions(false)} />
 
       <FullscreenPhoto photo={photo} open={fullscreen} onClose={() => setFullscreen(false)} />
 

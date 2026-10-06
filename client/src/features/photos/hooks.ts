@@ -1,33 +1,13 @@
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-  type InfiniteData,
-  type QueryClient,
-} from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { deletePhoto, fetchGroupPhotos, fetchPhoto, uploadPhoto } from "./api";
-import type { Photo, PhotoPage } from "./types";
+import { photoKeys, updateCachedFeed, type FeedData } from "./cache";
+import type { Photo } from "./types";
 
 /** Photos per feed page: eight rows of the three-column grid. */
 const FEED_PAGE_SIZE = 24;
 
-export const photoKeys = {
-  all: ["photos"] as const,
-  group: (groupId: string) => [...photoKeys.all, "group", groupId] as const,
-  details: () => [...photoKeys.all, "detail"] as const,
-  detail: (photoId: string) => [...photoKeys.details(), photoId] as const,
-};
-
-type FeedData = InfiniteData<PhotoPage, string | null>;
-
 const allPhotos = (feed: FeedData): Photo[] => feed.pages.flatMap((page) => page.photos);
-
-/** Edits the cached feed in place (if it's cached), so a change shows before the refetch lands. */
-function updateCachedFeed(queryClient: QueryClient, groupId: string, update: (pages: PhotoPage[]) => PhotoPage[]) {
-  queryClient.setQueryData<FeedData>(photoKeys.group(groupId), (feed) => feed && { ...feed, pages: update(feed.pages) });
-}
 
 /** A group's photos, newest first, one page at a time: `data` is every photo loaded so far. */
 export function useGroupFeed(groupId: string) {

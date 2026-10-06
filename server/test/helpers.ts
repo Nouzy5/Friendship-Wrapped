@@ -7,6 +7,9 @@ import { deletePrefix } from "../src/lib/storage.js";
 
 /** Deletes all rows, children before parents. */
 export async function resetDatabase(): Promise<void> {
+  await prisma.comment.deleteMany();
+  await prisma.reaction.deleteMany();
+  await prisma.favorite.deleteMany();
   await prisma.photo.deleteMany();
   await prisma.inviteToken.deleteMany();
   await prisma.groupMember.deleteMany();
@@ -87,6 +90,35 @@ export function makeImage({ width = 64, height = 48, format = "jpeg", orientatio
   if (exif) image = image.withExif({ IFD0: exif });
   if (orientation) image = image.withMetadata({ orientation });
   return image.toFormat(format).toBuffer();
+}
+
+/** A photo as the API returns it (the fields tests look at). */
+export type PhotoBody = {
+  id: string;
+  groupId: string;
+  caption: string | null;
+  width: number;
+  height: number;
+  imageUrls: { full: string; medium: string; thumbnail: string };
+  canDelete: boolean;
+  canInteract: boolean;
+  reactions: { counts: Record<string, number>; total: number; mine: string | null };
+  commentCount: number;
+  isFavorite: boolean;
+};
+
+export function postPhoto(agent: Agent, groupId: string, image?: Buffer, fields: Record<string, string> = {}) {
+  const req = agent.post(`/api/groups/${groupId}/photos`);
+  for (const [name, value] of Object.entries(fields)) req.field(name, value);
+  if (image) req.attach("photo", image, { filename: "photo.jpg", contentType: "image/jpeg" });
+  return req;
+}
+
+/** Posts a photo (a small generated JPEG unless one is given) and returns it. */
+export async function uploadPhoto(agent: Agent, groupId: string, image?: Buffer, caption?: string) {
+  const res = await postPhoto(agent, groupId, image ?? (await makeImage()), caption ? { caption } : {});
+  expect(res.status).toBe(201);
+  return res.body.photo as PhotoBody;
 }
 
 /** Decodes an image response, for asserting on what the server actually stored. */

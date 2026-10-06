@@ -2,7 +2,7 @@ import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-q
 import { sessionQueryKey } from "../../lib/query-client";
 import type { User } from "../auth/types";
 import { groupKeys } from "../groups/hooks";
-import { photoKeys } from "../photos/hooks";
+import { photoKeys } from "../photos/cache";
 import { removeAvatar, updateProfile, uploadAvatar } from "./api";
 
 /** Your name and picture appear in member lists and on photos too, so refresh those. */

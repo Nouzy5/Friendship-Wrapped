@@ -1,15 +1,36 @@
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { IMAGE_CONTENT_TYPE, PHOTO_VARIANTS, processPhoto, type PhotoVariant } from "../../lib/images.js";
 import { logger } from "../../lib/logger.js";
+import { toPage } from "../../lib/pagination.js";
 import { withTransaction } from "../../lib/prisma.js";
 import * as storage from "../../lib/storage.js";
 import { isMember, requireMembership } from "../groups/groups.service.js";
+import * as commentsRepository from "../comments/comments.repository.js";
+import * as reactionsRepository from "../reactions/reactions.repository.js";
 import { newPhotoKeys } from "./photo-keys.js";
-import { toPhotoDetailView, toPhotoView, type PhotoDetailView, type PhotoView } from "./photo.dto.js";
+import {
+  toPhotoDetailView,
+  toPhotoView,
+  type PhotoDetailView,
+  type PhotoView,
+  type ViewContext,
+} from "./photo.dto.js";
 import * as photosRepository from "./photos.repository.js";
-import { encodePhotoCursor, type ListPhotosQuery } from "./photos.schemas.js";
+import type { ListPhotosQuery } from "./photos.schemas.js";
 
 const VARIANTS = Object.keys(PHOTO_VARIANTS) as PhotoVariant[];
+
+/** Reaction and comment counts for a set of photos: one grouped query each, on indexed photo_id. */
+async function loadCounts(photoIds: string[]) {
+  const [reactions, comments] = await Promise.all([
+    reactionsRepository.countByPhoto(photoIds),
+    commentsRepository.countByPhoto(photoIds),
+  ]);
+  return (photoId: string): Pick<ViewContext, "reactionCounts" | "commentCount"> => ({
+    reactionCounts: reactions.get(photoId),
+    commentCount: comments.get(photoId) ?? 0,
+  });
+}
 
 /** Only members can post to a group. Checked before the upload body is even read. */
 export async function assertCanPost(groupId: string, userId: string): Promise<void> {
@@ -55,7 +76,7 @@ export async function createPhoto(
       );
     });
 
-    return toPhotoView(photo, uploaderId);
+    return toPhotoView(photo, { viewerId: uploaderId, canInteract: true, reactionCounts: undefined, commentCount: 0 });
   } catch (error) {
     await storage.discardObjects(Object.values(keys));
     throw error;
@@ -69,13 +90,13 @@ export async function listGroupPhotos(
 ): Promise<{ photos: PhotoView[]; nextCursor: string | null }> {
   await requireMembership(groupId, viewerId);
 
-  const rows = await photosRepository.listGroupPhotos(groupId, { cursor, take: limit + 1 });
-  const page = rows.slice(0, limit);
-  const last = page.at(-1);
+  const rows = await photosRepository.listGroupPhotos(groupId, viewerId, { cursor, take: limit + 1 });
+  const { items, nextCursor } = toPage(rows, limit);
+  const countsOf = await loadCounts(items.map((photo) => photo.id));
 
   return {
-    photos: page.map((photo) => toPhotoView(photo, viewerId)),
-    nextCursor: rows.length > limit && last ? encodePhotoCursor(last) : null,
+    photos: items.map((photo) => toPhotoView(photo, { viewerId, canInteract: true, ...countsOf(photo.id) })),
+    nextCursor,
   };
 }
 
@@ -84,9 +105,34 @@ export async function getPhoto(photoId: string, viewerId: string): Promise<Photo
   const photo = await photosRepository.findVisiblePhoto(photoId, viewerId);
   if (!photo) throw notFound("Photo not found");
 
-  // Only members browse the group feed; an uploader who has left just sees their own photo.
-  const feed = (await isMember(photo.groupId, viewerId)) ? await photosRepository.findFeedNeighbors(photo) : null;
-  return toPhotoDetailView(photo, viewerId, feed);
+  // Only members browse the group feed and join in; an uploader who has left just sees their own photo.
+  const member = await isMember(photo.groupId, viewerId);
+  const [feed, countsOf] = await Promise.all([
+    member ? photosRepository.findFeedNeighbors(photo) : null,
+    loadCounts([photo.id]),
+  ]);
+  return toPhotoDetailView(photo, { viewerId, canInteract: member, ...countsOf(photo.id) }, feed);
+}
+
+export async function canSeePhoto(photoId: string, viewerId: string): Promise<boolean> {
+  return (await photosRepository.findVisiblePhotoRef(photoId, viewerId)) !== null;
+}
+
+/** For features attached to a photo: the photo if the viewer can see it, else 404. */
+export async function requireVisiblePhoto(photoId: string, viewerId: string) {
+  const photo = await photosRepository.findVisiblePhotoRef(photoId, viewerId);
+  if (!photo) throw notFound("Photo not found");
+  return photo;
+}
+
+/**
+ * Reacting and commenting are for current members of the photo's group. Someone who
+ * posted a photo and then left can still see it (404 for everyone else), but not join in.
+ */
+export async function requireMemberAccess(photoId: string, userId: string) {
+  const photo = await requireVisiblePhoto(photoId, userId);
+  if (!(await isMember(photo.groupId, userId))) throw forbidden("Only members of this group can do that");
+  return photo;
 }
 
 export async function getPhotoImage(

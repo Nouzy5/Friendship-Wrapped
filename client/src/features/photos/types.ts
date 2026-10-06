@@ -1,4 +1,5 @@
 import type { UserSummary } from "../auth/types";
+import type { ReactionSummary } from "../reactions/types";
 
 export type PhotoVariant = "thumbnail" | "medium" | "full";
 
@@ -15,6 +16,12 @@ export type Photo = {
   /** Access-checked API URLs; the browser sends the session cookie with them. */
   imageUrls: Record<PhotoVariant, string>;
   canDelete: boolean;
+  /** Reacting and commenting are for current members of the photo's group. */
+  canInteract: boolean;
+  reactions: ReactionSummary;
+  commentCount: number;
+  /** Your private bookmark. */
+  isFavorite: boolean;
 };
 
 /** The photos either side of one in its group feed (newest first); null at either end. */
