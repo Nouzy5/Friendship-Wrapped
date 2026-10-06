@@ -19,11 +19,13 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 9 | Wrapped | — |
 | 10 | Polish | — |
 
+The native iOS app in [`ios/`](ios/README.md) covers phases 1–6 too.
+
 ## Stack
 
 ```text
-React 19 + Vite + Tailwind 4 (client/)
-        ↓  /api (proxied by Vite in dev)
+React 19 + Vite + Tailwind 4 (client/)     SwiftUI, iOS 17+ (ios/)
+        ↓  /api (proxied by Vite in dev)          ↓  same /api, session token in the Keychain
 Node 24 + Express 5 (server/)
         ↓  Prisma 7 + MariaDB driver adapter
 MySQL 8.4
@@ -130,6 +132,9 @@ server/
     app.ts            Express app factory (used by tests)
     index.ts          Process entry: listen + graceful shutdown
   test/               Vitest + Supertest
+
+ios/                  Native SwiftUI app (XcodeGen project.yml); see ios/README.md
+.github/workflows/    ios.yml: simulator build on macOS runners, optional TestFlight upload
 ```
 
 ## Conventions
