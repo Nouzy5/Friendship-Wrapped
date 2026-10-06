@@ -36,6 +36,13 @@ export function PageHeader({ title, backTo, onBack, backLabel = "Back", action }
   );
 }
 
-/** Round icon link used in page headers (settings, etc.). */
-export const headerIconLinkClasses =
-  "-mr-2 grid size-10 place-items-center rounded-full text-ink-200 transition hover:bg-ink-800 hover:text-ink-50";
+const headerIconShape = "grid size-10 place-items-center rounded-full transition hover:bg-ink-800";
+
+/** Round icon button or link for page headers. */
+export const headerIconClasses = `${headerIconShape} text-ink-200 hover:text-ink-50`;
+
+/** The same, switched on (e.g. a favorited star). */
+export const headerIconActiveClasses = `${headerIconShape} text-brand-gold`;
+
+/** A single header icon, pulled to the edge so its glyph lines up with the content (settings, etc.). */
+export const headerIconLinkClasses = `-mr-2 ${headerIconClasses}`;

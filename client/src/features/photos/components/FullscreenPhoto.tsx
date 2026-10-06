@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
 import { CloseIcon } from "../../../components/ui/icons";
+import { useModal } from "../../../lib/useModal";
 import type { Photo } from "../types";
 import { photoAlt } from "./PhotoImage";
 
@@ -15,14 +15,7 @@ type FullscreenPhotoProps = {
  * spot. Built on <dialog>, so Escape closes it and focus stays inside.
  */
 export function FullscreenPhoto({ photo, open, onClose }: FullscreenPhotoProps) {
-  const ref = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
+  const ref = useModal(open);
 
   return (
     <dialog

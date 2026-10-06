@@ -26,6 +26,9 @@ model User {
   memberships  GroupMember[]
   invites      InviteToken[]
   photos       Photo[]
+  reactions    Reaction[]
+  comments     Comment[]
+  favorites    Favorite[]
 
   @@map("users")
 }
@@ -112,9 +115,67 @@ model Photo {
   group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
   /// Restrict: what happens to someone's photos when they delete their account is decided with that feature.
   uploader     User     @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
+  reactions    Reaction[]
+  comments     Comment[]
+  favorites    Favorite[]
 
   /// Newest-first group listing with a (createdAt, id) keyset cursor.
   @@index([groupId, createdAt, id])
   @@index([uploaderId, createdAt])
   @@map("photos")
+}
+
+/// The five reactions: ❤️ HEART, 😂 LAUGH, 💀 SKULL, 🔥 FIRE, 😭 CRY.
+enum ReactionType {
+  HEART
+  LAUGH
+  SKULL
+  FIRE
+  CRY
+}
+
+/// One reaction per person per photo: reacting again changes it. Kept for Wrapped statistics.
+model Reaction {
+  photoId   String       @map("photo_id") @db.Char(36)
+  userId    String       @map("user_id") @db.Char(36)
+  type      ReactionType
+  /// When the person first reacted to the photo.
+  createdAt DateTime     @default(now()) @map("created_at")
+  /// When they last changed it.
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  photo     Photo        @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([photoId, userId])
+  @@index([userId, createdAt])
+  @@map("reactions")
+}
+
+model Comment {
+  id        String   @id @default(uuid(7)) @db.Char(36)
+  photoId   String   @map("photo_id") @db.Char(36)
+  authorId  String   @map("author_id") @db.Char(36)
+  body      String   @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at")
+  photo     Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  /// Restrict, like photos: the account-deletion policy will decide what happens to comments.
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  /// Oldest-first listing per photo with a (createdAt, id) keyset cursor.
+  @@index([photoId, createdAt, id])
+  @@index([authorId, createdAt])
+  @@map("comments")
+}
+
+/// A private bookmark: only the person who favorited a photo sees it.
+model Favorite {
+  userId    String   @map("user_id") @db.Char(36)
+  photoId   String   @map("photo_id") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photo     Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@id([userId, photoId])
+  @@index([photoId])
+  @@map("favorites")
 }

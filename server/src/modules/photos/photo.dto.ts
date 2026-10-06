@@ -1,25 +1,33 @@
 import type { Prisma } from "../../generated/prisma/client.js";
 import { apiPath } from "../../lib/api-path.js";
 import type { PhotoVariant } from "../../lib/images.js";
+import { toReactionSummary, type ReactionCounts, type ReactionSummary } from "../reactions/reaction.dto.js";
 import { toUserSummary, userSummarySelect, type UserSummary } from "../users/user.dto.js";
 
-export const photoSelect = {
-  id: true,
-  groupId: true,
-  caption: true,
-  width: true,
-  height: true,
-  createdAt: true,
-  uploader: { select: userSummarySelect },
-} satisfies Prisma.PhotoSelect;
+/** What a photo looks like to one viewer: their own reaction and favorite ride along (at most one row each). */
+export function photoSelect(viewerId: string) {
+  return {
+    id: true,
+    groupId: true,
+    caption: true,
+    width: true,
+    height: true,
+    createdAt: true,
+    uploader: { select: userSummarySelect },
+    reactions: { where: { userId: viewerId }, select: { type: true } },
+    favorites: { where: { userId: viewerId }, select: { userId: true } },
+  } satisfies Prisma.PhotoSelect;
+}
 
-export const photoDetailSelect = {
-  ...photoSelect,
-  group: { select: { id: true, name: true, emoji: true } },
-} satisfies Prisma.PhotoSelect;
+export function photoDetailSelect(viewerId: string) {
+  return {
+    ...photoSelect(viewerId),
+    group: { select: { id: true, name: true, emoji: true } },
+  } satisfies Prisma.PhotoSelect;
+}
 
-type PhotoRow = Prisma.PhotoGetPayload<{ select: typeof photoSelect }>;
-type PhotoDetailRow = Prisma.PhotoGetPayload<{ select: typeof photoDetailSelect }>;
+type PhotoRow = Prisma.PhotoGetPayload<{ select: ReturnType<typeof photoSelect> }>;
+type PhotoDetailRow = Prisma.PhotoGetPayload<{ select: ReturnType<typeof photoDetailSelect> }>;
 
 export type PhotoView = {
   id: string;
@@ -35,6 +43,12 @@ export type PhotoView = {
   imageUrls: Record<PhotoVariant, string>;
   /** Only the uploader may delete a photo. */
   canDelete: boolean;
+  /** Reacting and commenting are for current members of the photo's group. */
+  canInteract: boolean;
+  reactions: ReactionSummary;
+  commentCount: number;
+  /** The viewer's private bookmark. */
+  isFavorite: boolean;
 };
 
 /** The photos either side of this one in its group feed, for swiping through the viewer. */
@@ -51,7 +65,19 @@ function imageUrls(photoId: string): Record<PhotoVariant, string> {
   return { full: url("full"), medium: url("medium"), thumbnail: url("thumbnail") };
 }
 
-export function toPhotoView(photo: PhotoRow, viewerId: string): PhotoView {
+/** Who's looking, and the counts loaded alongside the rows (see `photos.service`). */
+export type ViewContext = {
+  viewerId: string;
+  canInteract: boolean;
+  /** Undefined when nobody has reacted. */
+  reactionCounts: ReactionCounts | undefined;
+  commentCount: number;
+};
+
+export function toPhotoView(
+  photo: PhotoRow,
+  { viewerId, canInteract, reactionCounts, commentCount }: ViewContext,
+): PhotoView {
   return {
     id: photo.id,
     groupId: photo.groupId,
@@ -62,13 +88,17 @@ export function toPhotoView(photo: PhotoRow, viewerId: string): PhotoView {
     uploader: toUserSummary(photo.uploader),
     imageUrls: imageUrls(photo.id),
     canDelete: photo.uploader.id === viewerId,
+    canInteract,
+    reactions: toReactionSummary(reactionCounts, photo.reactions[0]?.type ?? null),
+    commentCount,
+    isFavorite: photo.favorites.length > 0,
   };
 }
 
 export function toPhotoDetailView(
   photo: PhotoDetailRow,
-  viewerId: string,
+  context: ViewContext,
   feed: FeedNeighbors | null,
 ): PhotoDetailView {
-  return { ...toPhotoView(photo, viewerId), group: photo.group, feed };
+  return { ...toPhotoView(photo, context), group: photo.group, feed };
 }

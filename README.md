@@ -13,8 +13,8 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 3 | Groups & invites: create, invite links, join, leave, members, owner permissions | ✅ Done |
 | 4 | Photos: in-app camera, gallery upload, processing, thumbnails, object storage, captions, deletion, profile pictures | ✅ Done |
 | 5 | Feed: group feed and grid, infinite scroll, lazy images, photo viewer (swipe, full screen), upload flow | ✅ Done |
-| 6 | Reactions, comments, favorites | ⏳ Next |
-| 7 | Memories (timeline, albums, On This Day) | — |
+| 6 | Social: five reactions, comments, private favorites | ✅ Done |
+| 7 | Memories (timeline, albums, On This Day) | ⏳ Next |
 | 8 | Analytics | — |
 | 9 | Wrapped | — |
 | 10 | Polish | — |
@@ -120,7 +120,8 @@ server/
   src/
     config/env.ts     Zod-validated environment
     lib/              prisma client + withTransaction, errors (AppError), logger, password hashing, tokens,
-                      storage (S3), images (sharp), upload (multer), send-image
+                      storage (S3), images (sharp), upload (multer), send-image,
+                      pagination (keyset cursors), user-text (caption/comment validation)
     middleware/       error handler, 404, request logging, rate limit, same-origin check
     modules/<name>/   .routes → .controller → .service → .repository (+ .schemas for Zod)
     routes/index.ts   Mounts module routers under /api
@@ -162,7 +163,7 @@ server/
 | `GET` | `/api/users/:userId/avatar` | ✅ | The picture; only for the person and people who share a group with them |
 | `GET` | `/api/health` | — | API, database and storage status |
 
-Users come back with an `avatarUrl` (or `null`). The URL changes whenever the picture does, so browsers can cache it. Account deletion will be added once photos and comments exist, so its policy can cover them. Until then, `photos.uploader_id` is `ON DELETE RESTRICT`.
+Users come back with an `avatarUrl` (or `null`). The URL changes whenever the picture does, so browsers can cache it. Account deletion isn't built yet; its policy has to cover photos and comments. Until then, `photos.uploader_id` and `comments.author_id` are `ON DELETE RESTRICT`.
 
 ## Groups
 
@@ -234,7 +235,7 @@ Users come back with an `avatarUrl` (or `null`). The URL changes whenever the pi
 
 ## Feed
 
-- **Group feed.** The group page lists its photos newest first. Each post shows the uploader's avatar and name, when it was posted ("5 minutes ago", "yesterday", then a date; hover for the exact time), the photo and its caption. Long captions are cut to three lines with **more**.
+- **Group feed.** The group page lists its photos newest first. Each post shows the uploader's avatar and name, when it was posted ("5 minutes ago", "yesterday", then a date; hover for the exact time), the photo, reactions and comment count, and its caption. Long captions are cut to three lines with **more**.
   - **Feed or grid.** A toggle switches to a three-column grid of thumbnails. The choice is kept in the URL (`?view=grid`), so it survives opening a photo and coming back.
   - **Shapes.** Feed photos keep their shape between 3:4 portrait and 1.91:1 landscape. Taller or wider ones are cropped in the feed and shown whole in the viewer.
 - **Pagination.** 24 photos per page, fetched with the cursor (`useInfiniteQuery`). The next page loads by itself when the end of the list comes within 800 px of the screen (`IntersectionObserver`). The **Load more photos** button does the same for keyboard users and as a fallback. If a page fails, it waits for **Try again** rather than retrying in a loop. Only the pages someone scrolls to are ever loaded.
@@ -247,7 +248,53 @@ Users come back with an `avatarUrl` (or `null`). The URL changes whenever the pi
   - **History.** Stepping replaces the history entry, so **back** returns to the feed in one step, at the same scroll position, with the same pages loaded (`<ScrollRestoration>`).
   - **Full screen.** Tap the photo to see the `full` rendition on black. Pinch to zoom on phones. A tap, ✕ or Escape closes it.
 - **Upload flow.** Posting (from the feed's **Add photo** or the camera button) lands on the group's feed with the new photo already on top. The camera page is replaced in history, so **back** doesn't reopen the camera. Deleting a photo in the viewer goes back to the feed with the photo already gone.
-- **Performance.** On a local MySQL with 10,000 photos in one group, a page takes about 2 ms and the viewer's neighbours about 1 ms. Both are index range scans, and a full page-by-page walk visits every photo exactly once, in order.
+- **Performance.** See [Reactions, comments & favorites](#reactions-comments--favorites) for timings at the spec's full targets. Pages and viewer neighbours are index range scans, and a full page-by-page walk visits every photo exactly once, in order.
+
+## Reactions, comments & favorites
+
+Every photo comes back with `reactions: { counts, total, mine }`, `commentCount`, `isFavorite` and `canInteract`. Feed posts show the reactions and a comment count. The viewer adds who reacted, the comments, and a ★ for favorites.
+
+- **Reactions.** ❤️ `HEART`, 😂 `LAUGH`, 💀 `SKULL`, 🔥 `FIRE`, 😭 `CRY`.
+  - **One per person per photo** (primary key `photo_id, user_id`): reacting again changes it, and tapping your current one removes it.
+  - **Kept for Wrapped:** `created_at` is when you first reacted and `updated_at` when you last changed it.
+  - **Instant:** taps show straight away everywhere the photo appears. Taps on one photo are sent in order, and only the last answer is applied, so quick changes of mind don't flicker.
+- **Comments.**
+  - **Text:** up to 500 characters; line breaks are kept, other control characters rejected.
+  - **Order:** oldest first, 30 per page.
+  - **Deleting:** only the author can delete a comment, not the uploader or the group owner. Editing isn't supported (optional in the spec).
+  - **Linking:** a feed post's comment count links to `/photos/:id#comments`.
+- **Favorites.** Private bookmarks: only you can see that you favorited a photo. Browsing them comes with Memories (Phase 7).
+- **Who can do what.**
+  - **Reacting and commenting:** current members of the photo's group only.
+  - **Seeing reactions and comments:** anyone who can see the photo.
+  - **After leaving a group:** your reactions and comments stay with the group's photos, like photos do. You can still remove your own reaction, comment or favorite. On your own photo, the viewer becomes read-only (`canInteract: false`).
+  - **Everyone else:** gets 404.
+- **Deleting a photo** removes its reactions, comments and favorites with it (`ON DELETE CASCADE`).
+- **Account deletion** (still to come):
+  - `comments.author_id` is `ON DELETE RESTRICT`, like photos, until that policy is decided.
+  - Reactions and favorites are personal, so they'll go with the account (`CASCADE`).
+- **Counting.** Reaction and comment counts are one grouped query per page, on the indexed `photo_id`. Prisma's relation `_count` aggregated the whole comments table instead.
+  - **Timings** on a local MySQL at the spec's targets (20 members, 10,000 photos, 50,000 reactions, 20,000 comments in one group):
+
+    | Action | Time |
+    | --- | --- |
+    | Feed page with all counts | ≈ 6 ms |
+    | Viewer | ≈ 4 ms |
+    | Comments page | ≈ 2 ms |
+    | Who reacted | ≈ 3 ms |
+    | Reacting (one write) | ≈ 15–20 ms |
+  - **No aggregate tables:** none are needed yet, as the spec suggests.
+
+| Method | Endpoint | Who | Purpose |
+| --- | --- | --- | --- |
+| `PUT` | `/api/photos/:photoId/reaction` | member | `{ type }`: add or change your reaction. Returns `{ summary }` |
+| `DELETE` | `/api/photos/:photoId/reaction` | can see photo | Remove your reaction. Returns `{ summary }` |
+| `GET` | `/api/photos/:photoId/reactions` | can see photo | Who reacted, and how |
+| `GET` | `/api/photos/:photoId/comments` | can see photo | Oldest first: `{ comments, nextCursor }` |
+| `POST` | `/api/photos/:photoId/comments` | member | `{ body }`: add a comment |
+| `DELETE` | `/api/comments/:commentId` | author | Delete your comment |
+| `PUT` | `/api/photos/:photoId/favorite` | can see photo | Favorite (idempotent) |
+| `DELETE` | `/api/photos/:photoId/favorite` | you | Unfavorite (idempotent) |
 
 ## Local machine notes
 
