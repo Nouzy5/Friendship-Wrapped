@@ -1,6 +1,6 @@
 # Friendship Wrapped for iOS
 
-A native SwiftUI app that does everything the web client does so far: phases 1–4. It talks to the **same Express API** as the web client. The server needed no changes.
+A native SwiftUI app that does everything the web client does so far: phases 1–6. It talks to the **same Express API** as the web client. The server needed no changes.
 
 | Web | iOS |
 | --- | --- |
@@ -8,8 +8,9 @@ A native SwiftUI app that does everything the web client does so far: phases 1�
 | `/onboarding` | Full-screen "Welcome!" sheet after sign-up |
 | `/home` | **Home** tab: your groups, `+` → New group / Join with invite link |
 | Bottom-nav camera button, `/camera` | **Camera** tab: take a photo (system camera) or choose one from the library → caption → choose group → Post |
-| `/groups/:id` | Group screen: emoji, members, photo grid, invite friends |
-| `/photos/:id` | Photo screen: image, who posted it and when, caption; the uploader can delete it |
+| `/groups/:id` | Group screen: emoji, members, then the photo feed. Switch between posts and a grid; more photos load as you scroll |
+| Feed post | Who posted it and when, the photo, the five reactions, comment count, caption ("more" for long ones) |
+| `/photos/:id` | Photo viewer: swipe or use the arrows to step through the feed, tap for full size (pinch or double-tap to zoom), ☆ favourite (private), reactions with "see who", comments (oldest first, delete your own) with the composer pinned to the bottom; the uploader can delete the photo |
 | `/groups/:id/members` | Members (owner swipes left to remove) |
 | `/groups/:id/settings` | Group settings: edit, reset invite links, leave |
 | `/invite/:token` | Invite sheet: preview → join, or sign up and come back |

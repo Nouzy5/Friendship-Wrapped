@@ -86,6 +86,8 @@ struct MainTabView: View {
                             GroupSettingsView(groupID: groupID)
                         case .photo(let photoID):
                             PhotoDetailView(photoID: photoID)
+                        case .photoComments(let photoID):
+                            PhotoDetailView(photoID: photoID, scrollToComments: true)
                         }
                     }
             }

@@ -14,6 +14,8 @@ enum AppRoute: Hashable {
     case members(String)
     case groupSettings(String)
     case photo(String)
+    /// The photo viewer, scrolled to its comments (a feed card's comment button).
+    case photoComments(String)
 }
 
 enum AuthRoute: Hashable {

@@ -5,9 +5,11 @@ private struct PhotoResponse: Decodable {
 }
 
 extension APIClient {
-    /// The group's newest photos (the first page; the paginated feed comes with Phase 5).
-    func fetchGroupPhotos(_ groupID: String) async throws -> PhotoPage {
-        try await send(.get, "/groups/\(groupID.pathSegment)/photos")
+    /// One page of the group's photos, newest first. Pass the previous page's `nextCursor` to continue.
+    func fetchGroupPhotos(_ groupID: String, cursor: String? = nil, limit: Int = 24) async throws -> PhotoPage {
+        var path = "/groups/\(groupID.pathSegment)/photos?limit=\(limit)"
+        if let cursor { path += "&cursor=\(cursor.queryValue)" }
+        return try await send(.get, path)
     }
 
     /// 404 for photos you can't see, so their existence isn't revealed.
@@ -28,5 +30,12 @@ extension APIClient {
     /// Only the uploader can delete a photo.
     func deletePhoto(_ photoID: String) async throws {
         try await perform(.delete, "/photos/\(photoID.pathSegment)")
+    }
+}
+
+extension String {
+    /// Percent-encodes a value for use in a URL query string.
+    var queryValue: String {
+        addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+?#"))) ?? self
     }
 }
