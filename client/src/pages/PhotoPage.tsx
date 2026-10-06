@@ -2,7 +2,7 @@ import { Link, useParams } from "react-router";
 import { Button, buttonClasses } from "../components/ui/Button";
 import { Spinner } from "../components/ui/Spinner";
 import { StateMessage } from "../components/ui/StateMessage";
-import { PhotoDetails } from "../features/photos/components/PhotoDetails";
+import { PhotoViewer } from "../features/photos/components/PhotoViewer";
 import { usePhoto } from "../features/photos/hooks";
 import { ApiError } from "../lib/api-client";
 
@@ -43,5 +43,5 @@ export function PhotoPage() {
     );
   }
 
-  return <PhotoDetails photo={photo.data} />;
+  return <PhotoViewer photo={photo.data} />;
 }

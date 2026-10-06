@@ -3,7 +3,7 @@ import { IMAGE_CONTENT_TYPE, PHOTO_VARIANTS, processPhoto, type PhotoVariant } f
 import { logger } from "../../lib/logger.js";
 import { withTransaction } from "../../lib/prisma.js";
 import * as storage from "../../lib/storage.js";
-import { requireMembership } from "../groups/groups.service.js";
+import { isMember, requireMembership } from "../groups/groups.service.js";
 import { newPhotoKeys } from "./photo-keys.js";
 import { toPhotoDetailView, toPhotoView, type PhotoDetailView, type PhotoView } from "./photo.dto.js";
 import * as photosRepository from "./photos.repository.js";
@@ -83,7 +83,10 @@ export async function listGroupPhotos(
 export async function getPhoto(photoId: string, viewerId: string): Promise<PhotoDetailView> {
   const photo = await photosRepository.findVisiblePhoto(photoId, viewerId);
   if (!photo) throw notFound("Photo not found");
-  return toPhotoDetailView(photo, viewerId);
+
+  // Only members browse the group feed; an uploader who has left just sees their own photo.
+  const feed = (await isMember(photo.groupId, viewerId)) ? await photosRepository.findFeedNeighbors(photo) : null;
+  return toPhotoDetailView(photo, viewerId, feed);
 }
 
 export async function getPhotoImage(

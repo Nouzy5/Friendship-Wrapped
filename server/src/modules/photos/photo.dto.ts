@@ -37,7 +37,14 @@ export type PhotoView = {
   canDelete: boolean;
 };
 
-export type PhotoDetailView = PhotoView & { group: { id: string; name: string; emoji: string } };
+/** The photos either side of this one in its group feed, for swiping through the viewer. */
+export type FeedNeighbors = { newerId: string | null; olderId: string | null };
+
+export type PhotoDetailView = PhotoView & {
+  group: { id: string; name: string; emoji: string };
+  /** Null for a viewer who can see the photo but not its group (an uploader who has left). */
+  feed: FeedNeighbors | null;
+};
 
 function imageUrls(photoId: string): Record<PhotoVariant, string> {
   const url = (variant: PhotoVariant) => apiPath(`/photos/${photoId}/images/${variant}`);
@@ -58,6 +65,10 @@ export function toPhotoView(photo: PhotoRow, viewerId: string): PhotoView {
   };
 }
 
-export function toPhotoDetailView(photo: PhotoDetailRow, viewerId: string): PhotoDetailView {
-  return { ...toPhotoView(photo, viewerId), group: photo.group };
+export function toPhotoDetailView(
+  photo: PhotoDetailRow,
+  viewerId: string,
+  feed: FeedNeighbors | null,
+): PhotoDetailView {
+  return { ...toPhotoView(photo, viewerId), group: photo.group, feed };
 }

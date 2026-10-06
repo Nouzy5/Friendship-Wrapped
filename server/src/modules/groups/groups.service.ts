@@ -17,6 +17,11 @@ export async function requireMembership(groupId: string, userId: string, db: DbC
   return membership;
 }
 
+/** For features that behave differently for members, rather than refusing everyone else. */
+export async function isMember(groupId: string, userId: string, db: DbClient = prisma): Promise<boolean> {
+  return (await groupsRepository.findMembership(groupId, userId, db)) !== null;
+}
+
 export async function requireOwner(groupId: string, userId: string, db: DbClient = prisma) {
   const membership = await requireMembership(groupId, userId, db);
   if (membership.role !== "OWNER") throw forbidden("Only the group owner can do that");

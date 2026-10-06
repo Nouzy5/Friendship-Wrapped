@@ -17,7 +17,14 @@ export type Photo = {
   canDelete: boolean;
 };
 
-export type PhotoDetail = Photo & { group: { id: string; name: string; emoji: string } };
+/** The photos either side of one in its group feed (newest first); null at either end. */
+export type FeedNeighbors = { newerId: string | null; olderId: string | null };
+
+export type PhotoDetail = Photo & {
+  group: { id: string; name: string; emoji: string };
+  /** Null when you can see the photo but not its group (you posted it, then left). */
+  feed: FeedNeighbors | null;
+};
 
 export type PhotoPage = { photos: Photo[]; nextCursor: string | null };
 

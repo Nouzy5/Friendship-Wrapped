@@ -322,6 +322,64 @@ describe("listing", () => {
   });
 });
 
+describe("viewer navigation", () => {
+  type Feed = { newerId: string | null; olderId: string | null } | null;
+
+  async function feedOf(agent: Agent, photoId: string): Promise<Feed> {
+    const res = await agent.get(`/api/photos/${photoId}`);
+    expect(res.status).toBe(200);
+    return res.body.photo.feed;
+  }
+
+  /** Follows one direction's links from a photo to the end of the feed, like swiping through the viewer. */
+  async function walk(agent: Agent, fromId: string, direction: "newerId" | "olderId"): Promise<string[]> {
+    const visited = [fromId];
+    for (let id = (await feedOf(agent, fromId))![direction]; id; id = (await feedOf(agent, id))![direction]) {
+      visited.push(id);
+    }
+    return visited;
+  }
+
+  it("links each photo to the newer and older one in its group's feed, and only within that group", async () => {
+    const { owner: alice, members, group } = await groupWith(app, "alice", "bob");
+    const bob = members[0]!;
+    const otherGroup = await createGroup(alice.agent, { name: "Family", emoji: "🏡" });
+
+    const oldest = await uploadPhoto(alice.agent, group.id);
+    const elsewhere = await uploadPhoto(alice.agent, otherGroup.id);
+    const middle = await uploadPhoto(bob.agent, group.id);
+    const newest = await uploadPhoto(alice.agent, group.id);
+
+    expect(await feedOf(bob.agent, newest.id)).toEqual({ newerId: null, olderId: middle.id });
+    expect(await feedOf(bob.agent, middle.id)).toEqual({ newerId: newest.id, olderId: oldest.id });
+    expect(await feedOf(bob.agent, oldest.id)).toEqual({ newerId: middle.id, olderId: null });
+    expect(await feedOf(alice.agent, elsewhere.id)).toEqual({ newerId: null, olderId: null });
+  });
+
+  it("follows the feed's order exactly, even when upload times tie", async () => {
+    const { owner, group } = await groupWith(app, "alice");
+    for (let i = 0; i < 4; i++) await uploadPhoto(owner.agent, group.id);
+    await prisma.photo.updateMany({ data: { createdAt: new Date("2026-08-01T12:00:00.000Z") } });
+
+    const list = await owner.agent.get(`/api/groups/${group.id}/photos`);
+    const feedOrder = (list.body.photos as PhotoBody[]).map((photo) => photo.id);
+
+    expect(feedOrder).toHaveLength(4);
+    expect(await walk(owner.agent, feedOrder[0]!, "olderId")).toEqual(feedOrder);
+    expect(await walk(owner.agent, feedOrder.at(-1)!, "newerId")).toEqual(feedOrder.toReversed());
+  });
+
+  it("doesn't let an uploader who left browse the group through their own photo", async () => {
+    const { members, group } = await groupWith(app, "alice", "bob");
+    const bob = members[0]!;
+    await uploadPhoto(bob.agent, group.id);
+    const photo = await uploadPhoto(bob.agent, group.id);
+
+    expect((await bob.agent.post(`/api/groups/${group.id}/leave`)).status).toBe(200);
+    expect(await feedOf(bob.agent, photo.id)).toBeNull();
+  });
+});
+
 describe("profile pictures", () => {
   function putAvatar(agent: Agent, image: Buffer) {
     return agent.put("/api/users/me/avatar").attach("avatar", image, { filename: "me.png", contentType: "image/png" });
