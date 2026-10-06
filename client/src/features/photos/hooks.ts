@@ -1,18 +1,43 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+  type QueryClient,
+} from "@tanstack/react-query";
+import { useEffect } from "react";
 import { deletePhoto, fetchGroupPhotos, fetchPhoto, uploadPhoto } from "./api";
-import type { Photo } from "./types";
+import type { Photo, PhotoPage } from "./types";
+
+/** Photos per feed page: eight rows of the three-column grid. */
+const FEED_PAGE_SIZE = 24;
 
 export const photoKeys = {
   all: ["photos"] as const,
   group: (groupId: string) => [...photoKeys.all, "group", groupId] as const,
-  detail: (photoId: string) => [...photoKeys.all, "detail", photoId] as const,
+  details: () => [...photoKeys.all, "detail"] as const,
+  detail: (photoId: string) => [...photoKeys.details(), photoId] as const,
 };
 
-/** The group's newest photos (the first page; the paginated feed comes with Phase 5). */
-export function useGroupPhotos(groupId: string) {
-  return useQuery({
+type FeedData = InfiniteData<PhotoPage, string | null>;
+
+const allPhotos = (feed: FeedData): Photo[] => feed.pages.flatMap((page) => page.photos);
+
+/** Edits the cached feed in place (if it's cached), so a change shows before the refetch lands. */
+function updateCachedFeed(queryClient: QueryClient, groupId: string, update: (pages: PhotoPage[]) => PhotoPage[]) {
+  queryClient.setQueryData<FeedData>(photoKeys.group(groupId), (feed) => feed && { ...feed, pages: update(feed.pages) });
+}
+
+/** A group's photos, newest first, one page at a time: `data` is every photo loaded so far. */
+export function useGroupFeed(groupId: string) {
+  return useInfiniteQuery({
     queryKey: photoKeys.group(groupId),
-    queryFn: ({ signal }) => fetchGroupPhotos(groupId, signal),
+    queryFn: ({ pageParam, signal }) =>
+      fetchGroupPhotos(groupId, { cursor: pageParam, limit: FEED_PAGE_SIZE }, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
+    select: allPhotos,
   });
 }
 
@@ -23,12 +48,33 @@ export function usePhoto(photoId: string) {
   });
 }
 
+/** Loads a photo's details and image in the background, so opening it next is instant. */
+export function usePrefetchPhoto(photoId: string | null) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!photoId) return;
+    queryClient
+      .fetchQuery({ queryKey: photoKeys.detail(photoId), queryFn: ({ signal }) => fetchPhoto(photoId, signal) })
+      .then((photo) => {
+        new Image().src = photo.imageUrls.medium;
+      })
+      // Only a head start: if it fails, the viewer loads it (and shows any error) when it's opened.
+      .catch(() => undefined);
+  }, [queryClient, photoId]);
+}
+
 export function useUploadPhoto() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: uploadPhoto,
     onSuccess: (photo) => {
+      updateCachedFeed(queryClient, photo.groupId, ([first, ...rest]) =>
+        first ? [{ ...first, photos: [photo, ...first.photos] }, ...rest] : [],
+      );
       void queryClient.invalidateQueries({ queryKey: photoKeys.group(photo.groupId) });
+      // The previous newest photo now has a newer neighbour.
+      void queryClient.invalidateQueries({ queryKey: photoKeys.details() });
     },
   });
 }
@@ -38,7 +84,12 @@ export function useDeletePhoto(photo: Pick<Photo, "id" | "groupId">) {
   return useMutation({
     mutationFn: () => deletePhoto(photo.id),
     onSuccess: () => {
-      queryClient.removeQueries({ queryKey: photoKeys.detail(photo.id) });
+      // Not just this photo: its neighbours link to it, and stale links would be followed
+      // (and prefetched) until they refresh. Details are cheap to reload.
+      queryClient.removeQueries({ queryKey: photoKeys.details() });
+      updateCachedFeed(queryClient, photo.groupId, (pages) =>
+        pages.map((page) => ({ ...page, photos: page.photos.filter(({ id }) => id !== photo.id) })),
+      );
       void queryClient.invalidateQueries({ queryKey: photoKeys.group(photo.groupId) });
     },
   });

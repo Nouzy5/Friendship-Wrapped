@@ -70,7 +70,8 @@ export function CameraPage() {
         initialGroupId={defaultShareGroupId(groups.data, requestedGroupId)}
         discardLabel={shot.source === "camera" ? "Retake" : "Choose another"}
         onDiscard={() => setShot(null)}
-        onPosted={(photo) => void navigate(`/groups/${photo.groupId}`)}
+        // Replace the camera in history, so "back" from the feed doesn't reopen it.
+        onPosted={(photo) => void navigate(`/groups/${photo.groupId}`, { replace: true })}
       />
     );
   } else {

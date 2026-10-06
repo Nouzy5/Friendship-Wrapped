@@ -6,22 +6,29 @@ type PageHeaderProps = {
   /** Omit when the page renders its own <h1> (e.g. a hero). */
   title?: string;
   backTo?: string;
+  /** Instead of `backTo`, e.g. to step back in history and land where the person was. */
+  onBack?: () => void;
   backLabel?: string;
   /** Optional control on the right, e.g. an icon link. */
   action?: ReactNode;
 };
 
-export function PageHeader({ title, backTo, backLabel = "Back", action }: PageHeaderProps) {
+const backClasses =
+  "-ml-2 grid size-10 place-items-center rounded-full text-ink-200 transition hover:bg-ink-800 hover:text-ink-50";
+
+export function PageHeader({ title, backTo, onBack, backLabel = "Back", action }: PageHeaderProps) {
   return (
     <div className="flex min-h-12 items-center gap-1">
-      {backTo && (
-        <Link
-          to={backTo}
-          aria-label={backLabel}
-          className="-ml-2 grid size-10 place-items-center rounded-full text-ink-200 transition hover:bg-ink-800 hover:text-ink-50"
-        >
+      {onBack ? (
+        <button type="button" onClick={onBack} aria-label={backLabel} className={backClasses}>
           <ChevronLeftIcon className="size-5" />
-        </Link>
+        </button>
+      ) : (
+        backTo && (
+          <Link to={backTo} aria-label={backLabel} className={backClasses}>
+            <ChevronLeftIcon className="size-5" />
+          </Link>
+        )
       )}
       {title ? <h1 className="flex-1 text-2xl font-bold tracking-tight">{title}</h1> : <div className="flex-1" />}
       {action}

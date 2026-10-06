@@ -12,8 +12,8 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 2 | Authentication: register, login, logout, sessions, protected routes, profile | ✅ Done |
 | 3 | Groups & invites: create, invite links, join, leave, members, owner permissions | ✅ Done |
 | 4 | Photos: in-app camera, gallery upload, processing, thumbnails, object storage, captions, deletion, profile pictures | ✅ Done |
-| 5 | Feed | ⏳ Next |
-| 6 | Reactions, comments, favorites | — |
+| 5 | Feed: group feed and grid, infinite scroll, lazy images, photo viewer (swipe, full screen), upload flow | ✅ Done |
+| 6 | Reactions, comments, favorites | ⏳ Next |
 | 7 | Memories (timeline, albums, On This Day) | — |
 | 8 | Analytics | — |
 | 9 | Wrapped | — |
@@ -110,7 +110,7 @@ client/src/
   features/<name>/    Feature logic: API calls, hooks, feature components
   layouts/            App shell
   pages/              Route-level components (thin: compose features)
-  lib/                api-client (fetch + ApiError), query-client
+  lib/                api-client (fetch + ApiError), query-client, formatting, shared hooks (useWhenVisible, useSwipe, …)
   router.tsx          Route table
 
 server/
@@ -206,8 +206,8 @@ Users come back with an `avatarUrl` (or `null`). The URL changes whenever the pi
 
   | Rendition | Size | Column | Used for |
   | --- | --- | --- | --- |
-  | `full` | ≤ 2560 px on the long edge | `storage_key` | Downloads and zoom (later phases) |
-  | `medium` | ≤ 1280 px | `medium_key` | Photo page and feed |
+  | `full` | ≤ 2560 px on the long edge | `storage_key` | Full-screen view |
+  | `medium` | ≤ 1280 px | `medium_key` | Photo viewer and feed |
   | `thumbnail` | 480×480, centre-cropped | `thumbnail_key` | Grids |
 
   Small photos are never enlarged.
@@ -222,15 +222,32 @@ Users come back with an `avatarUrl` (or `null`). The URL changes whenever the pi
 - **Deleting.**
   - **A photo:** only its uploader can delete it (others get 403). Its files are deleted after its row.
   - **A group:** when the last member leaves, all of its photos and files go with it.
-- **Listing.** Photos are listed newest first with a keyset cursor (`?cursor=…&limit=…`, at most 50), backed by the `(group_id, created_at, id)` index. For now, the group page shows the newest 24; the scrolling feed comes in Phase 5.
+- **Listing.** Photos are listed newest first (ties broken by id) with a keyset cursor (`?cursor=…&limit=…`, at most 50), backed by the `(group_id, created_at, id)` index. See [Feed](#feed).
 
 | Method | Endpoint | Who | Purpose |
 | --- | --- | --- | --- |
 | `POST` | `/api/groups/:groupId/photos` | member | Post a photo |
 | `GET` | `/api/groups/:groupId/photos` | member | Newest first: `{ photos, nextCursor }` |
-| `GET` | `/api/photos/:photoId` | uploader or member | Photo details (+ its group) |
+| `GET` | `/api/photos/:photoId` | uploader or member | Photo details, its group, and its neighbours in the feed (`feed`) |
 | `GET` | `/api/photos/:photoId/images/:variant` | uploader or member | `thumbnail`, `medium` or `full` (WebP) |
 | `DELETE` | `/api/photos/:photoId` | uploader | Delete the photo and its files |
+
+## Feed
+
+- **Group feed.** The group page lists its photos newest first. Each post shows the uploader's avatar and name, when it was posted ("5 minutes ago", "yesterday", then a date; hover for the exact time), the photo and its caption. Long captions are cut to three lines with **more**.
+  - **Feed or grid.** A toggle switches to a three-column grid of thumbnails. The choice is kept in the URL (`?view=grid`), so it survives opening a photo and coming back.
+  - **Shapes.** Feed photos keep their shape between 3:4 portrait and 1.91:1 landscape. Taller or wider ones are cropped in the feed and shown whole in the viewer.
+- **Pagination.** 24 photos per page, fetched with the cursor (`useInfiniteQuery`). The next page loads by itself when the end of the list comes within 800 px of the screen (`IntersectionObserver`). The **Load more photos** button does the same for keyboard users and as a fallback. If a page fails, it waits for **Try again** rather than retrying in a loop. Only the pages someone scrolls to are ever loaded.
+- **Lazy loading.**
+  - Images below the fold use `loading="lazy"`. The first post loads straight away, at high priority.
+  - The feed uses the `medium` rendition and the grid uses `thumbnail`. Space is reserved for every image, so nothing jumps while they load. A placeholder pulses until the image arrives.
+- **Photo viewer** (`/photos/:id`).
+  - **Stepping through.** Swipe, or use the arrow buttons or the ←/→ keys, to step through the group's feed (left = newer). The API returns the neighbouring photo ids as `feed: { newerId, olderId }`. Both are found with the same keyset index as the feed. `feed` is `null` for an uploader who has left the group, so they can open their own photo but not browse the group.
+  - **Prefetching.** The neighbouring photos (details and image) are loaded in the background, so stepping is instant.
+  - **History.** Stepping replaces the history entry, so **back** returns to the feed in one step, at the same scroll position, with the same pages loaded (`<ScrollRestoration>`).
+  - **Full screen.** Tap the photo to see the `full` rendition on black. Pinch to zoom on phones. A tap, ✕ or Escape closes it.
+- **Upload flow.** Posting (from the feed's **Add photo** or the camera button) lands on the group's feed with the new photo already on top. The camera page is replaced in history, so **back** doesn't reopen the camera. Deleting a photo in the viewer goes back to the feed with the photo already gone.
+- **Performance.** On a local MySQL with 10,000 photos in one group, a page takes about 2 ms and the viewer's neighbours about 1 ms. Both are index range scans, and a full page-by-page walk visits every photo exactly once, in order.
 
 ## Local machine notes
 

@@ -1,0 +1,48 @@
+import { useState, type CSSProperties } from "react";
+import type { Photo, PhotoVariant } from "../types";
+
+export function photoAlt(photo: Pick<Photo, "caption" | "uploader">): string {
+  return photo.caption ?? `Photo by ${photo.uploader.displayName}`;
+}
+
+type PhotoImageProps = {
+  photo: Pick<Photo, "caption" | "uploader" | "imageUrls">;
+  variant: PhotoVariant;
+  fit?: "cover" | "contain";
+  /** For the first photo on screen: load straight away, at high priority. Everything else loads lazily. */
+  priority?: boolean;
+  /** Sizes the box (e.g. its aspect ratio); the image fills it. */
+  className?: string;
+  style?: CSSProperties;
+};
+
+/**
+ * A photo that holds its space with a placeholder while it loads, and shows a quiet
+ * message if it can't be loaded (e.g. it was just deleted). Key it by photo id.
+ */
+export function PhotoImage({ photo, variant, fit = "cover", priority = false, className = "", style }: PhotoImageProps) {
+  const [status, setStatus] = useState<"loading" | "loaded" | "failed">("loading");
+
+  return (
+    <div className={`relative overflow-hidden ${className}`} style={style}>
+      {status === "loading" && <div aria-hidden className="absolute inset-0 animate-pulse bg-ink-800" />}
+      {status === "failed" ? (
+        <div className="absolute inset-0 grid place-items-center bg-ink-800 p-4 text-center text-xs text-ink-400">
+          Couldn't load this photo
+        </div>
+      ) : (
+        <img
+          src={photo.imageUrls[variant]}
+          alt={photoAlt(photo)}
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
+          decoding="async"
+          draggable={false}
+          onLoad={() => setStatus("loaded")}
+          onError={() => setStatus("failed")}
+          className={`relative size-full ${fit === "cover" ? "object-cover" : "object-contain"}`}
+        />
+      )}
+    </div>
+  );
+}

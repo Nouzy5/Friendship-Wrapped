@@ -4,8 +4,15 @@ import type { NewPhoto, Photo, PhotoDetail, PhotoPage } from "./types";
 const photoPath = (photoId: string) => `/photos/${encodeURIComponent(photoId)}`;
 const groupPhotosPath = (groupId: string) => `/groups/${encodeURIComponent(groupId)}/photos`;
 
-export function fetchGroupPhotos(groupId: string, signal?: AbortSignal): Promise<PhotoPage> {
-  return apiRequest<PhotoPage>(groupPhotosPath(groupId), { signal });
+/** One page of a group's photos, newest first. Pass the previous page's `nextCursor` to continue. */
+export function fetchGroupPhotos(
+  groupId: string,
+  page: { cursor: string | null; limit: number },
+  signal?: AbortSignal,
+): Promise<PhotoPage> {
+  const query = new URLSearchParams({ limit: String(page.limit) });
+  if (page.cursor) query.set("cursor", page.cursor);
+  return apiRequest<PhotoPage>(`${groupPhotosPath(groupId)}?${query}`, { signal });
 }
 
 export async function fetchPhoto(photoId: string, signal?: AbortSignal): Promise<PhotoDetail> {
