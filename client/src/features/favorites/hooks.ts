@@ -18,6 +18,7 @@ export function useFavorite(photo: Pick<Photo, "id" | "groupId">) {
     },
     onSuccess: (isFavorite) => {
       if (isLatest()) patchCachedPhoto(queryClient, photo, () => ({ isFavorite }));
+      void queryClient.invalidateQueries({ queryKey: photoKeys.favorites(photo.groupId) });
     },
     onError: () => {
       if (!isLatest()) return;

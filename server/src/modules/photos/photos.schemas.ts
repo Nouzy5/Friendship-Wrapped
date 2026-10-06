@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PHOTO_VARIANTS, type PhotoVariant } from "../../lib/images.js";
 import { pageQuerySchema } from "../../lib/pagination.js";
+import { isRealDate, isValidTimeZone, type CalendarDate } from "../../lib/time-zone.js";
 import { multilineTextSchema } from "../../lib/user-text.js";
 
 export const CAPTION_MAX_LENGTH = 500;
@@ -22,6 +23,31 @@ export const photoImageParamsSchema = z.object({
   variant: z.enum(variants),
 });
 
-export const listPhotosQuerySchema = pageQuerySchema(24);
+export const listPhotosQuerySchema = pageQuerySchema(24).extend({
+  /** Start from photos posted before this instant, e.g. the end of a month the timeline jumps to. */
+  before: z.iso
+    .datetime({ offset: true })
+    .transform((value) => new Date(value))
+    .optional(),
+  /** Only the photos you've favorited. */
+  favorites: z.stringbool().optional(),
+});
+
+const calendarDateSchema = z.iso
+  .date()
+  .transform((value): CalendarDate => {
+    const [year, month, day] = value.split("-").map(Number) as [number, number, number];
+    return { year, month, day };
+  })
+  .refine(isRealDate, "Invalid date");
+
+export const onThisDayQuerySchema = z.object({
+  /** The viewer's IANA time zone, e.g. "Europe/Bratislava": days begin at their midnight. */
+  tz: z.string().refine(isValidTimeZone, "Unknown time zone"),
+  /** Defaults to today in `tz`. */
+  date: calendarDateSchema.optional(),
+});
+
+export type OnThisDayQuery = z.infer<typeof onThisDayQuerySchema>;
 
 export type ListPhotosQuery = z.infer<typeof listPhotosQuerySchema>;

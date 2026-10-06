@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { listPhotoAlbumIds } from "../albums/albums.controller.js";
 import { requireAuth } from "../auth/auth.middleware.js";
 import { addComment, listComments } from "../comments/comments.controller.js";
 import { addFavorite, removeFavorite } from "../favorites/favorites.controller.js";
@@ -22,3 +23,5 @@ photosRouter.post("/:photoId/comments", addComment);
 
 photosRouter.put("/:photoId/favorite", addFavorite);
 photosRouter.delete("/:photoId/favorite", removeFavorite);
+
+photosRouter.get("/:photoId/albums", listPhotoAlbumIds);

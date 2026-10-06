@@ -1,10 +1,27 @@
 import { Link, NavLink, Outlet } from "react-router";
 import { Wordmark } from "../components/Wordmark";
 import { Avatar } from "../components/ui/Avatar";
-import { CameraIcon, HomeIcon } from "../components/ui/icons";
+import type { ComponentType, SVGProps } from "react";
+import { CameraIcon, HomeIcon, MemoriesIcon } from "../components/ui/icons";
 import { useCurrentUser } from "../features/auth/hooks";
 
-/** Bottom navigation. Memories and Wrapped join it when those features exist. */
+function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: ComponentType<SVGProps<SVGSVGElement>> }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `flex w-20 flex-col items-center gap-0.5 rounded-xl px-3 py-1 text-xs font-medium transition ${
+          isActive ? "text-ink-50" : "text-ink-400 hover:text-ink-200"
+        }`
+      }
+    >
+      <Icon className="size-6" />
+      {label}
+    </NavLink>
+  );
+}
+
+/** Bottom navigation. Wrapped joins it once there's a Wrapped to show. */
 function BottomNav() {
   return (
     <nav
@@ -13,17 +30,7 @@ function BottomNav() {
     >
       <ul className="mx-auto flex h-16 w-full max-w-md items-center justify-around px-6">
         <li>
-          <NavLink
-            to="/home"
-            className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 rounded-xl px-3 py-1 text-xs font-medium transition ${
-                isActive ? "text-ink-50" : "text-ink-400 hover:text-ink-200"
-              }`
-            }
-          >
-            <HomeIcon className="size-6" />
-            Home
-          </NavLink>
+          <NavItem to="/home" label="Home" icon={HomeIcon} />
         </li>
         <li>
           {/* The camera is the app's main action, so it gets the big gradient button. */}
@@ -38,6 +45,9 @@ function BottomNav() {
           >
             <CameraIcon className="size-7" />
           </NavLink>
+        </li>
+        <li>
+          <NavItem to="/memories" label="Memories" icon={MemoriesIcon} />
         </li>
       </ul>
     </nav>

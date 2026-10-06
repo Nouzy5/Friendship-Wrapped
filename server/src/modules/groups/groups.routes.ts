@@ -1,7 +1,8 @@
 import { Router } from "express";
+import { createAlbum, listAlbums } from "../albums/albums.controller.js";
 import { requireAuth } from "../auth/auth.middleware.js";
 import { createInvite, resetInvites } from "../invites/invites.controller.js";
-import { listGroupPhotos, uploadPhoto } from "../photos/photos.controller.js";
+import { listGroupPhotos, listOnThisDay, uploadPhoto } from "../photos/photos.controller.js";
 import {
   createGroup,
   getGroup,
@@ -27,3 +28,6 @@ groupsRouter.post("/:groupId/invites", createInvite);
 groupsRouter.delete("/:groupId/invites", resetInvites);
 groupsRouter.get("/:groupId/photos", listGroupPhotos);
 groupsRouter.post("/:groupId/photos", uploadPhoto);
+groupsRouter.get("/:groupId/photos/on-this-day", listOnThisDay);
+groupsRouter.get("/:groupId/albums", listAlbums);
+groupsRouter.post("/:groupId/albums", createAlbum);

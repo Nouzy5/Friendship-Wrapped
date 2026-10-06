@@ -12,16 +12,60 @@ export function createPhoto(data: Prisma.PhotoUncheckedCreateInput, db: DbClient
   return db.photo.create({ data, select: photoSelect(data.uploaderId) });
 }
 
-/** Newest first; `take` is the page size (callers ask for one extra to detect a next page). */
+type GroupPhotosPage = {
+  cursor?: Cursor;
+  /** Where to start when there's no cursor yet (a timeline jumping to a month). */
+  startBefore?: Date;
+  /** Only photos the viewer has favorited. */
+  onlyFavorites?: boolean;
+  /** The page size; callers ask for one extra to detect a next page. */
+  take: number;
+};
+
+/** Newest first. */
 export function listGroupPhotos(
   groupId: string,
   viewerId: string,
-  page: { cursor?: Cursor; take: number },
+  { cursor, startBefore, onlyFavorites, take }: GroupPhotosPage,
   db: DbClient = prisma,
 ) {
-  const { cursor, take } = page;
   return db.photo.findMany({
-    where: { groupId, ...(cursor && before(cursor)) },
+    where: {
+      groupId,
+      ...(cursor ? before(cursor) : startBefore && { createdAt: { lt: startBefore } }),
+      ...(onlyFavorites && { favorites: { some: { userId: viewerId } } }),
+    },
+    orderBy: newestFirst,
+    take,
+    select: photoSelect(viewerId),
+  });
+}
+
+/** An album's photos, oldest first, so it reads like the story of the event. */
+export function listAlbumPhotos(
+  albumId: string,
+  viewerId: string,
+  { cursor, take }: { cursor?: Cursor; take: number },
+  db: DbClient = prisma,
+) {
+  return db.photo.findMany({
+    where: { albums: { some: { albumId } }, ...(cursor && after(cursor)) },
+    orderBy: oldestFirst,
+    take,
+    select: photoSelect(viewerId),
+  });
+}
+
+/** A group's photos posted within any of the time ranges, newest first. */
+export function listPhotosInRanges(
+  groupId: string,
+  viewerId: string,
+  ranges: { from: Date; to: Date }[],
+  take: number,
+  db: DbClient = prisma,
+) {
+  return db.photo.findMany({
+    where: { groupId, OR: ranges.map(({ from, to }) => ({ createdAt: { gte: from, lt: to } })) },
     orderBy: newestFirst,
     take,
     select: photoSelect(viewerId),

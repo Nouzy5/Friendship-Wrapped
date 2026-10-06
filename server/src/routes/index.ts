@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireSameOrigin } from "../middleware/same-origin.js";
+import { albumsRouter } from "../modules/albums/albums.routes.js";
 import { authRouter } from "../modules/auth/auth.routes.js";
 import { commentsRouter } from "../modules/comments/comments.routes.js";
 import { groupsRouter } from "../modules/groups/groups.routes.js";
@@ -25,3 +26,4 @@ apiRouter.use("/groups", groupsRouter);
 apiRouter.use("/invites", invitesRouter);
 apiRouter.use("/photos", photosRouter);
 apiRouter.use("/comments", commentsRouter);
+apiRouter.use("/albums", albumsRouter);

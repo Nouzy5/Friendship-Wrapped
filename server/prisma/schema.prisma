@@ -29,6 +29,7 @@ model User {
   reactions    Reaction[]
   comments     Comment[]
   favorites    Favorite[]
+  albums       Album[]
 
   @@map("users")
 }
@@ -62,6 +63,7 @@ model Group {
   members   GroupMember[]
   invites   InviteToken[]
   photos    Photo[]
+  albums    Album[]
 
   @@map("groups")
 }
@@ -118,6 +120,7 @@ model Photo {
   reactions    Reaction[]
   comments     Comment[]
   favorites    Favorite[]
+  albums       PhotoAlbum[]
 
   /// Newest-first group listing with a (createdAt, id) keyset cursor.
   @@index([groupId, createdAt, id])
@@ -178,4 +181,37 @@ model Favorite {
   @@id([userId, photoId])
   @@index([photoId])
   @@map("favorites")
+}
+
+/// A shared album in a group: any member can add or remove photos.
+model Album {
+  id          String       @id @default(uuid(7)) @db.Char(36)
+  groupId     String       @map("group_id") @db.Char(36)
+  /// Null once the creator's account is gone: the album belongs to the group.
+  createdById String?      @map("created_by_id") @db.Char(36)
+  name        String       @db.VarChar(60)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  group       Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  photos      PhotoAlbum[]
+
+  @@index([groupId, createdAt])
+  @@index([createdById])
+  @@map("albums")
+}
+
+/// Which photos are in which album. A photo can be in several albums of its own group.
+model PhotoAlbum {
+  albumId String   @map("album_id") @db.Char(36)
+  photoId String   @map("photo_id") @db.Char(36)
+  addedAt DateTime @default(now()) @map("added_at")
+  album   Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  photo   Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
+
+  @@id([albumId, photoId])
+  /// The most recently added photo is the album's cover.
+  @@index([albumId, addedAt])
+  @@index([photoId])
+  @@map("photo_albums")
 }

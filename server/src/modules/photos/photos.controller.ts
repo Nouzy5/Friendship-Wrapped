@@ -6,6 +6,7 @@ import { groupParamsSchema } from "../groups/groups.schemas.js";
 import {
   createPhotoSchema,
   listPhotosQuerySchema,
+  onThisDayQuerySchema,
   photoImageParamsSchema,
   photoParamsSchema,
 } from "./photos.schemas.js";
@@ -29,6 +30,13 @@ export const listGroupPhotos: RequestHandler = async (req, res) => {
   const query = listPhotosQuerySchema.parse(req.query);
   const page = await photosService.listGroupPhotos(groupId, currentUser(req).id, query);
   res.json(page);
+};
+
+/** GET /groups/:groupId/photos/on-this-day?tz=…&date=… */
+export const listOnThisDay: RequestHandler = async (req, res) => {
+  const { groupId } = groupParamsSchema.parse(req.params);
+  const query = onThisDayQuerySchema.parse(req.query);
+  res.json(await photosService.listOnThisDay(groupId, currentUser(req).id, query));
 };
 
 export const getPhoto: RequestHandler = async (req, res) => {

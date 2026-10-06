@@ -26,7 +26,7 @@ export function photoDetailSelect(viewerId: string) {
   } satisfies Prisma.PhotoSelect;
 }
 
-type PhotoRow = Prisma.PhotoGetPayload<{ select: ReturnType<typeof photoSelect> }>;
+export type PhotoRow = Prisma.PhotoGetPayload<{ select: ReturnType<typeof photoSelect> }>;
 type PhotoDetailRow = Prisma.PhotoGetPayload<{ select: ReturnType<typeof photoDetailSelect> }>;
 
 export type PhotoView = {
@@ -60,8 +60,12 @@ export type PhotoDetailView = PhotoView & {
   feed: FeedNeighbors | null;
 };
 
+export function photoImageUrl(photoId: string, variant: PhotoVariant): string {
+  return apiPath(`/photos/${photoId}/images/${variant}`);
+}
+
 function imageUrls(photoId: string): Record<PhotoVariant, string> {
-  const url = (variant: PhotoVariant) => apiPath(`/photos/${photoId}/images/${variant}`);
+  const url = (variant: PhotoVariant) => photoImageUrl(photoId, variant);
   return { full: url("full"), medium: url("medium"), thumbnail: url("thumbnail") };
 }
 
