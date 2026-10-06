@@ -60,18 +60,31 @@ struct AuthenticatedImage<Placeholder: View>: View {
             image = nil
             return
         }
-        if let cached = ImageCache.shared.image(for: path) {
-            image = cached
-            return
+        // On failure keep the placeholder (e.g. initials for a profile picture).
+        if let loaded = await ImageLoader.load(path) {
+            image = loaded
         }
-        do {
-            let data = try await APIClient.shared.imageData(atServerPath: path)
-            guard let decoded = UIImage(data: data) else { return }
-            let prepared = await decoded.byPreparingForDisplay() ?? decoded
-            ImageCache.shared.insert(prepared, for: path)
-            image = prepared
-        } catch {
-            // Keep the placeholder (e.g. initials for a profile picture).
+    }
+}
+
+/// Fetches, decodes and caches API images.
+enum ImageLoader {
+    static func load(_ path: String) async -> UIImage? {
+        if let cached = ImageCache.shared.image(for: path) { return cached }
+        guard
+            let data = try? await APIClient.shared.imageData(atServerPath: path),
+            let decoded = UIImage(data: data)
+        else { return nil }
+        let prepared = await decoded.byPreparingForDisplay() ?? decoded
+        ImageCache.shared.insert(prepared, for: path)
+        return prepared
+    }
+
+    /// Warms the cache, e.g. for the photos either side of the one on screen.
+    static func prefetch(_ path: String) {
+        guard ImageCache.shared.image(for: path) == nil else { return }
+        Task.detached(priority: .utility) {
+            _ = await ImageLoader.load(path)
         }
     }
 }

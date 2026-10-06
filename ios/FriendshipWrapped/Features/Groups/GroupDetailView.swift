@@ -1,14 +1,17 @@
 import SwiftUI
 
-/// A group's home. Non-members (or removed members) get a "not found" screen.
+/// A group's home: who's in it, then its photos, newest first, loading more as you scroll.
+/// Non-members (or removed members) get a "not found" screen.
 struct GroupDetailView: View {
     let groupID: String
 
     @Environment(GroupsStore.self) private var store
     @Environment(PhotosStore.self) private var photos
     @Environment(AppRouter.self) private var router
+
     @State private var failure: APIError?
-    @State private var photosFailed = false
+    @State private var feedFailed = false
+    @State private var layout: FeedLayout = .feed
 
     var body: some View {
         content
@@ -29,41 +32,20 @@ struct GroupDetailView: View {
 
     @ViewBuilder private var content: some View {
         if let group = store.group(groupID) {
-            List {
-                Section {
-                    VStack(spacing: 12) {
-                        GroupEmojiTile(emoji: group.emoji, size: .extraLarge)
-                        Text(group.name)
-                            .font(.largeTitle.weight(.black))
-                            .multilineTextAlignment(.center)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    header(group)
+
+                    // Until there's someone to share photos with, inviting comes first.
+                    if group.memberCount == 1 {
+                        InviteFriendsCard(group: group, highlight: true)
                     }
-                    .frame(maxWidth: .infinity)
-                    .listRowBackground(Color.clear)
-                }
 
-                Section {
-                    NavigationLink(value: AppRoute.members(groupID)) {
-                        HStack(spacing: 12) {
-                            if let members = store.members(of: groupID) {
-                                MemberAvatarStack(members: members)
-                            }
-                            Text(Format.memberCount(group.memberCount))
-                        }
-                    }
+                    feedHeader
+                    feedContent
                 }
-
-                // Inviting comes first until there's someone to share photos with.
-                if group.memberCount == 1 {
-                    InviteFriendsSection(group: group, highlight: true)
-                }
-
-                GroupPhotosSection(groupID: groupID, loadFailed: photosFailed) {
-                    Task { await loadPhotos() }
-                }
-
-                if group.memberCount > 1 {
-                    InviteFriendsSection(group: group)
-                }
+                .padding(.horizontal)
+                .padding(.bottom, 24)
             }
             .refreshable { await load() }
         } else if let failure {
@@ -91,6 +73,139 @@ struct GroupDetailView: View {
         }
     }
 
+    private func header(_ group: FriendGroup) -> some View {
+        VStack(spacing: 12) {
+            GroupEmojiTile(emoji: group.emoji, size: .extraLarge)
+            Text(group.name)
+                .font(.largeTitle.weight(.black))
+                .multilineTextAlignment(.center)
+
+            HStack(spacing: 8) {
+                Button {
+                    router.homePath.append(.members(groupID))
+                } label: {
+                    HStack(spacing: 10) {
+                        if let members = store.members(of: groupID) {
+                            MemberAvatarStack(members: members)
+                        }
+                        Text(Format.memberCount(group.memberCount))
+                            .font(.subheadline)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                // The feed scrolls on and on, so invites live on the members screen rather than below it.
+                if group.memberCount > 1 {
+                    Button {
+                        router.homePath.append(.members(groupID))
+                    } label: {
+                        Label("Invite", systemImage: "plus")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 8)
+    }
+
+    private var feedHeader: some View {
+        HStack(spacing: 12) {
+            Text("Photos")
+                .font(.headline)
+            Spacer()
+            Picker("Layout", selection: $layout) {
+                Image(systemName: "rectangle.grid.1x2")
+                    .accessibilityLabel("Feed")
+                    .tag(FeedLayout.feed)
+                Image(systemName: "square.grid.3x3")
+                    .accessibilityLabel("Grid")
+                    .tag(FeedLayout.grid)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 100)
+
+            Button {
+                router.openCamera(groupID: groupID)
+            } label: {
+                Label("Add photo", systemImage: "camera")
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+    }
+
+    @ViewBuilder private var feedContent: some View {
+        if let feed = photos.feed(for: groupID) {
+            if feed.photos.isEmpty {
+                EmptyStateView(
+                    emoji: "📸",
+                    title: "No photos yet",
+                    message: "Be the first to share a moment with the group."
+                ) {
+                    Button("Take a photo") { router.openCamera(groupID: groupID) }
+                        .buttonStyle(.brand)
+                        .frame(maxWidth: 240)
+                }
+            } else {
+                switch layout {
+                case .feed:
+                    ForEach(feed.photos) { photo in
+                        PhotoCard(photo: photo)
+                    }
+                case .grid:
+                    PhotoGrid(photos: feed.photos)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+                loadMoreFooter(feed)
+            }
+        } else if feedFailed {
+            EmptyStateView(
+                emoji: "📡",
+                title: "Couldn't load photos",
+                message: "Check your connection and try again."
+            ) {
+                Button("Try again") { Task { await loadFeed() } }
+                    .buttonStyle(.borderedProminent)
+            }
+        } else {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 32)
+        }
+    }
+
+    @ViewBuilder private func loadMoreFooter(_ feed: PhotosStore.GroupFeed) -> some View {
+        if feed.hasMore {
+            if feed.loadMoreFailed {
+                LoadMoreRow(title: "Load more photos", isLoading: false, failed: true) {
+                    Task { await photos.loadMore(in: groupID) }
+                }
+            } else {
+                // Coming into view loads the next page. A new identity per page means it fires
+                // again if it's still on screen after a short page.
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .id(feed.photos.count)
+                    .onAppear {
+                        Task { await photos.loadMore(in: groupID) }
+                    }
+            }
+        } else {
+            Text("You're all caught up ✨")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+        }
+    }
+
     private func load() async {
         do {
             try await store.loadGroup(groupID)
@@ -102,17 +217,17 @@ struct GroupDetailView: View {
             return
         }
         try? await store.loadMembers(of: groupID)
-        await loadPhotos()
+        await loadFeed()
     }
 
-    private func loadPhotos() async {
+    private func loadFeed() async {
         do {
-            try await photos.loadPhotos(in: groupID)
-            photosFailed = false
+            try await photos.refreshFeed(in: groupID)
+            feedFailed = false
         } catch is CancellationError {
             return
         } catch {
-            photosFailed = true
+            feedFailed = true
         }
     }
 }

@@ -19,7 +19,7 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 9 | Wrapped | — |
 | 10 | Polish | — |
 
-The native iOS app in [`ios/`](ios/README.md) covers phases 1–4 too.
+The native iOS app in [`ios/`](ios/README.md) covers phases 1–6 too.
 
 ## Stack
 
