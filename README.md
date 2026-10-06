@@ -253,6 +253,7 @@ Users come back with an `avatarUrl` (or `null`). The URL changes whenever the pi
 
 - MySQL runs as the Windows service `MySQL84`, bound to `127.0.0.1` only.
 - Local secrets (the MySQL root password, dev test-account logins) live in `.local/`, which is gitignored.
+- Prisma 7.10.0 pins vulnerable versions of `mariadb`, `mysql2` and `deepmerge-ts`, so `overrides` in the root `package.json` lift them to patched releases. The overrides are keyed to the exact Prisma 7.10.0 packages, so they stop applying once Prisma is upgraded. When bumping Prisma, update the `allowScripts` versions below, re-run `npm audit`, and drop the overrides (or re-key them if the new release still pins vulnerable versions).
 - npm 11 only runs install scripts for packages listed under `allowScripts` in `package.json` (Prisma's engines, esbuild).
 - The API dev watcher is `node --watch-path=./src --import tsx` rather than `tsx watch`, because `tsx watch` hangs on Windows when run under `concurrently`.
   - It watches only `src/`: plain `--watch` on Windows treated a dependency file loaded for the first time as a change, and restarted the API mid-request.

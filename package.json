@@ -25,5 +25,16 @@
     "prisma@7.10.0": true,
     "@prisma/engines@7.10.0": true,
     "esbuild@0.28.2": true
+  },
+  "overrides": {
+    "@prisma/adapter-mariadb@7.10.0": {
+      "mariadb": "3.4.7"
+    },
+    "@prisma/config@7.10.0": {
+      "deepmerge-ts": "8.0.2"
+    },
+    "prisma@7.10.0": {
+      "mysql2": "3.24.5"
+    }
   }
 }
