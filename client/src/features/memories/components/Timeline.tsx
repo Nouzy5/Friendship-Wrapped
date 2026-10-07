@@ -1,13 +1,13 @@
 import { useId, useState, type FormEvent } from "react";
 import { Button } from "../../../components/ui/Button";
 import { LoadMore } from "../../../components/ui/LoadMore";
-import { Spinner } from "../../../components/ui/Spinner";
 import { StateMessage } from "../../../components/ui/StateMessage";
 import { formatMonthYear } from "../../../lib/format";
 import type { Group } from "../../groups/types";
 import { PhotoGrid } from "../../photos/components/PhotoGrid";
 import { useGroupFeed } from "../../photos/hooks";
 import { endOfMonth, formatMonthParam, groupByMonth, monthOf, type Month } from "../months";
+import { PhotoGridSkeleton } from "../../../components/ui/Skeleton";
 
 const monthStart = ({ year, month }: Month) => new Date(year, month - 1, 1).toISOString();
 const monthNames = Array.from({ length: 12 }, (_, index) =>
@@ -28,12 +28,8 @@ export function Timeline({ group, from, onJump }: TimelineProps) {
 
   let content;
   if (photos.isPending) {
-    content = (
-      <div className="flex justify-center py-10">
-        <Spinner />
-      </div>
-    );
-  } else if (photos.isError) {
+    content = <PhotoGridSkeleton />;
+  } else if (photos.isLoadingError) {
     content = (
       <StateMessage
         emoji="📡"

@@ -1,22 +1,16 @@
 import { Button } from "../../../components/ui/Button";
 import { LoadMore } from "../../../components/ui/LoadMore";
-import { Spinner } from "../../../components/ui/Spinner";
 import { StateMessage } from "../../../components/ui/StateMessage";
 import { PhotoGrid } from "../../photos/components/PhotoGrid";
 import { useGroupFeed } from "../../photos/hooks";
+import { PhotoGridSkeleton } from "../../../components/ui/Skeleton";
 
 /** The photos you've starred in this group, newest first. Only you see them. */
 export function FavoritesTab({ groupId }: { groupId: string }) {
   const favorites = useGroupFeed(groupId, { favorites: true });
 
-  if (favorites.isPending) {
-    return (
-      <div className="flex justify-center py-10">
-        <Spinner />
-      </div>
-    );
-  }
-  if (favorites.isError) {
+  if (favorites.isPending) return <PhotoGridSkeleton />;
+  if (favorites.isLoadingError) {
     return (
       <StateMessage
         emoji="📡"

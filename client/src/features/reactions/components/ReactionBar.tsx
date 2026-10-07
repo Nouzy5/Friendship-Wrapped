@@ -25,7 +25,7 @@ export function ReactionBar({ photo }: { photo: Pick<Photo, "id" | "groupId" | "
             title={label}
             disabled={!photo.canInteract && !selected}
             onClick={() => react.mutate(selected ? null : type)}
-            className={`inline-flex h-9 min-w-11 items-center justify-center gap-1 rounded-full border px-2.5 text-sm transition active:scale-95 disabled:opacity-40 ${
+            className={`inline-flex h-10 min-w-11 items-center justify-center gap-1 rounded-full border px-2.5 text-sm transition active:scale-95 disabled:opacity-40 ${
               selected
                 ? "border-brand-orange/70 bg-brand-orange/15 text-ink-50"
                 : "border-ink-700 bg-ink-900/60 text-ink-200 hover:border-ink-400"

@@ -1,3 +1,4 @@
+import type { Prisma } from "../../generated/prisma/client.js";
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
 import { prisma, withTransaction, type DbClient } from "../../lib/prisma.js";
 import * as storage from "../../lib/storage.js";
@@ -76,24 +77,34 @@ export async function removeMember(groupId: string, ownerId: string, memberId: s
  * stay with the group when someone leaves; they're deleted only with the group itself.
  */
 export async function leaveGroup(groupId: string, userId: string): Promise<{ groupDeleted: boolean }> {
-  const result = await withTransaction(async (tx) => {
-    const membership = await requireMembership(groupId, userId, tx);
-
-    if (membership.role === "OWNER") {
-      const successor = await groupsRepository.findSuccessor(groupId, userId, tx);
-      if (!successor) {
-        await groupsRepository.deleteGroup(groupId, tx); // cascades to memberships, invites and photos
-        return { groupDeleted: true };
-      }
-      await groupsRepository.setMemberRole(groupId, successor.userId, "OWNER", tx);
-    }
-
-    await groupsRepository.deleteMembership(groupId, userId, tx);
-    await invitesRepository.deleteInvitesCreatedBy(groupId, userId, tx);
-    return { groupDeleted: false };
-  });
+  const result = await withTransaction((tx) => leaveInTransaction(groupId, userId, tx));
 
   // The rows are gone; now remove the group's image files.
   if (result.groupDeleted) await storage.discardPrefix(groupStoragePrefix(groupId));
   return result;
+}
+
+/**
+ * The database side of leaving, inside the caller's transaction (also used when deleting an
+ * account). A deleted group's image files are the caller's to remove afterwards.
+ */
+export async function leaveInTransaction(
+  groupId: string,
+  userId: string,
+  tx: Prisma.TransactionClient,
+): Promise<{ groupDeleted: boolean }> {
+  const membership = await requireMembership(groupId, userId, tx);
+
+  if (membership.role === "OWNER") {
+    const successor = await groupsRepository.findSuccessor(groupId, userId, tx);
+    if (!successor) {
+      await groupsRepository.deleteGroup(groupId, tx); // cascades to memberships, invites and photos
+      return { groupDeleted: true };
+    }
+    await groupsRepository.setMemberRole(groupId, successor.userId, "OWNER", tx);
+  }
+
+  await groupsRepository.deleteMembership(groupId, userId, tx);
+  await invitesRepository.deleteInvitesCreatedBy(groupId, userId, tx);
+  return { groupDeleted: false };
 }

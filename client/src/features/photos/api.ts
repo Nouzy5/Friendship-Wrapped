@@ -1,4 +1,5 @@
-import { apiRequest } from "../../lib/api-client";
+import { apiRequest, apiUpload } from "../../lib/api-client";
+import { shrinkForUpload } from "../../lib/shrink-image";
 import type { NewPhoto, Photo, PhotoDetail, PhotoPage } from "./types";
 
 const photoPath = (photoId: string) => `/photos/${encodeURIComponent(photoId)}`;
@@ -30,11 +31,12 @@ export async function fetchPhoto(photoId: string, signal?: AbortSignal): Promise
   return photo;
 }
 
-export async function uploadPhoto({ groupId, image, caption }: NewPhoto): Promise<Photo> {
+/** Big photos are scaled down on the device first (see shrinkForUpload). */
+export async function uploadPhoto({ groupId, image, caption, onProgress }: NewPhoto): Promise<Photo> {
   const form = new FormData();
   form.append("caption", caption);
-  form.append("photo", image, "photo.jpg");
-  const { photo } = await apiRequest<{ photo: Photo }>(groupPhotosPath(groupId), { method: "POST", body: form });
+  form.append("photo", await shrinkForUpload(image), "photo.jpg");
+  const { photo } = await apiUpload<{ photo: Photo }>(groupPhotosPath(groupId), form, onProgress);
   return photo;
 }
 

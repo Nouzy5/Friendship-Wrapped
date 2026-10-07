@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { deletePhoto, fetchGroupPhotos, fetchPhoto, uploadPhoto, type GroupPhotosFilter } from "./api";
-import { photoKeys, updateCachedFeed, type FeedData } from "./cache";
+import { findCachedPhotoDetail, photoKeys, updateCachedFeed, type FeedData } from "./cache";
 import { wrappedKeys } from "../wrapped/hooks";
 import type { Photo } from "./types";
 
@@ -32,9 +32,11 @@ export function useGroupFeed(groupId: string, filter: GroupPhotosFilter = {}) {
 }
 
 export function usePhoto(photoId: string) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: photoKeys.detail(photoId),
     queryFn: ({ signal }) => fetchPhoto(photoId, signal),
+    placeholderData: () => findCachedPhotoDetail(queryClient, photoId),
   });
 }
 

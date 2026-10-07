@@ -27,6 +27,7 @@ export function PhotoComposer({ image, groups, initialGroupId, discardLabel, onD
   const [caption, setCaption] = useState("");
   const [groupId, setGroupId] = useState(initialGroupId ?? "");
   const [groupError, setGroupError] = useState<string>();
+  const [progress, setProgress] = useState<number | null>(null);
 
   const fieldErrors = getFieldErrors(upload.error);
   const formError = getFormError(upload.error);
@@ -38,14 +39,36 @@ export function PhotoComposer({ image, groups, initialGroupId, discardLabel, onD
       setGroupError("Choose who to share this with");
       return;
     }
-    upload.mutate({ groupId, image, caption }, { onSuccess: onPosted });
+    setProgress(null);
+    upload.mutate({ groupId, image, caption, onProgress: setProgress }, { onSuccess: onPosted });
   }
 
   return (
     <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-5" aria-label="Share photo">
       <div className="overflow-hidden rounded-3xl bg-black">
-        {previewUrl && <img src={previewUrl} alt="Your photo" className="max-h-[55dvh] w-full object-contain" />}
+        {/* Small enough that the caption and Post button fit on a phone screen too. */}
+        {previewUrl && (
+          <img src={previewUrl} alt="Your photo" className="max-h-[max(12rem,calc(100dvh-30rem))] w-full object-contain" />
+        )}
       </div>
+
+      {upload.isPending && (
+        <div
+          role="progressbar"
+          aria-label="Upload"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progress === null ? undefined : Math.round(progress * 100)}
+          className="-mt-2 h-1.5 overflow-hidden rounded-full bg-ink-800"
+        >
+          <div
+            className={`h-full rounded-full bg-linear-to-r from-brand-rose to-brand-orange transition-[width] ${
+              progress === null ? "w-1/5 animate-pulse" : ""
+            }`}
+            style={progress === null ? undefined : { width: `${Math.max(4, progress * 100)}%` }}
+          />
+        </div>
+      )}
 
       {formError && <Alert>{formError}</Alert>}
 
@@ -93,7 +116,13 @@ export function PhotoComposer({ image, groups, initialGroupId, discardLabel, onD
           {discardLabel}
         </Button>
         <Button type="submit" className="flex-1" disabled={upload.isPending}>
-          {upload.isPending ? "Posting…" : "Post"}
+          {upload.isPaused
+            ? "Waiting for connection…"
+            : upload.isPending
+              ? progress === null || progress >= 1
+                ? "Posting…"
+                : `Posting… ${Math.round(progress * 100)}%`
+              : "Post"}
         </Button>
       </div>
     </form>

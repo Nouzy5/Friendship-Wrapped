@@ -18,6 +18,16 @@ export function findUserCredentials(username: string) {
   });
 }
 
+/** For confirming a sensitive action with the signed-in user's password. */
+export function findPasswordHash(id: string) {
+  return prisma.user.findUnique({ where: { id }, select: { passwordHash: true } });
+}
+
+/** Sessions, reactions, favorites, memberships and invites go with the user (ON DELETE CASCADE). */
+export function deleteUser(id: string, db: DbClient = prisma) {
+  return db.user.delete({ where: { id }, select: { avatarKey: true } });
+}
+
 export function updateUserProfile(id: string, data: { displayName: string }) {
   return prisma.user.update({ where: { id }, data, select: publicUserSelect });
 }

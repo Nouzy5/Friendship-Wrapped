@@ -12,6 +12,7 @@ export function useFavorite(photo: Pick<Photo, "id" | "groupId">) {
   return useMutation({
     mutationKey,
     scope: { id: `favorite:${photo.id}` },
+    meta: { errorToast: "Couldn't update your favorites." },
     mutationFn: (favorite: boolean) => setFavorite(photo.id, favorite),
     onMutate: (favorite) => {
       patchCachedPhoto(queryClient, photo, () => ({ isFavorite: favorite }));

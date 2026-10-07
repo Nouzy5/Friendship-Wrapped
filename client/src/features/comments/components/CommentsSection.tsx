@@ -41,7 +41,7 @@ export function CommentsSection({ photo }: CommentsSectionProps) {
         <Spinner />
       </div>
     );
-  } else if (comments.isError) {
+  } else if (comments.isLoadingError) {
     list = (
       <div className="flex flex-col items-start gap-3">
         <p className="text-sm text-ink-400">Couldn't load comments.</p>

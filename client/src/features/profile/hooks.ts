@@ -1,9 +1,11 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { sessionQueryKey } from "../../lib/query-client";
+import { forgetSignedInUser } from "../auth/hooks";
+import { markSignedOut } from "../auth/sign-out";
 import type { User } from "../auth/types";
 import { groupKeys } from "../groups/hooks";
 import { photoKeys } from "../photos/cache";
-import { removeAvatar, updateProfile, uploadAvatar } from "./api";
+import { deleteAccount, removeAvatar, updateProfile, uploadAvatar } from "./api";
 
 /** Your name and picture appear in member lists and on photos too, so refresh those. */
 function applyUpdatedUser(queryClient: QueryClient, user: User) {
@@ -33,5 +35,17 @@ export function useRemoveAvatar() {
   return useMutation({
     mutationFn: removeAvatar,
     onSuccess: (user) => applyUpdatedUser(queryClient, user),
+  });
+}
+
+/** The auth guard then shows the login page, which confirms the deletion. */
+export function useDeleteAccount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteAccount,
+    onSuccess: () => {
+      markSignedOut("account-deleted");
+      forgetSignedInUser(queryClient);
+    },
   });
 }

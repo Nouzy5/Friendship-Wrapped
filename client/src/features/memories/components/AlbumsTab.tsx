@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Button } from "../../../components/ui/Button";
 import { PlusIcon } from "../../../components/ui/icons";
-import { Spinner } from "../../../components/ui/Spinner";
 import { StateMessage } from "../../../components/ui/StateMessage";
 import { AlbumCard, albumPath } from "../../albums/components/AlbumCard";
 import { AlbumNameDialog } from "../../albums/components/AlbumNameDialog";
 import { useAlbums, useCreateAlbum } from "../../albums/hooks";
+import { AlbumGridSkeleton } from "../../../components/ui/Skeleton";
 
 /** The group's shared albums, with a button to start a new one. */
 export function AlbumsTab({ groupId }: { groupId: string }) {
@@ -24,12 +24,8 @@ export function AlbumsTab({ groupId }: { groupId: string }) {
 
   let content;
   if (albums.isPending) {
-    content = (
-      <div className="flex justify-center py-10">
-        <Spinner />
-      </div>
-    );
-  } else if (albums.isError) {
+    content = <AlbumGridSkeleton />;
+  } else if (albums.isLoadingError) {
     content = (
       <StateMessage
         emoji="📡"

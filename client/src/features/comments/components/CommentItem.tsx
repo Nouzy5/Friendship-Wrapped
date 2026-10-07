@@ -25,7 +25,7 @@ export function CommentItem({ comment, onDelete }: CommentItemProps) {
           type="button"
           aria-label="Delete comment"
           onClick={() => onDelete(comment)}
-          className="-mr-2 grid size-9 shrink-0 place-items-center rounded-full text-ink-400 transition hover:bg-ink-800 hover:text-ink-50"
+          className="-mr-2 grid size-10 shrink-0 place-items-center rounded-full text-ink-400 transition hover:bg-ink-800 hover:text-ink-50"
         >
           <TrashIcon className="size-4" />
         </button>

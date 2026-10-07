@@ -128,3 +128,16 @@ export function findVisiblePhotoKeys(photoId: string, viewerId: string, db: DbCl
 export function deletePhoto(photoId: string, db: DbClient = prisma) {
   return db.photo.deleteMany({ where: { id: photoId } });
 }
+
+/** Every photo someone posted, in any group (for deleting their account). */
+export function listPhotoKeysByUploader(uploaderId: string, db: DbClient = prisma) {
+  return db.photo.findMany({
+    where: { uploaderId },
+    select: { storageKey: true, mediumKey: true, thumbnailKey: true },
+  });
+}
+
+/** Their reactions, comments, favorites and album links go with them (ON DELETE CASCADE). */
+export function deletePhotosByUploader(uploaderId: string, db: DbClient = prisma) {
+  return db.photo.deleteMany({ where: { uploaderId } });
+}

@@ -9,9 +9,11 @@ import { useGroupMembers } from "../features/groups/hooks";
 import { InviteFriendsCard } from "../features/invites/components/InviteFriendsCard";
 import { GroupFeed } from "../features/photos/components/GroupFeed";
 import { formatMemberCount } from "../lib/format";
+import { usePageTitle } from "../lib/usePageTitle";
 
 export function GroupPage() {
   const group = useGroupContext();
+  usePageTitle(group.name);
   const members = useGroupMembers(group.id);
   const membersPath = `/groups/${group.id}/members`;
   const alone = group.memberCount === 1;
@@ -30,7 +32,7 @@ export function GroupPage() {
 
       <section className="flex flex-col items-center text-center">
         <GroupEmoji emoji={group.emoji} size="xl" />
-        <h1 className="mt-4 text-3xl font-black tracking-tight">{group.name}</h1>
+        <h1 className="mt-4 text-3xl font-black tracking-tight wrap-anywhere">{group.name}</h1>
         <div className="mt-3 flex flex-wrap items-center justify-center gap-1">
           <Link
             to={membersPath}
@@ -41,7 +43,7 @@ export function GroupPage() {
           </Link>
           {/* The feed scrolls on and on, so invites live on the members page rather than below it. */}
           {!alone && (
-            <Link to={membersPath} className={buttonClasses("ghost", "min-h-9 px-3 text-xs")}>
+            <Link to={membersPath} className={buttonClasses("ghost", "min-h-10 px-3 text-xs")}>
               <PlusIcon className="size-4" />
               Invite
             </Link>

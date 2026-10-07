@@ -18,7 +18,7 @@ export function ReactionsDialog({ photoId, open, onClose }: ReactionsDialogProps
         <Spinner />
       </div>
     );
-  } else if (reactions.isError) {
+  } else if (reactions.isLoadingError) {
     content = <p className="py-4 text-sm text-ink-400">Couldn't load reactions. Check your connection.</p>;
   } else if (reactions.data.length === 0) {
     content = <p className="py-4 text-sm text-ink-400">No reactions yet.</p>;

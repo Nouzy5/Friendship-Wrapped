@@ -10,7 +10,19 @@ export const commentKeys = {
 
 type CommentData = InfiniteData<CommentPage, string | null>;
 
-const allComments = (data: CommentData): Comment[] => data.pages.flatMap((page) => page.comments);
+/**
+ * Every comment loaded so far. A comment you just posted is shown straight away even if
+ * older pages haven't loaded yet; when its real page arrives, that copy (in its proper
+ * place) wins.
+ */
+function allComments(data: CommentData): Comment[] {
+  const byId = new Map<string, Comment>();
+  for (const comment of data.pages.flatMap((page) => page.comments)) {
+    byId.delete(comment.id);
+    byId.set(comment.id, comment);
+  }
+  return [...byId.values()];
+}
 
 /** A photo's comments, oldest first, a page at a time: `data` is every comment loaded so far. */
 export function useComments(photoId: string) {
@@ -28,10 +40,10 @@ export function useAddComment(photo: Pick<Photo, "id" | "groupId">) {
   return useMutation({
     mutationFn: (body: string) => addComment(photo.id, body),
     onSuccess: (comment) => {
-      // Shown at the end straight away, unless later pages are still to load (it comes with them).
+      // Shown at the end straight away (see allComments for when later pages load).
       queryClient.setQueryData<CommentData>(commentKeys.list(photo.id), (data) => {
         const last = data?.pages.at(-1);
-        if (!data || !last || last.nextCursor) return data;
+        if (!data || !last) return data;
         return { ...data, pages: [...data.pages.slice(0, -1), { ...last, comments: [...last.comments, comment] }] };
       });
       patchCachedPhoto(queryClient, photo, (current) => ({ commentCount: current.commentCount + 1 }));

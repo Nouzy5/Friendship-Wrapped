@@ -11,6 +11,7 @@ import { useMyGroups } from "../features/groups/hooks";
 import { PhotoComposer } from "../features/photos/components/PhotoComposer";
 import { defaultShareGroupId } from "../features/photos/share-target";
 import { imageFileError } from "../lib/image-files";
+import { usePageTitle } from "../lib/usePageTitle";
 
 type Shot = { image: Blob; source: "camera" | "file" };
 
@@ -22,6 +23,7 @@ export function CameraPage() {
   const requestedGroupId = searchParams.get("group");
   const [shot, setShot] = useState<Shot | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  usePageTitle(shot ? "Share photo" : "Camera");
 
   function pickFile(file: File) {
     const error = imageFileError(file);
@@ -36,7 +38,7 @@ export function CameraPage() {
         <Spinner />
       </div>
     );
-  } else if (groups.isError) {
+  } else if (groups.isLoadingError) {
     content = (
       <Card>
         <StateMessage
@@ -78,7 +80,13 @@ export function CameraPage() {
     content = (
       <>
         {fileError && <Alert>{fileError}</Alert>}
-        <CameraViewfinder onCapture={(image) => setShot({ image, source: "camera" })} onPickFile={pickFile} />
+        <CameraViewfinder
+          onCapture={(image) => {
+            setFileError(null);
+            setShot({ image, source: "camera" });
+          }}
+          onPickFile={pickFile}
+        />
       </>
     );
   }

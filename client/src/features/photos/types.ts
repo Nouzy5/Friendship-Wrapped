@@ -35,4 +35,10 @@ export type PhotoDetail = Photo & {
 
 export type PhotoPage = { photos: Photo[]; nextCursor: string | null };
 
-export type NewPhoto = { groupId: string; image: Blob; caption: string };
+export type NewPhoto = {
+  groupId: string;
+  image: Blob;
+  caption: string;
+  /** Called as the upload goes, with the fraction sent (0–1). */
+  onProgress?: (fraction: number) => void;
+};

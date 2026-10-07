@@ -4,6 +4,7 @@ import { FullScreenLoader } from "../../../components/ui/Spinner";
 import { StateMessage } from "../../../components/ui/StateMessage";
 import { useSession } from "../hooks";
 import { postLoginPath } from "../redirect";
+import { signOutReason } from "../sign-out";
 
 /** Layout route: renders its children only for signed-in users. */
 export function RequireAuth() {
@@ -12,7 +13,7 @@ export function RequireAuth() {
 
   if (session.isPending) return <FullScreenLoader />;
 
-  if (session.isError) {
+  if (session.isLoadingError) {
     return (
       <div className="flex min-h-dvh items-center justify-center px-4">
         <StateMessage
@@ -27,7 +28,10 @@ export function RequireAuth() {
   }
 
   if (!session.data) {
-    return <Navigate to="/auth/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
+    // After an expired session, come back here once signed in again; after signing out on
+    // purpose, start fresh.
+    const from = signOutReason() ? undefined : { from: `${location.pathname}${location.search}` };
+    return <Navigate to="/auth/login" replace state={from} />;
   }
 
   return <Outlet />;

@@ -26,5 +26,7 @@ export function useWrapped(groupId: string, year: number) {
   return useQuery({
     queryKey: wrappedKeys.detail(groupId, year, timeZone),
     queryFn: ({ signal }) => fetchWrapped(groupId, year, timeZone, signal),
+    // Not mid-story: a refresh could change the slides under you.
+    refetchOnWindowFocus: false,
   });
 }

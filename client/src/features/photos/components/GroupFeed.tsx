@@ -4,11 +4,11 @@ import { Button, buttonClasses } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 import { CameraIcon, FeedIcon, GridIcon } from "../../../components/ui/icons";
 import { LoadMore } from "../../../components/ui/LoadMore";
-import { Spinner } from "../../../components/ui/Spinner";
 import { StateMessage } from "../../../components/ui/StateMessage";
 import { useGroupFeed } from "../hooks";
 import { PhotoCard } from "./PhotoCard";
 import { PhotoGrid } from "./PhotoGrid";
+import { FeedSkeleton, PhotoGridSkeleton } from "../../../components/ui/Skeleton";
 
 type Layout = "feed" | "grid";
 
@@ -44,12 +44,8 @@ export function GroupFeed({ groupId }: { groupId: string }) {
 
   let content;
   if (feed.isPending) {
-    content = (
-      <div className="flex justify-center py-10">
-        <Spinner />
-      </div>
-    );
-  } else if (feed.isError) {
+    content = layout === "grid" ? <PhotoGridSkeleton /> : <FeedSkeleton />;
+  } else if (feed.isLoadingError) {
     content = (
       <Card>
         <StateMessage
@@ -115,7 +111,7 @@ export function GroupFeed({ groupId }: { groupId: string }) {
               aria-label={label}
               aria-pressed={layout === value}
               onClick={() => setLayout(value)}
-              className={`grid size-8 place-items-center rounded-full transition ${
+              className={`grid size-10 place-items-center rounded-full transition ${
                 layout === value ? "bg-ink-700 text-ink-50" : "text-ink-400 hover:text-ink-200"
               }`}
             >
@@ -123,7 +119,7 @@ export function GroupFeed({ groupId }: { groupId: string }) {
             </button>
           ))}
         </div>
-        <Link to={cameraLink} className={buttonClasses("ghost", "min-h-9 px-3 text-xs")}>
+        <Link to={cameraLink} className={buttonClasses("ghost", "min-h-10 px-3 text-xs")}>
           <CameraIcon className="size-4" />
           Add photo
         </Link>

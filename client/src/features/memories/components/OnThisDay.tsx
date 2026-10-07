@@ -1,9 +1,9 @@
 import { Link } from "react-router";
 import { Card } from "../../../components/ui/Card";
-import { Spinner } from "../../../components/ui/Spinner";
 import { PhotoImage } from "../../photos/components/PhotoImage";
 import { fromFeedState, photoPath } from "../../photos/viewer-link";
 import { useOnThisDay } from "../hooks";
+import { ThumbnailRowSkeleton } from "../../../components/ui/Skeleton";
 
 const plural = new Intl.PluralRules("en");
 const yearsAgo = (years: number) => `${years} ${plural.select(years) === "one" ? "year" : "years"} ago`;
@@ -15,12 +15,8 @@ export function OnThisDay({ groupId }: { groupId: string }) {
 
   let content;
   if (memories.isPending) {
-    content = (
-      <div className="flex justify-center py-4">
-        <Spinner />
-      </div>
-    );
-  } else if (memories.isError) {
+    content = <ThumbnailRowSkeleton />;
+  } else if (memories.isLoadingError) {
     content = <p className="text-sm text-ink-400">Couldn't look back right now.</p>;
   } else if (memories.data.years.length === 0) {
     content = (

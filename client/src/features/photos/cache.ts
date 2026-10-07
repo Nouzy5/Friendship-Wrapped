@@ -1,4 +1,6 @@
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
+import { groupKeys } from "../groups/hooks";
+import type { Group } from "../groups/types";
 import type { Photo, PhotoDetail, PhotoPage } from "./types";
 
 export const photoKeys = {
@@ -38,4 +40,20 @@ export function patchCachedPhoto(
       photos: page.photos.map((cached) => (cached.id === photo.id ? { ...cached, ...patch(cached) } : cached)),
     })),
   );
+}
+
+/**
+ * A photo from any cached list it's in (feed, timeline, favorites), dressed up as the viewer's
+ * details with its group from the cached group list: so opening it from a grid shows it at
+ * once, and the details (neighbours for swiping) fill in when they arrive.
+ */
+export function findCachedPhotoDetail(queryClient: QueryClient, photoId: string): PhotoDetail | undefined {
+  for (const [, feed] of queryClient.getQueriesData<FeedData>({ queryKey: [...photoKeys.all, "group"] })) {
+    const photo = feed?.pages.flatMap((page) => page.photos).find(({ id }) => id === photoId);
+    if (!photo) continue;
+    const group = queryClient.getQueryData<Group[]>(groupKeys.list())?.find(({ id }) => id === photo.groupId);
+    if (!group) return undefined;
+    return { ...photo, group: { id: group.id, name: group.name, emoji: group.emoji }, feed: { newerId: null, olderId: null } };
+  }
+  return undefined;
 }

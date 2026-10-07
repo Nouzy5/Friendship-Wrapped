@@ -17,7 +17,7 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 7 | Memories: On This Day, timeline by month, shared albums, favorites | ✅ Done |
 | 8 | Analytics: a group's year in numbers, for Wrapped | ✅ Done |
 | 9 | Wrapped: the year as a full-screen story, saved once the year is over | ✅ Done |
-| 10 | Polish | ⏳ Next |
+| 10 | Polish: loading, empty, error and offline states, accessibility, camera and upload, Wrapped transitions, account deletion, home screen install | ✅ Done |
 
 The native iOS app in [`ios/`](ios/README.md) covers phases 1–9 too.
 
@@ -166,10 +166,21 @@ ios/                  Native SwiftUI app (XcodeGen project.yml); see ios/README.
 | `PATCH` | `/api/users/me` | ✅ | Update display name |
 | `PUT` | `/api/users/me/avatar` | ✅ | Upload a profile picture (multipart field `avatar`) |
 | `DELETE` | `/api/users/me/avatar` | ✅ | Remove it (back to initials) |
+| `DELETE` | `/api/users/me` | ✅ | Delete your account; body `{ password }` (see below) |
 | `GET` | `/api/users/:userId/avatar` | ✅ | The picture; only for the person and people who share a group with them |
 | `GET` | `/api/health` | — | API, database and storage status |
 
-Users come back with an `avatarUrl` (or `null`). The URL changes whenever the picture does, so browsers can cache it. Account deletion isn't built yet; its policy has to cover photos and comments. Until then, `photos.uploader_id` and `comments.author_id` are `ON DELETE RESTRICT`.
+Users come back with an `avatarUrl` (or `null`). The URL changes whenever the picture does, so browsers can cache it.
+
+**Deleting an account** (Settings → Delete account, confirmed with your password; 5 tries per 15 minutes):
+
+- **Deleted:**
+  - every photo you posted, in every group, with the reactions, comments and favorites on them, and their image files
+  - your own comments, reactions and favorites, profile picture and sessions
+- **Your groups:** you leave each one as if you'd tapped "Leave". A group you own passes to its longest-standing member; a group you're the last member of is deleted.
+- **Kept:** albums you created stay with their group (`albums.created_by_id` is `SET NULL`).
+- **Wrapped:** saved Wrapped that include you are dropped, so those years are counted again without you.
+- **How it's built:** it all happens in one transaction (files are removed after it commits). `photos.uploader_id` and `comments.author_id` stay `ON DELETE RESTRICT`: deletion removes those rows first, so nothing is ever orphaned.
 
 ## Groups
 
@@ -276,9 +287,7 @@ Every photo comes back with `reactions: { counts, total, mine }`, `commentCount`
   - **After leaving a group:** your reactions and comments stay with the group's photos, like photos do. You can still remove your own reaction, comment or favorite. On your own photo, the viewer becomes read-only (`canInteract: false`).
   - **Everyone else:** gets 404.
 - **Deleting a photo** removes its reactions, comments and favorites with it (`ON DELETE CASCADE`).
-- **Account deletion** (still to come):
-  - `comments.author_id` is `ON DELETE RESTRICT`, like photos, until that policy is decided.
-  - Reactions and favorites are personal, so they'll go with the account (`CASCADE`).
+- **Deleting an account** removes the person's reactions, comments and favorites along with their photos (see Authentication).
 - **Counting.** Reaction and comment counts are one grouped query per page, on the indexed `photo_id`. Prisma's relation `_count` aggregated the whole comments table instead.
   - **Timings** on a local MySQL at the spec's targets (20 members, 10,000 photos, 50,000 reactions, 20,000 comments in one group):
 
@@ -318,7 +327,7 @@ Every photo comes back with `reactions: { counts, total, mine }`, `commentCount`
   - **Album pages** (`/memories/albums/:id`) list photos oldest first, so an album reads like the story of the event. The cover is the photo most recently added.
   - **From the photo viewer:** the album button opens a checklist of the group's albums, with a box to start a new album containing that photo.
   - **Deleting:** a deleted photo leaves every album it was in. A group's albums go with the group.
-  - **Account deletion (later):** `albums.created_by_id` is `SET NULL`, because an album belongs to the group, not to its creator.
+  - **Deleting an account:** albums the person created stay (`albums.created_by_id` becomes `NULL`), because an album belongs to the group, not to its creator.
 - **Favorites.** The photos you've starred in the group, newest first. Only you see them.
 - **Performance.** Measured on a local MySQL with 10,000 photos over three years, 40 favorites, and 20 albums of 100 photos. Favorites, a timeline jump, On This Day and an album page each take about 5–7 ms. The album list with counts and covers takes about 7 ms.
   - The cover is the most recently added photo: one lookup per album on the `(album_id, added_at)` index.
@@ -396,6 +405,47 @@ A group's year, played as a full-screen story of slides. There's a Wrapped for e
   - **Controls:** tap the right of the screen (or swipe left, or press →) for the next slide, and the left third (swipe right, ←) for the previous one. Press and hold, or Space, to pause; swipe down or Escape to close.
   - **Wide screens:** the story plays in a phone-shaped frame with arrows either side.
   - **Pausing and motion:** playback pauses while the tab is hidden. With reduced motion, numbers and slides appear without animating.
+
+## Polish (Phase 10)
+
+The finishing pass for giving the app to a real group of friends:
+
+- **Spec acceptance check.** I ran the Definition of Done in the browser with two fresh accounts:
+  1. Register, create "The Boys", invite, register and join.
+  2. Take a photo with the in-app camera and post it.
+  3. The friend sees it, reacts ❤️ and comments.
+  4. Both browse Memories, and the Wrapped shows the real numbers.
+
+  Then both accounts were deleted from Settings.
+- **Loading.**
+  - Content-shaped skeletons (feed cards, photo grids, album covers, member and group lists, On This Day) instead of spinners, so pages don't jump.
+  - A photo opened from a feed or grid shows at once from the cache while its details load.
+- **Errors.**
+  - A failed refresh or next page keeps what's already on screen; full error states are only for a first load that fails (`isLoadingError`), and a failed next page offers "Try again" at the bottom.
+  - Reactions and favorites that fail to save say so in a toast (`mutation.meta.errorToast`).
+  - Deleting a photo or album, removing a member and leaving a group are confirmed in one.
+- **Offline.** A banner says when you're offline. Loading and saving wait for the connection and carry on by themselves (TanStack Query pauses them), and posting says "Waiting for connection…". Coming back to the app refreshes what's stale.
+- **Camera and upload.**
+  - **Layout:** the viewfinder sizes itself so the shutter is never under the navigation bar.
+  - **Feedback:** a shutter flash, and a hint while the browser asks for camera access.
+  - **Camera handling:** the switch button only appears with a second camera. Capture is up to 2560 × 1920. The camera turns off while the app is in the background.
+  - **Smaller uploads:** big JPEG and WebP photos are scaled to 2560 px on the phone before uploading (a 12 MP photo goes from ~5 MB to under 1 MB).
+  - **Progress:** posting shows a progress bar (XMLHttpRequest, since `fetch` can't report upload progress).
+- **Wrapped.**
+  - **Transitions:** slides crossfade, with the outgoing one fading out under the incoming one.
+  - **Pausing:** it also freezes the looping decorations.
+  - **Fit:** text scales with the story's width (container query units) and fits 320 px screens. Content that doesn't fit a short screen starts at the top instead of being clipped.
+  - **Screen readers:** they get the story's heading and previous/next buttons on phones too.
+- **Accessibility.**
+  - **Titles and focus:** every page sets its title ("Memories · Friendship Wrapped"), and focus moves to the page's heading after navigation.
+  - **Headings:** the photo viewer and Wrapped story now have one.
+  - **Touch targets:** icon buttons are 44 px, and other small controls at least 40 px.
+  - **Dialogs:** tapping the backdrop closes them.
+- **Mobile.**
+  - **Navigation:** the bottom navigation is four equal slots, so it fits 320 px.
+  - **Long names:** group and display names wrap.
+  - **Home screen:** a web app manifest and icons let friends add the app to their home screen; it then opens full screen.
+- **Settings.** Account deletion (above), and the server status check is folded into "App status" (it opens by itself if something's wrong).
 
 ## Local machine notes
 
