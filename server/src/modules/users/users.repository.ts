@@ -1,5 +1,10 @@
 import { prisma, type DbClient } from "../../lib/prisma.js";
-import { publicUserSelect } from "./user.dto.js";
+import { publicUserSelect, userSummarySelect } from "./user.dto.js";
+
+/** How several people appear (e.g. everyone in a group's statistics), in one query. */
+export function findUserSummaries(userIds: string[], db: DbClient = prisma) {
+  return db.user.findMany({ where: { id: { in: userIds } }, select: userSummarySelect });
+}
 
 export function createUser(data: { username: string; displayName: string; passwordHash: string }) {
   return prisma.user.create({ data, select: publicUserSelect });

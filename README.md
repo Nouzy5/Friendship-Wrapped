@@ -15,8 +15,8 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 5 | Feed: group feed and grid, infinite scroll, lazy images, photo viewer (swipe, full screen), upload flow | ✅ Done |
 | 6 | Social: five reactions, comments, private favorites | ✅ Done |
 | 7 | Memories: On This Day, timeline by month, shared albums, favorites | ✅ Done |
-| 8 | Analytics | ⏳ Next |
-| 9 | Wrapped | — |
+| 8 | Analytics: a group's year in numbers, for Wrapped | ✅ Done |
+| 9 | Wrapped | ⏳ Next |
 | 10 | Polish | — |
 
 The native iOS app in [`ios/`](ios/README.md) covers phases 1–7 too.
@@ -124,7 +124,7 @@ server/
     lib/              prisma client + withTransaction, errors (AppError), logger, password hashing, tokens,
                       storage (S3), images (sharp), upload (multer), send-image,
                       pagination (keyset cursors), user-text (caption/comment validation),
-                      time-zone (local calendar days for On This Day)
+                      time-zone (local calendar days: On This Day, yearly stats)
     middleware/       error handler, 404, request logging, rate limit, same-origin check
     modules/<name>/   .routes → .controller → .service → .repository (+ .schemas for Zod)
     routes/index.ts   Mounts module routers under /api
@@ -336,6 +336,36 @@ Every photo comes back with `reactions: { counts, total, mine }`, `commentCount`
 | `POST` | `/api/albums/:albumId/photos` | member | `{ photoIds }` (1–100, from the same group): add. Returns `{ album }` |
 | `DELETE` | `/api/albums/:albumId/photos/:photoId` | member | Take a photo out. Returns `{ album }` |
 | `GET` | `/api/photos/:photoId/albums` | member | `{ albumIds }`: the albums a photo is in |
+
+## Analytics
+
+`GET /api/groups/:groupId/stats/:year?tz=Europe/Bratislava` returns `{ stats }`: everything the Wrapped slides need, for members of the group (others get 404). It's counted live from photos, reactions and comments, with no aggregate tables.
+
+- **Time zone.** The year, its months and its days run from local midnight in the viewer's IANA zone (`tz`, required).
+  - **Example:** a photo at 00:30 on 1 January in Bratislava belongs to the new year there, but to the old one in UTC.
+  - `from` and `to` in the response give the exact span.
+- **What's in it:**
+
+  | Field | Meaning |
+  | --- | --- |
+  | `photos.total` | Photos posted during the year |
+  | `photos.byMonth` | 12 counts, January first |
+  | `photos.byUser` | Photos per person, most first |
+  | `photos.topPhotographer` | Most photos; on a tie, whoever posted first that year |
+  | `photos.mostActiveMonth` | `{ month: 1–12, count }`; on a tie, the earlier month |
+  | `photos.mostActiveDay` | `{ date: "YYYY-MM-DD", count }`; on a tie, the earlier day |
+  | `reactions.total`, `reactions.byUser` | Reactions *given* during the year, on any of the group's photos |
+  | `reactions.mostReactedPhoto` | `{ photo, count }`: of the photos posted that year, the one with the most reactions; on a tie, the earlier photo |
+  | `comments.total`, `comments.byUser` | Comments written during the year |
+  | `activeUserCount` | People who posted, reacted or commented in the group that year, including anyone who has left since |
+  | `memberCount` | Members today |
+  | `highlights` | Up to 9 photos from the year for the collage: most reactions + comments first, then the earlier photo |
+
+  A year with nothing in it comes back as zeros, empty lists and `null`s.
+- **Performance.** On a local MySQL at the spec's full targets for one year (20 members, 10,000 photos, 50,000 reactions, 20,000 comments), a year's stats take about 260 ms.
+  - **How it runs:** five queries in parallel, each starting from the group's photos (the `(group_id, created_at, id)` index). The cost grows with the size of the group, not of the whole database.
+  - **Why no aggregate tables:** the spec says to add them only if performance requires it. A Wrapped is generated rarely, and Phase 9 can store the result.
+  - **If it's ever needed:** the next step would be copying `group_id` onto reactions and comments, so their counts become a single index range scan.
 
 ## Local machine notes
 

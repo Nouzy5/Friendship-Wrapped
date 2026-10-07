@@ -114,6 +114,17 @@ export async function listGroupPhotos(
   return toPageOfViews(rows, limit, viewerId);
 }
 
+/**
+ * Views of specific photos of a group, in the order of `photoIds` (ids not in the group
+ * are left out). Callers check the viewer is a member first.
+ */
+export async function listGroupPhotosByIds(groupId: string, photoIds: string[], viewerId: string): Promise<PhotoView[]> {
+  if (photoIds.length === 0) return [];
+  const rows = await photosRepository.findGroupPhotosByIds(groupId, photoIds, viewerId);
+  const views = new Map((await toViews(rows, viewerId)).map((view) => [view.id, view]));
+  return photoIds.flatMap((id) => views.get(id) ?? []);
+}
+
 /** Oldest first. Callers check access to the album (and so its group) first. */
 export async function listAlbumPhotos(
   albumId: string,

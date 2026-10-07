@@ -56,6 +56,11 @@ export function listAlbumPhotos(
   });
 }
 
+/** Specific photos of a group, in no particular order. */
+export function findGroupPhotosByIds(groupId: string, photoIds: string[], viewerId: string, db: DbClient = prisma) {
+  return db.photo.findMany({ where: { groupId, id: { in: photoIds } }, select: photoSelect(viewerId) });
+}
+
 /** A group's photos posted within any of the time ranges, newest first. */
 export function listPhotosInRanges(
   groupId: string,
