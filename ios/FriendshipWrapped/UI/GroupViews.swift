@@ -59,9 +59,10 @@ struct GroupRow: View {
         HStack(spacing: 14) {
             GroupEmojiTile(emoji: group.emoji)
             VStack(alignment: .leading, spacing: 2) {
+                // Long names wrap rather than being cut off.
                 Text(group.name)
                     .font(.headline)
-                    .lineLimit(1)
+                    .lineLimit(3)
                 Text(group.isOwner ? "\(Format.memberCount(group.memberCount)) · Owner" : Format.memberCount(group.memberCount))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

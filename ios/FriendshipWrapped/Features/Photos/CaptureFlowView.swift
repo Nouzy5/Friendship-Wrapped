@@ -189,12 +189,18 @@ struct PhotoComposer: View {
 
     @Environment(PhotosStore.self) private var photos
     @Environment(WrappedStore.self) private var wrapped
+    @Environment(NetworkMonitor.self) private var network
 
     @State private var caption = ""
     @State private var groupID: String?
     @State private var groupError: String?
     @State private var isPosting = false
+    @State private var waitingForConnection = false
+    /// The fraction of the photo sent so far, while it uploads.
+    @State private var uploadProgress: Double?
     @State private var failure: APIError?
+    /// Cancelled if the screen closes, so a post waiting for the connection doesn't go up later.
+    @State private var postTask: Task<Void, Never>?
 
     init(
         image: UIImage,
@@ -259,8 +265,13 @@ struct PhotoComposer: View {
 
             Section {
                 VStack(spacing: 12) {
-                    PrimaryButton(title: "Post", pendingTitle: "Posting…", isPending: isPosting) {
-                        Task { await post() }
+                    PrimaryButton(title: "Post", pendingTitle: postingTitle, isPending: isPosting) {
+                        postTask = Task { await post() }
+                    }
+                    if let uploadProgress {
+                        ProgressView(value: uploadProgress)
+                            .tint(Color.brandOrange)
+                            .accessibilityLabel("Uploading")
                     }
                     Button(discardLabel, action: onDiscard)
                         .buttonStyle(.brandSecondary)
@@ -271,6 +282,15 @@ struct PhotoComposer: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .onChange(of: groupID) { groupError = nil }
+        .onDisappear { postTask?.cancel() }
+    }
+
+    private var postingTitle: String {
+        if waitingForConnection { return "Waiting for connection…" }
+        if let uploadProgress, uploadProgress > 0 {
+            return "Posting… \(Int((uploadProgress * 100).rounded()))%"
+        }
+        return "Posting…"
     }
 
     private func post() async {
@@ -294,14 +314,30 @@ struct PhotoComposer: View {
             return
         }
 
+        // Offline: wait for the connection, then carry on by itself.
+        if !network.isOnline {
+            waitingForConnection = true
+            await network.waitUntilOnline()
+            waitingForConnection = false
+            guard !Task.isCancelled else { return }
+        }
+
+        uploadProgress = 0
         do {
-            let photo = try await photos.upload(jpeg, caption: caption, to: target)
+            let photo = try await photos.upload(jpeg, caption: caption, to: target) { fraction in
+                Task { @MainActor in
+                    if isPosting { uploadProgress = fraction }
+                }
+            }
             // It may start this year's Wrapped, and it counts in it.
             wrapped.setNeedsRefresh()
             onPosted(photo)
+        } catch is CancellationError {
+            return
         } catch {
             failure = error.asAPIError
             isPosting = false
+            uploadProgress = nil
         }
     }
 }

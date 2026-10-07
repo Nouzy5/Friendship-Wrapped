@@ -174,9 +174,7 @@ struct GroupDetailView: View {
                     .buttonStyle(.borderedProminent)
             }
         } else {
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 32)
+            FeedSkeleton()
         }
     }
 

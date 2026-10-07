@@ -39,7 +39,7 @@ private struct IntroSlide: View {
         SlideFrame(tone: .sunset, centered: true) {
             VStack {
                 Spacer()
-                Text("Tap to start")
+                Text("Tap to skip ahead, hold to pause")
                     .font(.subheadline.weight(.semibold))
                     .opacity(0.7)
                     .rise(after: 1.6)
@@ -411,13 +411,14 @@ private struct FloatingReactions: View {
     private static let cycle = 4.0
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var start = Date()
+    @Environment(\.storyClock) private var clock
 
     var body: some View {
         if !reduceMotion {
             GeometryReader { geometry in
-                TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-                    let elapsed = context.date.timeIntervalSince(start)
+                // Runs on the slide's clock, so it freezes while the story is paused.
+                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: clock.isPaused)) { context in
+                    let elapsed = clock.elapsed(at: context.date)
                     ZStack(alignment: .topLeading) {
                         ForEach(Self.floaters.indices, id: \.self) { index in
                             floater(index, elapsed: elapsed, in: geometry.size)
@@ -590,12 +591,14 @@ private struct StoryBackground: View {
     let tone: StoryTone
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.storyClock) private var clock
 
     var body: some View {
         if tone == .sunset, !reduceMotion {
-            // The sunset drifts slowly back and forth across a gradient twice the screen's size.
-            TimelineView(.animation(minimumInterval: 1.0 / 30)) { context in
-                let seconds = context.date.timeIntervalSinceReferenceDate
+            // The sunset drifts slowly back and forth across a gradient twice the screen's size,
+            // on the slide's clock, so it freezes while the story is paused.
+            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: clock.isPaused)) { context in
+                let seconds = clock.elapsed(at: context.date)
                 let shift = (1 - cos(seconds / 6 * .pi)) / 2
                 LinearGradient(
                     colors: tone.colors,

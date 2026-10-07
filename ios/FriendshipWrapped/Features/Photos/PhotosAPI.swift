@@ -35,11 +35,21 @@ extension APIClient {
     }
 
     /// Multipart: `caption`, then the image in `photo`. The server re-encodes it and strips metadata such as GPS.
-    func uploadPhoto(toGroup groupID: String, jpeg: Data, caption: String) async throws -> Photo {
+    func uploadPhoto(
+        toGroup groupID: String,
+        jpeg: Data,
+        caption: String,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> Photo {
         var form = MultipartForm()
         form.addField("caption", value: caption)
         form.addFile("photo", filename: "photo.jpg", mimeType: "image/jpeg", data: jpeg)
-        let response: PhotoResponse = try await upload(.post, "/groups/\(groupID.pathSegment)/photos", form: form)
+        let response: PhotoResponse = try await upload(
+            .post,
+            "/groups/\(groupID.pathSegment)/photos",
+            form: form,
+            progress: progress
+        )
         return response.photo
     }
 

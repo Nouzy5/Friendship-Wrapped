@@ -18,6 +18,10 @@ final class SessionStore {
     /// True right after creating an account, so the app can show onboarding.
     private(set) var justRegistered = false
 
+    /// Why the app just signed out, when it's worth saying (after deleting the account), for the
+    /// welcome screen to show once.
+    private(set) var signOutNotice: String?
+
     var user: User? {
         if case .signedIn(let user) = phase { return user }
         return nil
@@ -56,6 +60,7 @@ final class SessionStore {
     func login(username: String, password: String) async throws {
         let user = try await api.login(LoginInput(username: username, password: password))
         justRegistered = false
+        signOutNotice = nil
         phase = .signedIn(user)
     }
 
@@ -64,6 +69,7 @@ final class SessionStore {
             RegisterInput(username: username, displayName: displayName, password: password)
         )
         justRegistered = true
+        signOutNotice = nil
         phase = .signedIn(user)
     }
 
@@ -72,6 +78,20 @@ final class SessionStore {
         api.clearSession()
         justRegistered = false
         phase = .signedOut
+    }
+
+    /// Deletes the account for good (see `APIClient.deleteAccount`), then signs out.
+    func deleteAccount(password: String) async throws {
+        try await api.deleteAccount(password: password)
+        api.clearSession()
+        justRegistered = false
+        signOutNotice = "Your account and everything you posted have been deleted."
+        phase = .signedOut
+    }
+
+    /// Once the welcome screen has shown it.
+    func clearSignOutNotice() {
+        signOutNotice = nil
     }
 
     func updateProfile(displayName: String) async throws -> User {
