@@ -34,6 +34,11 @@ export function isValidTimeZone(timeZone: string): boolean {
   }
 }
 
+/** The zone's canonical name ("europe/bratislava" → "Europe/Bratislava", "Etc/UTC" → "UTC"). Call with a valid zone. */
+export function canonicalTimeZone(timeZone: string): string {
+  return wallClockFormatter(timeZone).resolvedOptions().timeZone;
+}
+
 /** The wall-clock reading in the zone at `instant`, as numbers. */
 function wallClock(instant: Date, timeZone: string) {
   const parts = Object.fromEntries(
@@ -55,6 +60,19 @@ function offsetMs(instant: Date, timeZone: string): number {
 export function todayIn(timeZone: string, now = new Date()): CalendarDate {
   const { year, month, day } = wallClock(now, timeZone);
   return { year, month, day };
+}
+
+/** The year it is in the zone at `instant`. */
+export function yearIn(instant: Date, timeZone: string): number {
+  return wallClock(instant, timeZone).year;
+}
+
+/** From the local midnight starting `year` in the zone to the one starting the next year. */
+export function yearRangeIn(year: number, timeZone: string): { from: Date; to: Date } {
+  return {
+    from: dayRangeIn({ year, month: 1, day: 1 }, timeZone).from,
+    to: dayRangeIn({ year: year + 1, month: 1, day: 1 }, timeZone).from,
+  };
 }
 
 /** False for dates that don't exist, such as 29 February in most years. */

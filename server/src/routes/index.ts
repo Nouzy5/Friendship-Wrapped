@@ -8,6 +8,7 @@ import { healthRouter } from "../modules/health/health.routes.js";
 import { invitesRouter } from "../modules/invites/invites.routes.js";
 import { photosRouter } from "../modules/photos/photos.routes.js";
 import { usersRouter } from "../modules/users/users.routes.js";
+import { wrappedRouter } from "../modules/wrapped/wrapped.routes.js";
 
 /** Mounted at API_PREFIX (/api). Each feature module contributes its own router. */
 export const apiRouter = Router();
@@ -27,3 +28,4 @@ apiRouter.use("/invites", invitesRouter);
 apiRouter.use("/photos", photosRouter);
 apiRouter.use("/comments", commentsRouter);
 apiRouter.use("/albums", albumsRouter);
+apiRouter.use("/wrapped", wrappedRouter);

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { groupKeys } from "../groups/hooks";
+import { wrappedKeys } from "../wrapped/hooks";
 import { acceptInvite, createInvite, fetchInvitePreview, resetInvites } from "./api";
 
 /** Keyed by viewer too: whether you're already a member depends on who's signed in. */
@@ -17,6 +18,8 @@ export function useAcceptInvite() {
     onSuccess: (group) => {
       queryClient.setQueryData(groupKeys.detail(group.id), group);
       void queryClient.invalidateQueries({ queryKey: groupKeys.list() });
+      // The group's Wrapped are yours now too.
+      void queryClient.invalidateQueries({ queryKey: wrappedKeys.all });
     },
   });
 }

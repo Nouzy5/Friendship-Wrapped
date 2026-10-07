@@ -1,4 +1,4 @@
-import { dayStartsOfYear } from "../../lib/time-zone.js";
+import { dayStartsOfYear, yearRangeIn } from "../../lib/time-zone.js";
 import { getGroup } from "../groups/groups.service.js";
 import type { PhotoView } from "../photos/photo.dto.js";
 import { listGroupPhotosByIds } from "../photos/photos.service.js";
@@ -10,6 +10,27 @@ import * as analyticsRepository from "./analytics.repository.js";
 const HIGHLIGHT_COUNT = 9;
 
 export type PersonCount = { user: UserSummary; count: number };
+type IdCount = { userId: string; count: number };
+
+/**
+ * A group's year in numbers, with people and photos as ids: plain JSON, which is what a
+ * finished year's Wrapped saves. Names, avatars and photos are looked up when it's shown,
+ * so they're always current (and a photo deleted since simply drops out).
+ * Every ranking is already in order.
+ */
+export type YearNumbers = {
+  activeUserCount: number;
+  photos: {
+    total: number;
+    byMonth: number[];
+    byUser: IdCount[];
+    mostActiveMonth: { month: number; count: number } | null;
+    mostActiveDay: { date: string; count: number } | null;
+  };
+  reactions: { total: number; byUser: IdCount[]; mostReactedPhoto: { photoId: string; count: number } | null };
+  comments: { total: number; byUser: IdCount[] };
+  highlightIds: string[];
+};
 
 /**
  * A group's year in numbers: everything the Wrapped slides need. Everything is counted
@@ -70,13 +91,9 @@ const sum = (counts: Iterable<number>) => [...counts].reduce((total, count) => t
 /** The calendar date of the `index`th day of the year, "YYYY-MM-DD". */
 const dateOfDay = (year: number, index: number) => new Date(Date.UTC(year, 0, 1 + index)).toISOString().slice(0, 10);
 
-export async function getYearStats(
-  groupId: string,
-  viewerId: string,
-  { year, tz }: { year: number; tz: string },
-): Promise<YearStats> {
-  const group = await getGroup(groupId, viewerId);
-  const dayStarts = dayStartsOfYear(year, tz);
+/** Counts the group's year in the time zone. Callers check the viewer is a member first. */
+export async function computeYearNumbers(groupId: string, year: number, timeZone: string): Promise<YearNumbers> {
+  const dayStarts = dayStartsOfYear(year, timeZone);
   const range = { from: dayStarts[0]!, to: dayStarts.at(-1)! };
 
   const [photos, reactionsByUser, commentsByUser, reactionsByPhoto, commentsByPhoto] = await Promise.all([
@@ -103,70 +120,119 @@ export async function getYearStats(
     photosByMonth[new Date(Date.UTC(year, 0, 1 + index)).getUTCMonth()]! += count;
   });
 
-  // Everyone who appears in the numbers, in one query.
+  // Ties between people go by name, so everyone who appears is looked up (in one query).
   const activeIds = new Set([...photosByUser.keys(), ...reactionsByUser.keys(), ...commentsByUser.keys()]);
-  const people = new Map(
-    (await usersRepository.findUserSummaries([...activeIds])).map((user) => [user.id, toUserSummary(user)]),
+  const names = new Map(
+    (await usersRepository.findUserSummaries([...activeIds])).map((user) => [user.id, user.displayName]),
   );
-  const rank = (counts: Map<string, number>, tieBreak: (a: PersonCount, b: PersonCount) => number) =>
+  const rank = (counts: Map<string, number>, tieBreak: (a: string, b: string) => number): IdCount[] =>
     [...counts]
-      .flatMap(([userId, count]) => {
-        const user = people.get(userId);
-        return user ? [{ user, count }] : [];
-      })
-      .sort((a, b) => b.count - a.count || tieBreak(a, b));
-  const byName = (a: PersonCount, b: PersonCount) => a.user.displayName.localeCompare(b.user.displayName);
-  const byFirstPhoto = (a: PersonCount, b: PersonCount) =>
-    firstPhotoAt.get(a.user.id)!.getTime() - firstPhotoAt.get(b.user.id)!.getTime();
+      .map(([userId, count]) => ({ userId, count }))
+      .sort((a, b) => b.count - a.count || tieBreak(a.userId, b.userId));
+  const byName = (a: string, b: string) => (names.get(a) ?? "").localeCompare(names.get(b) ?? "");
+  const byFirstPhoto = (a: string, b: string) => firstPhotoAt.get(a)!.getTime() - firstPhotoAt.get(b)!.getTime();
 
   // Photos in posting order, so ties go to the earlier photo.
   const engagement = (photoId: string) => (reactionsByPhoto.get(photoId) ?? 0) + (commentsByPhoto.get(photoId) ?? 0);
-  const mostReacted = photos.reduce<{ id: string; count: number } | null>((best, photo) => {
+  const mostReacted = photos.reduce<{ photoId: string; count: number } | null>((best, photo) => {
     const count = reactionsByPhoto.get(photo.id) ?? 0;
-    return count > (best?.count ?? 0) ? { id: photo.id, count } : best;
+    return count > (best?.count ?? 0) ? { photoId: photo.id, count } : best;
   }, null);
   const highlightIds = photos
     .map((photo, order) => ({ id: photo.id, score: engagement(photo.id), order }))
     .sort((a, b) => b.score - a.score || a.order - b.order)
     .slice(0, HIGHLIGHT_COUNT)
     .map(({ id }) => id);
-  const views = await listGroupPhotosByIds(
-    groupId,
-    [...new Set([...(mostReacted ? [mostReacted.id] : []), ...highlightIds])],
-    viewerId,
-  );
-  const viewOf = new Map(views.map((view) => [view.id, view]));
 
-  const photographers = rank(photosByUser, byFirstPhoto);
   const busiestMonth = indexOfMax(photosByMonth);
   const busiestDay = indexOfMax(photosByDay);
-  const mostReactedView = mostReacted && viewOf.get(mostReacted.id);
 
   return {
-    group: { id: group.id, name: group.name, emoji: group.emoji },
-    year,
-    timeZone: tz,
-    from: range.from,
-    to: range.to,
-    memberCount: group.memberCount,
     activeUserCount: activeIds.size,
     photos: {
       total: photos.length,
       byMonth: photosByMonth,
-      byUser: photographers,
-      topPhotographer: photographers[0] ?? null,
+      byUser: rank(photosByUser, byFirstPhoto),
       mostActiveMonth: busiestMonth === -1 ? null : { month: busiestMonth + 1, count: photosByMonth[busiestMonth]! },
       mostActiveDay: busiestDay === -1 ? null : { date: dateOfDay(year, busiestDay), count: photosByDay[busiestDay]! },
     },
     reactions: {
       total: sum(reactionsByUser.values()),
       byUser: rank(reactionsByUser, byName),
-      mostReactedPhoto: mostReacted && mostReactedView ? { photo: mostReactedView, count: mostReacted.count } : null,
+      mostReactedPhoto: mostReacted,
     },
     comments: {
       total: sum(commentsByUser.values()),
       byUser: rank(commentsByUser, byName),
     },
-    highlights: highlightIds.flatMap((id) => viewOf.get(id) ?? []),
+    highlightIds,
   };
+}
+
+type YearContext = {
+  group: { id: string; name: string; emoji: string; memberCount: number };
+  year: number;
+  timeZone: string;
+  viewerId: string;
+};
+
+/** Puts names, avatars and photos to a year's numbers, as the viewer sees them. */
+export async function toYearStats(
+  numbers: YearNumbers,
+  { group, year, timeZone, viewerId }: YearContext,
+): Promise<YearStats> {
+  const counts = [...numbers.photos.byUser, ...numbers.reactions.byUser, ...numbers.comments.byUser];
+  const mostReacted = numbers.reactions.mostReactedPhoto;
+  const photoIds = new Set([...(mostReacted ? [mostReacted.photoId] : []), ...numbers.highlightIds]);
+  const [users, views] = await Promise.all([
+    usersRepository.findUserSummaries([...new Set(counts.map(({ userId }) => userId))]),
+    listGroupPhotosByIds(group.id, [...photoIds], viewerId),
+  ]);
+
+  const people = new Map(users.map((user) => [user.id, toUserSummary(user)]));
+  const withPeople = (ranked: IdCount[]): PersonCount[] =>
+    ranked.flatMap(({ userId, count }) => {
+      const user = people.get(userId);
+      return user ? [{ user, count }] : [];
+    });
+  const viewOf = new Map(views.map((view) => [view.id, view]));
+  const photographers = withPeople(numbers.photos.byUser);
+  const mostReactedView = mostReacted && viewOf.get(mostReacted.photoId);
+
+  return {
+    group: { id: group.id, name: group.name, emoji: group.emoji },
+    year,
+    timeZone,
+    ...yearRangeIn(year, timeZone),
+    memberCount: group.memberCount,
+    activeUserCount: numbers.activeUserCount,
+    photos: {
+      total: numbers.photos.total,
+      byMonth: numbers.photos.byMonth,
+      byUser: photographers,
+      topPhotographer: photographers[0] ?? null,
+      mostActiveMonth: numbers.photos.mostActiveMonth,
+      mostActiveDay: numbers.photos.mostActiveDay,
+    },
+    reactions: {
+      total: numbers.reactions.total,
+      byUser: withPeople(numbers.reactions.byUser),
+      mostReactedPhoto: mostReacted && mostReactedView ? { photo: mostReactedView, count: mostReacted.count } : null,
+    },
+    comments: {
+      total: numbers.comments.total,
+      byUser: withPeople(numbers.comments.byUser),
+    },
+    highlights: numbers.highlightIds.flatMap((id) => viewOf.get(id) ?? []),
+  };
+}
+
+export async function getYearStats(
+  groupId: string,
+  viewerId: string,
+  { year, tz }: { year: number; tz: string },
+): Promise<YearStats> {
+  const group = await getGroup(groupId, viewerId);
+  const numbers = await computeYearNumbers(groupId, year, tz);
+  return toYearStats(numbers, { group, year, timeZone: tz, viewerId });
 }

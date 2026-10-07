@@ -16,8 +16,8 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 6 | Social: five reactions, comments, private favorites | ✅ Done |
 | 7 | Memories: On This Day, timeline by month, shared albums, favorites | ✅ Done |
 | 8 | Analytics: a group's year in numbers, for Wrapped | ✅ Done |
-| 9 | Wrapped | ⏳ Next |
-| 10 | Polish | — |
+| 9 | Wrapped: the year as a full-screen story, saved once the year is over | ✅ Done |
+| 10 | Polish | ⏳ Next |
 
 The native iOS app in [`ios/`](ios/README.md) covers phases 1–7 too.
 
@@ -124,7 +124,7 @@ server/
     lib/              prisma client + withTransaction, errors (AppError), logger, password hashing, tokens,
                       storage (S3), images (sharp), upload (multer), send-image,
                       pagination (keyset cursors), user-text (caption/comment validation),
-                      time-zone (local calendar days: On This Day, yearly stats)
+                      time-zone (local calendar days and years: On This Day, stats, Wrapped)
     middleware/       error handler, 404, request logging, rate limit, same-origin check
     modules/<name>/   .routes → .controller → .service → .repository (+ .schemas for Zod)
     routes/index.ts   Mounts module routers under /api
@@ -364,8 +364,38 @@ Every photo comes back with `reactions: { counts, total, mine }`, `commentCount`
   A year with nothing in it comes back as zeros, empty lists and `null`s.
 - **Performance.** On a local MySQL at the spec's full targets for one year (20 members, 10,000 photos, 50,000 reactions, 20,000 comments), a year's stats take about 260 ms.
   - **How it runs:** five queries in parallel, each starting from the group's photos (the `(group_id, created_at, id)` index). The cost grows with the size of the group, not of the whole database.
-  - **Why no aggregate tables:** the spec says to add them only if performance requires it. A Wrapped is generated rarely, and Phase 9 can store the result.
+  - **Why no aggregate tables:** the spec says to add them only if performance requires it. A Wrapped is opened rarely, and a finished year's numbers are saved (see Wrapped below).
   - **If it's ever needed:** the next step would be copying `group_id` onto reactions and comments, so their counts become a single index range scan.
+
+## Wrapped
+
+A group's year, played as a full-screen story of slides. There's a Wrapped for each group and each year in which the group posted at least one photo (years in the viewer's time zone). The **Wrapped** tab appears in the bottom navigation once you have one.
+
+- **API**
+  - `GET /api/wrapped?tz=…` lists yours: `{ wrapped: [{ group, year, final }] }`, newest year first. It uses each group's first and last photo times (MIN/MAX off the `(group_id, created_at, id)` index) and checks any years in between.
+  - `GET /api/groups/:groupId/wrapped/:year?tz=…` returns `{ wrapped: { group, year, final, timeZone, generatedAt, slides } }` for members (others get 404, and so does a year without photos).
+- **Slides.** The server decides which slides there are, and clients write the words around the numbers. In order:
+  1. `intro`: "Your 2026 Wrapped"
+  2. `photos`: how many photos you took together
+  3. `topPhotographer`: the top photographer and up to two runners-up
+  4. `busiestMonth`: the biggest month, a 12-month chart and the busiest day
+  5. `mostReactedPhoto`: the photo and its reaction count
+  6. `reactions`: reactions sent, comments written and who reacted most
+  7. `collage`: up to 9 highlights
+  8. `outro`: "That's your year together. ❤️" with the totals
+
+  A slide with nothing to show is left out (no reactions means no slides 5 and 6; the collage needs at least 2 photos).
+- **Saved once the year is over.** While a year is in progress (`final: false`), its Wrapped is counted live on every opening.
+  - **When it's saved:** once the year has ended in that time zone, the first opening saves the numbers in the `wrapped` table, keyed by group, year and canonical zone name.
+  - **After that:** every later opening shows the same story.
+  - **What's stored:** the analytics numbers, with people and photos as ids. Names, avatars and photos are looked up when it's shown, so a photo deleted since simply drops out.
+  - **Format changes:** a format version in the stored JSON means a change to the numbers recounts older saves.
+  - **Speed:** at the spec's full scale, a saved Wrapped loads in about 6 ms, against about 270 ms to count it.
+- **The story (web).** `/wrapped` lists them by year; `/wrapped/:year?group=…` plays one full screen, outside the app shell.
+  - **Playback:** each slide plays for 4.5 to 8 seconds behind a progress bar. Slides enter with a transition, numbers count up, and charts and photos animate in.
+  - **Controls:** tap the right of the screen (or swipe left, or press →) for the next slide, and the left third (swipe right, ←) for the previous one. Press and hold, or Space, to pause; swipe down or Escape to close.
+  - **Wide screens:** the story plays in a phone-shaped frame with arrows either side.
+  - **Pausing and motion:** playback pauses while the tab is hidden. With reduced motion, numbers and slides appear without animating.
 
 ## Local machine notes
 
