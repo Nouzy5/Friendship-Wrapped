@@ -63,6 +63,20 @@ export function isRealDate({ year, month, day }: CalendarDate): boolean {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
+/**
+ * The local midnight starting each day of `year` in the zone, then the one starting
+ * the next year: 366 instants (367 in a leap year). Day `i` runs from `[i]` to `[i + 1]`.
+ */
+export function dayStartsOfYear(year: number, timeZone: string): Date[] {
+  const starts: Date[] = [];
+  for (let index = 0; ; index++) {
+    const date = new Date(Date.UTC(year, 0, 1 + index));
+    const day = { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+    starts.push(dayRangeIn(day, timeZone).from);
+    if (day.year !== year) return starts;
+  }
+}
+
 /** The instant a calendar day begins in the zone (its local midnight), and the next day's. */
 export function dayRangeIn({ year, month, day }: CalendarDate, timeZone: string): { from: Date; to: Date } {
   const startOf = (dayOfMonth: number) => {

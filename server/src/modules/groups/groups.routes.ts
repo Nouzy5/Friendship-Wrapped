@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { createAlbum, listAlbums } from "../albums/albums.controller.js";
+import { getYearStats } from "../analytics/analytics.controller.js";
 import { requireAuth } from "../auth/auth.middleware.js";
 import { createInvite, resetInvites } from "../invites/invites.controller.js";
 import { listGroupPhotos, listOnThisDay, uploadPhoto } from "../photos/photos.controller.js";
@@ -31,3 +32,4 @@ groupsRouter.post("/:groupId/photos", uploadPhoto);
 groupsRouter.get("/:groupId/photos/on-this-day", listOnThisDay);
 groupsRouter.get("/:groupId/albums", listAlbums);
 groupsRouter.post("/:groupId/albums", createAlbum);
+groupsRouter.get("/:groupId/stats/:year", getYearStats);
