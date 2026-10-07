@@ -5,10 +5,11 @@ enum AppTab: Hashable {
     case home
     /// Never actually selected: tapping it opens the camera over the current tab.
     case camera
+    case memories
     case profile
 }
 
-/// Screens pushed onto the Home tab's navigation stack.
+/// Screens pushed onto the Home and Memories tabs' navigation stacks.
 enum AppRoute: Hashable {
     case group(String)
     case members(String)
@@ -16,6 +17,7 @@ enum AppRoute: Hashable {
     case photo(String)
     /// The photo viewer, scrolled to its comments (a feed card's comment button).
     case photoComments(String)
+    case album(String)
 }
 
 enum AuthRoute: Hashable {
@@ -41,6 +43,7 @@ struct CameraRequest: Identifiable {
 final class AppRouter {
     var selectedTab: AppTab = .home
     var homePath: [AppRoute] = []
+    var memoriesPath: [AppRoute] = []
     var authPath: [AuthRoute] = []
     var presentedInvite: PendingInvite?
     var showOnboarding = false
@@ -117,6 +120,7 @@ final class AppRouter {
     func didSignOut() {
         selectedTab = .home
         homePath = []
+        memoriesPath = []
         authPath = []
         showOnboarding = false
         cameraRequest = nil

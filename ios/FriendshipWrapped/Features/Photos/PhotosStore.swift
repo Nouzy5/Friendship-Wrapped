@@ -19,6 +19,8 @@ final class PhotosStore {
     private var feeds: [String: GroupFeed] = [:]
     /// Photos opened in the viewer (these include the group and the feed neighbours).
     private var details: [String: Photo] = [:]
+    /// Photos seen in other lists (timeline, favorites, albums, On This Day).
+    private var seen: [String: Photo] = [:]
 
     private let api: APIClient
 
@@ -35,7 +37,12 @@ final class PhotosStore {
         for feed in feeds.values {
             if let match = feed.photos.first(where: { $0.id == photoID }) { return match }
         }
-        return nil
+        return seen[photoID]
+    }
+
+    /// Photos listed elsewhere, so opening one shows it straight away.
+    func remember(_ photos: [Photo]) {
+        for photo in photos { seen[photo.id] = photo }
     }
 
     // MARK: - Loading
@@ -130,6 +137,7 @@ final class PhotosStore {
 
     func forget(_ photoID: String) {
         details[photoID] = nil
+        seen[photoID] = nil
         for groupID in Array(feeds.keys) {
             feeds[groupID]?.photos.removeAll { $0.id == photoID }
         }
@@ -138,6 +146,7 @@ final class PhotosStore {
     func reset() {
         feeds = [:]
         details = [:]
+        seen = [:]
     }
 
     // MARK: - Helpers
@@ -147,6 +156,10 @@ final class PhotosStore {
         if var detail = details[photoID] {
             change(&detail)
             details[photoID] = detail
+        }
+        if var other = seen[photoID] {
+            change(&other)
+            seen[photoID] = other
         }
         for groupID in Array(feeds.keys) {
             guard var feed = feeds[groupID], let index = feed.photos.firstIndex(where: { $0.id == photoID }) else { continue }

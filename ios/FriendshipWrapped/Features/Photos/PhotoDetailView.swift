@@ -9,7 +9,6 @@ struct PhotoDetailView: View {
 
     @Environment(PhotosStore.self) private var photos
     @Environment(GroupsStore.self) private var groups
-    @Environment(AppRouter.self) private var router
     @Environment(\.dismiss) private var dismiss
 
     /// The photo on screen; changes as you step through the feed.
@@ -21,6 +20,7 @@ struct PhotoDetailView: View {
     @State private var didScrollToComments = false
     @State private var showingFullSize = false
     @State private var showingReactions = false
+    @State private var showingAlbums = false
     @State private var confirmingDelete = false
     @State private var isDeleting = false
     @State private var alertMessage: String?
@@ -42,6 +42,15 @@ struct PhotoDetailView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if let photo {
+                        if photo.canInteract {
+                            Button {
+                                showingAlbums = true
+                            } label: {
+                                Image(systemName: "rectangle.stack.badge.plus")
+                            }
+                            .accessibilityLabel("Add to an album")
+                        }
+
                         Button {
                             Task { await toggleFavorite(photo) }
                         } label: {
@@ -74,6 +83,12 @@ struct PhotoDetailView: View {
             .sheet(isPresented: $showingReactions) {
                 ReactionsSheet(photoID: currentID)
                     .presentationDetents([.medium, .large])
+            }
+            .sheet(isPresented: $showingAlbums) {
+                if let photo {
+                    PhotoAlbumsSheet(photo: photo)
+                        .presentationDetents([.medium, .large])
+                }
             }
             .fullScreenCover(isPresented: $showingFullSize) {
                 if let photo {
@@ -149,7 +164,7 @@ struct PhotoDetailView: View {
                     title: "Photo not found",
                     message: "It may have been deleted, or it's in a group you're not part of."
                 ) {
-                    Button("Go home") { router.popToHome() }
+                    Button("Go back") { dismiss() }
                         .buttonStyle(.bordered)
                 }
             } else {

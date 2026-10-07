@@ -6,10 +6,26 @@ private struct PhotoResponse: Decodable {
 
 extension APIClient {
     /// One page of the group's photos, newest first. Pass the previous page's `nextCursor` to continue.
-    func fetchGroupPhotos(_ groupID: String, cursor: String? = nil, limit: Int = 24) async throws -> PhotoPage {
+    /// - Parameters:
+    ///   - before: Start from photos posted before this instant (the timeline jumping to a month).
+    ///   - favoritesOnly: Only the photos you've favorited.
+    func fetchGroupPhotos(
+        _ groupID: String,
+        cursor: String? = nil,
+        limit: Int = 24,
+        before: Date? = nil,
+        favoritesOnly: Bool = false
+    ) async throws -> PhotoPage {
         var path = "/groups/\(groupID.pathSegment)/photos?limit=\(limit)"
         if let cursor { path += "&cursor=\(cursor.queryValue)" }
+        if let before { path += "&before=\(ISO8601DateFormatter().string(from: before).queryValue)" }
+        if favoritesOnly { path += "&favorites=true" }
         return try await send(.get, path)
+    }
+
+    /// Photos from today's date in earlier years. Days begin at midnight in your own time zone.
+    func fetchOnThisDay(_ groupID: String, timeZone: TimeZone = .current) async throws -> OnThisDay {
+        try await send(.get, "/groups/\(groupID.pathSegment)/photos/on-this-day?tz=\(timeZone.identifier.queryValue)")
     }
 
     /// 404 for photos you can't see, so their existence isn't revealed.
