@@ -5,6 +5,7 @@ import { FileButton } from "../../../components/ui/FileButton";
 import { CameraIcon, ImagesIcon, SwitchCameraIcon } from "../../../components/ui/icons";
 import { Spinner } from "../../../components/ui/Spinner";
 import { IMAGE_ACCEPT } from "../../../lib/image-files";
+import { usePageHidden } from "../../../lib/usePageHidden";
 import { captureFrame } from "../capture";
 import { useCamera, type CameraProblem } from "../useCamera";
 
@@ -13,6 +14,9 @@ type CameraViewfinderProps = {
   /** A photo from the gallery, or from the phone's own camera app (fallback). */
   onPickFile: (file: File) => void;
 };
+
+/** How long the shutter flash shows before the preview replaces the camera. */
+const FLASH_MS = 180;
 
 const roundButtonClasses =
   "grid size-12 place-items-center rounded-full bg-ink-800 text-ink-50 transition hover:bg-ink-700 disabled:opacity-40";
@@ -36,7 +40,9 @@ function problemMessage(problem: CameraProblem): string {
 
 /** Live camera → shutter. Falls back to the phone's camera app or the gallery when there's no live camera. */
 export function CameraViewfinder({ onCapture, onPickFile }: CameraViewfinderProps) {
-  const camera = useCamera(true);
+  // Off while the app is in the background: the camera light goes out and the battery is spared.
+  const camera = useCamera(!usePageHidden());
+  const [flashes, setFlashes] = useState(0);
   const [aspectRatio, setAspectRatio] = useState(3 / 4);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const mirrored = camera.facingMode === "user";
@@ -47,7 +53,10 @@ export function CameraViewfinder({ onCapture, onPickFile }: CameraViewfinderProp
     if (!video) return;
     try {
       setCaptureError(null);
-      onCapture(await captureFrame(video, mirrored));
+      const photo = await captureFrame(video, mirrored);
+      // Flash first; the preview takes over once it has been seen.
+      setFlashes((count) => count + 1);
+      window.setTimeout(() => onCapture(photo), FLASH_MS);
     } catch (error) {
       setCaptureError(error instanceof Error ? error.message : "Couldn't capture the photo");
     }
@@ -55,7 +64,15 @@ export function CameraViewfinder({ onCapture, onPickFile }: CameraViewfinderProp
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="relative max-h-[65dvh] overflow-hidden rounded-3xl bg-black" style={{ aspectRatio }}>
+      <div
+        className="relative mx-auto min-h-48 w-full overflow-hidden rounded-3xl bg-black"
+        // As big as fits while the shutter stays above the navigation bar: the screen minus
+        // the app header, page title, shutter row and navigation (~20.5rem) and safe areas.
+        style={{
+          aspectRatio,
+          maxWidth: `calc((100dvh - 20.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)) * ${aspectRatio})`,
+        }}
+      >
         <video
           ref={camera.videoRef}
           muted
@@ -69,9 +86,19 @@ export function CameraViewfinder({ onCapture, onPickFile }: CameraViewfinderProp
         />
 
         {camera.state.status === "starting" && (
-          <div className="absolute inset-0 grid place-items-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
             <Spinner />
+            <p className="text-sm text-ink-400">If your browser asks, allow the camera.</p>
           </div>
+        )}
+
+        {/* A white flash on the shutter, like a camera. */}
+        {flashes > 0 && (
+          <div
+            key={flashes}
+            aria-hidden
+            className="pointer-events-none absolute inset-0 animate-flash bg-white motion-reduce:hidden"
+          />
         )}
 
         {camera.state.status === "error" && (
@@ -119,15 +146,20 @@ export function CameraViewfinder({ onCapture, onPickFile }: CameraViewfinderProp
           <span className="size-15 rounded-full bg-linear-to-br from-brand-rose via-brand-orange to-brand-gold" />
         </button>
 
-        <button
-          type="button"
-          onClick={camera.flip}
-          disabled={!isLive}
-          aria-label="Switch camera"
-          className={roundButtonClasses}
-        >
-          <SwitchCameraIcon className="size-6" />
-        </button>
+        {camera.canFlip ? (
+          <button
+            type="button"
+            onClick={camera.flip}
+            disabled={!isLive}
+            aria-label="Switch camera"
+            className={roundButtonClasses}
+          >
+            <SwitchCameraIcon className="size-6" />
+          </button>
+        ) : (
+          // Keeps the shutter centred.
+          <span aria-hidden className="size-12" />
+        )}
       </div>
     </div>
   );

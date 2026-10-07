@@ -1,8 +1,11 @@
 import { isRouteErrorResponse, useRouteError } from "react-router";
+import { buttonClasses } from "../components/ui/Button";
 import { StateMessage } from "../components/ui/StateMessage";
+import { usePageTitle } from "../lib/usePageTitle";
 
 /** Rendered by the router when a route throws while rendering or loading. */
 export function RouteErrorPage() {
+  usePageTitle("Something went wrong");
   const error = useRouteError();
 
   if (import.meta.env.DEV) console.error(error);
@@ -19,7 +22,7 @@ export function RouteErrorPage() {
         title="Something went wrong"
         description={description}
         action={
-          <a href="/" className="text-sm font-semibold text-brand-orange hover:underline">
+          <a href="/" className={buttonClasses()}>
             Reload the app
           </a>
         }

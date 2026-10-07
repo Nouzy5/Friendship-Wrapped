@@ -37,7 +37,7 @@ export function PhotoCard({ photo, priority = false }: { photo: Photo; priority?
           to={`${photoPath(photo.id)}#${COMMENTS_ANCHOR}`}
           state={fromFeedState}
           aria-label={commentCount === 1 ? "1 comment" : `${commentCount} comments`}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-sm text-ink-200 transition hover:bg-ink-800 hover:text-ink-50"
+          className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-sm text-ink-200 transition hover:bg-ink-800 hover:text-ink-50"
         >
           <CommentIcon className="size-5" />
           {commentCount > 0 && <span className="font-semibold tabular-nums">{commentCount}</span>}

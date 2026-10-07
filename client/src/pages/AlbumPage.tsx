@@ -6,6 +6,7 @@ import { PencilIcon, PlusIcon, TrashIcon } from "../components/ui/icons";
 import { LoadMore } from "../components/ui/LoadMore";
 import { headerIconClasses, PageHeader } from "../components/ui/PageHeader";
 import { Spinner } from "../components/ui/Spinner";
+import { toast } from "../lib/toast";
 import { StateMessage } from "../components/ui/StateMessage";
 import { AlbumNameDialog } from "../features/albums/components/AlbumNameDialog";
 import { AlbumPhotoPicker } from "../features/albums/components/AlbumPhotoPicker";
@@ -14,11 +15,14 @@ import type { Album } from "../features/albums/types";
 import { PhotoGrid } from "../features/photos/components/PhotoGrid";
 import { ApiError } from "../lib/api-client";
 import { getFormError } from "../lib/form-errors";
+import { usePageTitle } from "../lib/usePageTitle";
+import { PhotoGridSkeleton } from "../components/ui/Skeleton";
 
 /** /memories/albums/:albumId */
 export function AlbumPage() {
   const { albumId = "" } = useParams();
   const album = useAlbum(albumId);
+  usePageTitle(album.data?.name ?? "Album");
 
   if (album.isPending) {
     return (
@@ -27,7 +31,7 @@ export function AlbumPage() {
       </div>
     );
   }
-  if (album.isError) {
+  if (album.isLoadingError) {
     const notFound = album.error instanceof ApiError && [400, 404].includes(album.error.status);
     return notFound ? (
       <StateMessage
@@ -71,12 +75,8 @@ function AlbumDetails({ album }: { album: Album }) {
 
   let content;
   if (photos.isPending) {
-    content = (
-      <div className="flex justify-center py-10">
-        <Spinner />
-      </div>
-    );
-  } else if (photos.isError) {
+    content = <PhotoGridSkeleton />;
+  } else if (photos.isLoadingError) {
     content = (
       <StateMessage
         emoji="📡"
@@ -160,7 +160,14 @@ function AlbumDetails({ album }: { album: Album }) {
         variant="danger"
         isPending={remove.isPending}
         error={getFormError(remove.error)}
-        onConfirm={() => remove.mutate(undefined, { onSuccess: () => void navigate(backTo, { replace: true }) })}
+        onConfirm={() =>
+          remove.mutate(undefined, {
+            onSuccess: () => {
+              toast("Album deleted");
+              void navigate(backTo, { replace: true });
+            },
+          })
+        }
         onClose={closeDialog}
       />
     </div>

@@ -34,7 +34,7 @@ function AlbumChecklist({ photo }: { photo: Pick<Photo, "id" | "groupId"> }) {
       </div>
     );
   }
-  if (albums.isError || albumIds.isError) {
+  if (albums.isLoadingError || albumIds.isLoadingError) {
     return <p className="py-4 text-sm text-ink-400">Couldn't load albums. Check your connection.</p>;
   }
 

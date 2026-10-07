@@ -3,7 +3,6 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { ConfirmDialog } from "../components/ui/ConfirmDialog";
 import { PageHeader } from "../components/ui/PageHeader";
-import { Spinner } from "../components/ui/Spinner";
 import { StateMessage } from "../components/ui/StateMessage";
 import { useCurrentUser } from "../features/auth/hooks";
 import { useGroupContext } from "../features/groups/components/GroupRoute";
@@ -12,9 +11,13 @@ import { useGroupMembers, useRemoveMember } from "../features/groups/hooks";
 import type { GroupMember } from "../features/groups/types";
 import { InviteFriendsCard } from "../features/invites/components/InviteFriendsCard";
 import { getFormError } from "../lib/form-errors";
+import { toast } from "../lib/toast";
+import { usePageTitle } from "../lib/usePageTitle";
+import { ListSkeleton } from "../components/ui/Skeleton";
 
 export function GroupMembersPage() {
   const group = useGroupContext();
+  usePageTitle(`Members · ${group.name}`);
   const user = useCurrentUser();
   const members = useGroupMembers(group.id);
   const removeMember = useRemoveMember(group.id);
@@ -33,10 +36,8 @@ export function GroupMembersPage() {
 
       <Card>
         {members.isPending ? (
-          <div className="flex justify-center py-6">
-            <Spinner />
-          </div>
-        ) : members.isError ? (
+          <ListSkeleton rows={Math.min(group.memberCount, 6)} />
+        ) : members.isLoadingError ? (
           <StateMessage
             emoji="📡"
             title="Couldn't load members"
@@ -64,7 +65,13 @@ export function GroupMembersPage() {
         error={getFormError(removeMember.error)}
         onClose={closeDialog}
         onConfirm={() => {
-          if (toRemove) removeMember.mutate(toRemove.user.id, { onSuccess: closeDialog });
+          if (!toRemove) return;
+          removeMember.mutate(toRemove.user.id, {
+            onSuccess: () => {
+              toast(`${toRemove.user.displayName} was removed from ${group.name}`);
+              closeDialog();
+            },
+          });
         }}
       />
     </div>

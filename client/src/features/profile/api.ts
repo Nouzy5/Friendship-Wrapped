@@ -15,6 +15,11 @@ export async function uploadAvatar(image: File): Promise<User> {
   return user;
 }
 
+/** Permanently deletes your account and everything you posted; your password confirms it. */
+export async function deleteAccount(password: string): Promise<void> {
+  await apiRequest<null>("/users/me", { method: "DELETE", body: { password } });
+}
+
 export async function removeAvatar(): Promise<User> {
   const { user } = await apiRequest<{ user: User }>("/users/me/avatar", { method: "DELETE" });
   return user;

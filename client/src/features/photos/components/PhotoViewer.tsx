@@ -4,6 +4,7 @@ import { ConfirmDialog } from "../../../components/ui/ConfirmDialog";
 import { AlbumIcon, ChevronLeftIcon, ChevronRightIcon, TrashIcon } from "../../../components/ui/icons";
 import { headerIconClasses, PageHeader } from "../../../components/ui/PageHeader";
 import { getFormError } from "../../../lib/form-errors";
+import { toast } from "../../../lib/toast";
 import { useSwipe } from "../../../lib/useSwipe";
 import { PhotoAlbumsDialog } from "../../albums/components/PhotoAlbumsDialog";
 import { CommentsSection } from "../../comments/components/CommentsSection";
@@ -15,7 +16,7 @@ import type { PhotoDetail } from "../types";
 import { cameFromFeed, photoPath } from "../viewer-link";
 import { FullscreenPhoto } from "./FullscreenPhoto";
 import { PhotoAttribution } from "./PhotoAttribution";
-import { PhotoImage } from "./PhotoImage";
+import { photoAlt, PhotoImage } from "./PhotoImage";
 
 const stepButtonClasses =
   "absolute top-1/2 grid size-10 -translate-y-1/2 place-items-center rounded-full bg-black/50 text-ink-50 backdrop-blur transition hover:bg-black/70";
@@ -74,6 +75,7 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
 
   return (
     <article className="flex flex-col gap-4 py-2">
+      <h1 className="sr-only">{photoAlt(photo)}</h1>
       <PageHeader
         backTo={fromFeed ? undefined : backTo}
         onBack={fromFeed ? goBack : undefined}
@@ -163,7 +165,8 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
         )}
       </div>
 
-      <CommentsSection photo={photo} />
+      {/* Keyed, so a half-written comment doesn't follow you to the next photo. */}
+      <CommentsSection key={photo.id} photo={photo} />
 
       <ReactionsDialog photoId={photo.id} open={showingReactions} onClose={() => setShowingReactions(false)} />
       <PhotoAlbumsDialog photo={photo} open={choosingAlbums} onClose={() => setChoosingAlbums(false)} />
@@ -179,7 +182,14 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
         variant="danger"
         isPending={remove.isPending}
         error={getFormError(remove.error)}
-        onConfirm={() => remove.mutate(undefined, { onSuccess: goBack })}
+        onConfirm={() =>
+          remove.mutate(undefined, {
+            onSuccess: () => {
+              toast("Photo deleted");
+              goBack();
+            },
+          })
+        }
         onClose={() => {
           setConfirmingDelete(false);
           remove.reset();

@@ -2,13 +2,16 @@ import { Link, useParams } from "react-router";
 import { Button, buttonClasses } from "../components/ui/Button";
 import { Spinner } from "../components/ui/Spinner";
 import { StateMessage } from "../components/ui/StateMessage";
+import { photoAlt } from "../features/photos/components/PhotoImage";
 import { PhotoViewer } from "../features/photos/components/PhotoViewer";
 import { usePhoto } from "../features/photos/hooks";
 import { ApiError } from "../lib/api-client";
+import { usePageTitle } from "../lib/usePageTitle";
 
 export function PhotoPage() {
   const { photoId = "" } = useParams();
   const photo = usePhoto(photoId);
+  usePageTitle(photo.data ? photoAlt(photo.data) : "Photo");
 
   if (photo.isPending) {
     return (
@@ -18,7 +21,7 @@ export function PhotoPage() {
     );
   }
 
-  if (photo.isError) {
+  if (photo.isLoadingError) {
     const notFound = photo.error instanceof ApiError && (photo.error.status === 404 || photo.error.status === 400);
     return notFound ? (
       <StateMessage

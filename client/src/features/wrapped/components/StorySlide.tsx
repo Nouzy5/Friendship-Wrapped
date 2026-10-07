@@ -28,7 +28,8 @@ function SlideFrame({ tone, center = false, decoration, children }: SlideFramePr
     <div className={`relative flex size-full flex-col overflow-hidden ${toneClasses[tone]}`}>
       {decoration}
       <div
-        className={`relative flex flex-1 flex-col justify-center gap-6 px-7 pt-[calc(6rem+env(safe-area-inset-top))] pb-[calc(3rem+env(safe-area-inset-bottom))] ${
+        // safe: content that doesn't fit a short screen starts at the top instead of being cut off at both ends.
+        className={`relative flex flex-1 flex-col justify-center-safe gap-[clamp(0.75rem,3dvh,1.5rem)] px-7 pt-[calc(6rem+env(safe-area-inset-top))] pb-[calc(3rem+env(safe-area-inset-bottom))] ${
           center ? "items-center text-center" : ""
         }`}
       >
@@ -62,10 +63,17 @@ function Kicker({ children }: { children: ReactNode }) {
   return <span className="block text-sm font-bold tracking-[0.2em] uppercase opacity-80">{children}</span>;
 }
 
-/** Big numbers get as large as fits the width of a phone. */
+/** Big numbers get as large as fits the story's width (cqw: the story is a size container). */
 function bigNumberClasses(value: number): string {
   const length = formatNumber(value).length;
-  const size = length <= 3 ? "text-9xl" : length <= 5 ? "text-8xl" : length <= 7 ? "text-7xl" : "text-6xl";
+  const size =
+    length <= 3
+      ? "text-[clamp(4rem,34cqw,8rem)]"
+      : length <= 5
+        ? "text-[clamp(3.5rem,26cqw,6rem)]"
+        : length <= 7
+          ? "text-[clamp(3rem,20cqw,4.5rem)]"
+          : "text-[clamp(2.5rem,15cqw,3.75rem)]";
   return `${size} leading-none font-black tracking-tighter`;
 }
 
@@ -91,14 +99,14 @@ function IntroSlide({ wrapped }: { wrapped: Wrapped }) {
       >
         {wrapped.group.emoji}
       </span>
-      <Rise delay={250} className="text-lg font-bold">
+      <Rise delay={250} className="text-lg font-bold wrap-break-word">
         {wrapped.group.name}
       </Rise>
       <h2 className="font-black tracking-tight">
         <Rise delay={450} className="text-3xl">
           Your
         </Rise>
-        <Rise delay={600} className="text-8xl leading-none tracking-tighter">
+        <Rise delay={600} className="text-[clamp(4rem,28cqw,6rem)] leading-none tracking-tighter">
           {wrapped.year}
         </Rise>
         <Rise delay={750} className="text-5xl">
@@ -111,7 +119,7 @@ function IntroSlide({ wrapped }: { wrapped: Wrapped }) {
         </Rise>
       )}
       <Rise delay={1600} className="absolute inset-x-0 bottom-[calc(2.5rem+env(safe-area-inset-bottom))] text-sm font-semibold opacity-70">
-        Tap to start
+        Tap to skip ahead, hold to pause
       </Rise>
     </SlideFrame>
   );
@@ -154,7 +162,7 @@ function TopPhotographerSlide({ top, runnersUp }: { top: PersonCount; runnersUp:
           👑
         </span>
       </span>
-      <h2 className="text-4xl leading-tight font-black tracking-tight text-balance">
+      <h2 className="text-[clamp(1.75rem,11cqw,2.25rem)] leading-tight font-black tracking-tight text-balance wrap-break-word">
         <Rise delay={350}>{nameOf(top)} took the most photos.</Rise>
       </h2>
       <Rise delay={550} className="text-2xl font-bold">
@@ -190,7 +198,7 @@ function BusiestMonthSlide({ month, count, byMonth, busiestDay }: BusiestMonthPr
       <Rise>
         <Kicker>Month by month</Kicker>
       </Rise>
-      <h2 className="text-5xl leading-none font-black tracking-tight text-balance">
+      <h2 className="text-[clamp(2rem,13cqw,3rem)] leading-none font-black tracking-tight text-balance">
         <Rise delay={150}>{monthName(month)} was your biggest month.</Rise>
       </h2>
       <div aria-hidden className="flex gap-1.5">

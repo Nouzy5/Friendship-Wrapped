@@ -31,7 +31,7 @@ export function AvatarEditor({ user }: { user: User }) {
           accept={IMAGE_ACCEPT}
           onFile={pickFile}
           disabled={busy}
-          className={buttonClasses("secondary", "min-h-9 px-4 text-xs")}
+          className={buttonClasses("secondary", "min-h-10 px-4 text-xs")}
         >
           {upload.isPending ? "Uploading…" : user.avatarUrl ? "Change photo" : "Add photo"}
         </FileButton>
@@ -44,7 +44,7 @@ export function AvatarEditor({ user }: { user: User }) {
               upload.reset();
               remove.mutate();
             }}
-            className={buttonClasses("ghost", "min-h-9 px-4 text-xs")}
+            className={buttonClasses("ghost", "min-h-10 px-4 text-xs")}
           >
             {remove.isPending ? "Removing…" : "Remove"}
           </button>

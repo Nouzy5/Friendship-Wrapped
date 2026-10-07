@@ -2,9 +2,11 @@ import { Link } from "react-router";
 import { Card } from "../components/ui/Card";
 import { useCurrentUser } from "../features/auth/hooks";
 import { CreateGroupForm } from "../features/groups/components/CreateGroupForm";
+import { usePageTitle } from "../lib/usePageTitle";
 
 /** First stop after registering (unless they arrived through an invite link). */
 export function OnboardingPage() {
+  usePageTitle("Welcome");
   const user = useCurrentUser();
   const firstName = user.displayName.split(/\s+/)[0];
 

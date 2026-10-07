@@ -33,6 +33,7 @@ export function useCamera(enabled: boolean) {
   const [facingMode, setFacingMode] = useState<FacingMode>("environment");
   const [state, setState] = useState<CameraState>({ status: "idle" });
   const [attempt, setAttempt] = useState(0);
+  const [cameraCount, setCameraCount] = useState(0);
 
   useEffect(() => {
     if (!enabled) return;
@@ -48,7 +49,8 @@ export function useCamera(enabled: boolean) {
 
     navigator.mediaDevices
       .getUserMedia({
-        video: { facingMode: { ideal: facingMode }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        // 4:3 like phone sensors, up to the 2560px our full-size photos keep.
+        video: { facingMode: { ideal: facingMode }, width: { ideal: 2560 }, height: { ideal: 1920 } },
         audio: false,
       })
       .then(async (granted) => {
@@ -63,6 +65,9 @@ export function useCamera(enabled: boolean) {
           await video.play().catch(() => undefined); // autoplay is allowed for muted inline video
         }
         if (!cancelled) setState({ status: "live" });
+        // Device names and counts are only reliable once access has been granted.
+        const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+        if (!cancelled) setCameraCount(devices.filter((device) => device.kind === "videoinput").length);
       })
       .catch((error: unknown) => {
         if (!cancelled) setState({ status: "error", problem: toProblem(error) });
@@ -80,6 +85,8 @@ export function useCamera(enabled: boolean) {
     videoRef,
     state,
     facingMode,
+    /** Only phones (and the odd laptop) have a second camera to switch to. */
+    canFlip: cameraCount > 1,
     flip: () => setFacingMode((mode) => (mode === "user" ? "environment" : "user")),
     retry: () => setAttempt((count) => count + 1),
   };

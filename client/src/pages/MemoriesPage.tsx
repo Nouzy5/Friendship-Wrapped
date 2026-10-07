@@ -13,6 +13,7 @@ import { GroupSwitcher } from "../features/memories/components/GroupSwitcher";
 import { OnThisDay } from "../features/memories/components/OnThisDay";
 import { Timeline } from "../features/memories/components/Timeline";
 import { formatMonthParam, parseMonthParam, type Month } from "../features/memories/months";
+import { usePageTitle } from "../lib/usePageTitle";
 
 type Tab = "timeline" | "albums" | "favorites";
 
@@ -30,6 +31,7 @@ const parseTab = (value: string | null): Tab => tabs.find((tab) => tab.value ===
  * back from a photo lands in the same place.
  */
 export function MemoriesPage() {
+  usePageTitle("Memories");
   const groups = useMyGroups();
   const [params, setParams] = useSearchParams();
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -59,7 +61,7 @@ export function MemoriesPage() {
         <Spinner />
       </div>
     );
-  } else if (groups.isError) {
+  } else if (groups.isLoadingError) {
     content = (
       <Card>
         <StateMessage

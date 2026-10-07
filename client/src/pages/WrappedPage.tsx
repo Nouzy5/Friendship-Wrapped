@@ -7,6 +7,7 @@ import { WrappedStory } from "../features/wrapped/components/WrappedStory";
 import { useWrapped, useWrappedList } from "../features/wrapped/hooks";
 import { cameFromList, wrappedPath } from "../features/wrapped/links";
 import { ApiError } from "../lib/api-client";
+import { usePageTitle } from "../lib/usePageTitle";
 
 function FullScreen({ children }: { children: ReactNode }) {
   return <main className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-ink-950 p-4">{children}</main>;
@@ -56,13 +57,14 @@ function FirstGroupOfYear({ year }: { year: number }) {
       </FullScreen>
     );
   }
-  if (list.isError) return <LoadFailed onRetry={() => void list.refetch()} />;
+  if (list.isLoadingError) return <LoadFailed onRetry={() => void list.refetch()} />;
   const first = list.data.find((wrapped) => wrapped.year === year);
   return first ? <Navigate replace to={wrappedPath(year, first.group.id)} /> : <NoWrapped year={year} />;
 }
 
 function Story({ groupId, year, onClose }: { groupId: string; year: number; onClose: () => void }) {
   const wrapped = useWrapped(groupId, year);
+  usePageTitle(wrapped.data ? `${wrapped.data.group.name} · ${year} Wrapped` : `${year} Wrapped`);
   if (wrapped.isPending) {
     return (
       <FullScreen>
@@ -70,7 +72,7 @@ function Story({ groupId, year, onClose }: { groupId: string; year: number; onCl
       </FullScreen>
     );
   }
-  if (wrapped.isError) {
+  if (wrapped.isLoadingError) {
     const missing = wrapped.error instanceof ApiError && [400, 404].includes(wrapped.error.status);
     return missing ? <NoWrapped year={year} /> : <LoadFailed onRetry={() => void wrapped.refetch()} />;
   }

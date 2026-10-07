@@ -10,6 +10,8 @@ import { useLeaveGroup, useUpdateGroup } from "../features/groups/hooks";
 import type { Group } from "../features/groups/types";
 import { useResetInvites } from "../features/invites/hooks";
 import { getFormError } from "../lib/form-errors";
+import { toast } from "../lib/toast";
+import { usePageTitle } from "../lib/usePageTitle";
 
 function leaveConsequence(group: Group): string {
   if (group.memberCount === 1) return "You're the only member, so leaving will permanently delete this group.";
@@ -85,7 +87,7 @@ function LeaveGroupCard({ group }: { group: Group }) {
     <Card>
       <h2 className={sectionHeadingClasses}>Leave group</h2>
       <p className="mt-2 text-sm text-ink-200">{leaveConsequence(group)}</p>
-      <Button variant="danger" className="mt-4 w-full" onClick={() => setConfirming(true)}>
+      <Button variant="danger" className="mt-4 w-full wrap-anywhere" onClick={() => setConfirming(true)}>
         Leave {group.name}
       </Button>
 
@@ -99,7 +101,14 @@ function LeaveGroupCard({ group }: { group: Group }) {
         isPending={leaveGroup.isPending}
         error={getFormError(leaveGroup.error)}
         onClose={() => setConfirming(false)}
-        onConfirm={() => leaveGroup.mutate(undefined, { onSuccess: () => navigate("/home", { replace: true }) })}
+        onConfirm={() =>
+          leaveGroup.mutate(undefined, {
+            onSuccess: () => {
+              toast(group.memberCount === 1 ? `${group.name} was deleted` : `You left ${group.name}`);
+              void navigate("/home", { replace: true });
+            },
+          })
+        }
       />
     </Card>
   );
@@ -107,6 +116,7 @@ function LeaveGroupCard({ group }: { group: Group }) {
 
 export function GroupSettingsPage() {
   const group = useGroupContext();
+  usePageTitle(`Settings · ${group.name}`);
   const isOwner = group.myRole === "OWNER";
 
   return (

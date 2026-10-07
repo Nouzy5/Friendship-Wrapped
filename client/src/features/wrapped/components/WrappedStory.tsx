@@ -17,6 +17,9 @@ const SLIDE_MS: Record<WrappedSlideType, number> = {
   outro: 6000,
 };
 
+/** The outgoing slide stays this long, fading out under the incoming one (the `exit` animation). */
+const CROSSFADE_MS = 450;
+
 type ProgressProps = { count: number; index: number; visit: number; durationMs: number; paused: boolean; onDone: () => void };
 
 /** One bar per slide: the ones seen are full, the current one fills while it plays. */
@@ -42,11 +45,16 @@ function StoryProgress({ count, index, visit, durationMs, paused, onDone }: Prog
 }
 
 const roundButton =
-  "pointer-events-auto grid size-10 place-items-center rounded-full text-ink-50 transition hover:bg-white/15";
+  "pointer-events-auto grid size-11 place-items-center rounded-full text-ink-50 transition hover:bg-white/15";
 const sideButton =
   "hidden size-12 shrink-0 place-items-center rounded-full bg-ink-800 text-ink-50 transition hover:bg-ink-700 disabled:invisible sm:grid";
+/** On phones, previous/next are taps and swipes; these buttons are for screen readers (and show when focused). */
+const hiddenStepButton =
+  "sr-only rounded-full bg-ink-950/80 px-4 py-2 text-sm font-semibold text-ink-50 focus:not-sr-only focus:absolute focus:bottom-4 focus:z-10 sm:hidden";
 
 type WrappedStoryProps = { wrapped: Wrapped; onClose: () => void };
+
+type Layer = { index: number; visit: number };
 
 /**
  * The Wrapped as a full-screen story. Slides play on their own; tap the right of the
@@ -57,6 +65,7 @@ type WrappedStoryProps = { wrapped: Wrapped; onClose: () => void };
 export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
   const { slides } = wrapped;
   const [position, setPosition] = useState({ index: 0, forward: true, visit: 0 });
+  const [leaving, setLeaving] = useState<Layer | null>(null);
   const [userPaused, setUserPaused] = useState(false);
   const [holding, setHolding] = useState(false);
   const hidden = usePageHidden();
@@ -69,8 +78,9 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
   const paused = userPaused || holding || hidden;
 
   function goTo(target: number) {
-    if (target < 0 || target >= slides.length) return;
-    setPosition((current) => ({ index: target, forward: target >= current.index, visit: current.visit + 1 }));
+    if (target < 0 || target >= slides.length || target === index) return;
+    setLeaving({ index, visit: position.visit });
+    setPosition({ index: target, forward: target > index, visit: position.visit + 1 });
   }
   const next = () => goTo(index + 1);
   const previous = () => goTo(index - 1);
@@ -78,6 +88,12 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
     setUserPaused(false);
     goTo(0);
   };
+
+  useEffect(() => {
+    if (!leaving) return;
+    const timer = window.setTimeout(() => setLeaving(null), CROSSFADE_MS);
+    return () => clearTimeout(timer);
+  }, [leaving]);
 
   const gestures = useStoryGestures({
     onTap: (side) => (side === "previous" ? previous() : next()),
@@ -111,6 +127,11 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
     for (const url of slides.flatMap(slideImageUrls)) new Image().src = url;
   }, [slides]);
 
+  // The outgoing slide (if any) underneath, then the current one. Keys are visits, so a
+  // slide that starts leaving stays mounted as it was and only its animation changes.
+  const layers: Layer[] = [...(leaving ? [leaving] : []), { index, visit: position.visit }];
+  const label = `${wrapped.group.name}: ${wrapped.year} Wrapped`;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center gap-6 bg-black sm:bg-ink-950 sm:p-4">
       <button type="button" onClick={previous} disabled={isFirst} aria-label="Previous slide" className={sideButton}>
@@ -121,24 +142,40 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
         ref={rootRef}
         tabIndex={-1}
         aria-roledescription="story"
-        aria-label={`${wrapped.group.name}: ${wrapped.year} Wrapped`}
-        className="relative size-full touch-none overflow-hidden outline-none select-none [-webkit-touch-callout:none] sm:aspect-9/16 sm:h-[min(100%,52rem)] sm:w-auto sm:rounded-3xl sm:shadow-2xl sm:shadow-black/60"
+        aria-label={label}
+        className={`@container relative size-full touch-none overflow-hidden outline-none select-none [-webkit-touch-callout:none] sm:aspect-9/16 sm:h-[min(100%,52rem)] sm:w-auto sm:rounded-3xl sm:shadow-2xl sm:shadow-black/60 ${
+          // Pausing also freezes the looping decorations (entrances still play, or a slide
+          // you step to while paused would stay invisible).
+          paused ? "[&_.animate-float-up]:[animation-play-state:paused] [&_.animate-pan]:[animation-play-state:paused]" : ""
+        }`}
         onContextMenu={(event) => event.preventDefault()}
         {...gestures}
       >
+        <h1 className="sr-only">{label}</h1>
+
         {/* Announced as it changes only while paused: a playing story would talk over itself. */}
         <div aria-live={userPaused ? "polite" : "off"} className="absolute inset-0">
-          <div
-            key={position.visit}
-            role="group"
-            aria-roledescription="slide"
-            aria-label={`${index + 1} of ${slides.length}`}
-            className={`absolute inset-0 motion-reduce:animate-none ${
-              position.forward ? "animate-enter-forward" : "animate-enter-back"
-            }`}
-          >
-            <StorySlide slide={slide} wrapped={wrapped} onRestart={restart} onClose={onClose} />
-          </div>
+          {layers.map((layer) => {
+            const current = layer.visit === position.visit;
+            return (
+              <div
+                key={layer.visit}
+                role={current ? "group" : undefined}
+                aria-roledescription={current ? "slide" : undefined}
+                aria-label={current ? `${index + 1} of ${slides.length}` : undefined}
+                aria-hidden={current ? undefined : true}
+                className={`absolute inset-0 motion-reduce:animate-none ${
+                  current
+                    ? position.forward
+                      ? "animate-enter-forward"
+                      : "animate-enter-back"
+                    : "pointer-events-none animate-exit motion-reduce:hidden"
+                }`}
+              >
+                <StorySlide slide={slides[layer.index]!} wrapped={wrapped} onRestart={restart} onClose={onClose} />
+              </div>
+            );
+          })}
         </div>
 
         <div className="pointer-events-none absolute inset-x-0 top-0 bg-linear-to-b from-black/40 to-transparent px-3 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-8">
@@ -152,11 +189,11 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
               if (!isLast) next();
             }}
           />
-          <div className="mt-2 flex items-center gap-2 text-ink-50 [text-shadow:0_1px_4px_rgb(0_0_0/0.4)]">
+          <div className="mt-2 flex items-center gap-1 text-ink-50 [text-shadow:0_1px_4px_rgb(0_0_0/0.4)]">
             <span aria-hidden className="text-lg">
               {wrapped.group.emoji}
             </span>
-            <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+            <span className="ml-1 min-w-0 flex-1 truncate text-sm font-semibold">
               {wrapped.group.name} · {wrapped.year}
             </span>
             <button
@@ -167,10 +204,19 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
             >
               {userPaused ? <PlayIcon className="size-5" /> : <PauseIcon className="size-5" />}
             </button>
-            <button type="button" onClick={onClose} aria-label="Close" className={`-mr-1 ${roundButton}`}>
+            <button type="button" onClick={onClose} aria-label="Close" className={`-mr-1.5 ${roundButton}`}>
               <CloseIcon className="size-6" />
             </button>
           </div>
+        </div>
+
+        <div className="absolute inset-x-0 bottom-0 flex justify-between px-4">
+          <button type="button" onClick={previous} disabled={isFirst} className={`${hiddenStepButton} focus:left-4`}>
+            Previous slide
+          </button>
+          <button type="button" onClick={next} disabled={isLast} className={`${hiddenStepButton} focus:right-4`}>
+            Next slide
+          </button>
         </div>
       </section>
 

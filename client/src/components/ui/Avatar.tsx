@@ -52,7 +52,7 @@ export function Avatar({ name, seed, src, size = "md" }: AvatarProps) {
       className={`inline-grid shrink-0 place-items-center overflow-hidden rounded-full bg-linear-to-br font-bold text-ink-950 select-none ${sizeClasses[size]} ${gradientFor(seed)}`}
     >
       {showImage ? (
-        <img src={src} alt="" decoding="async" className="size-full object-cover" onError={() => setFailedSrc(src)} />
+        <img src={src} alt="" loading="lazy" decoding="async" className="size-full object-cover" onError={() => setFailedSrc(src)} />
       ) : (
         initialsOf(name)
       )}

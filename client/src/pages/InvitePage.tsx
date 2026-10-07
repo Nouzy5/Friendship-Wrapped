@@ -9,6 +9,7 @@ import { useAcceptInvite, useInvitePreview } from "../features/invites/hooks";
 import { ApiError } from "../lib/api-client";
 import { getFormError } from "../lib/form-errors";
 import { formatMemberCount } from "../lib/format";
+import { usePageTitle } from "../lib/usePageTitle";
 
 /** Public landing page for an invite link: preview the group, then sign up / log in / join. */
 export function InvitePage() {
@@ -19,6 +20,7 @@ export function InvitePage() {
   const user = session.data ?? null;
   const preview = useInvitePreview(token, user?.id ?? null);
   const accept = useAcceptInvite();
+  usePageTitle(preview.data ? `Join ${preview.data.group.name}` : "Invite");
 
   if (session.isPending || preview.isPending) {
     return (
@@ -28,7 +30,7 @@ export function InvitePage() {
     );
   }
 
-  if (preview.isError) {
+  if (preview.isLoadingError) {
     const invalid = preview.error instanceof ApiError && preview.error.status === 404;
     return invalid ? (
       <StateMessage
@@ -63,7 +65,7 @@ export function InvitePage() {
       <div className="my-3">
         <GroupEmoji emoji={group.emoji} size="lg" />
       </div>
-      <h1 className="text-2xl font-black tracking-tight">{group.name}</h1>
+      <h1 className="text-2xl font-black tracking-tight wrap-anywhere">{group.name}</h1>
       <p className="text-sm text-ink-400">{formatMemberCount(group.memberCount)}</p>
 
       <div className="mt-6 flex w-full flex-col gap-3">

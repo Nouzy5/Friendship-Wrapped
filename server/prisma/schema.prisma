@@ -116,7 +116,7 @@ model Photo {
   /// Upload time.
   createdAt    DateTime @default(now()) @map("created_at")
   group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  /// Restrict: what happens to someone's photos when they delete their account is decided with that feature.
+  /// Restrict: deleting an account deletes the person's photos first (users.service deleteAccount), so none is left orphaned.
   uploader     User     @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
   reactions    Reaction[]
   comments     Comment[]
@@ -162,7 +162,7 @@ model Comment {
   body      String   @db.VarChar(500)
   createdAt DateTime @default(now()) @map("created_at")
   photo     Photo    @relation(fields: [photoId], references: [id], onDelete: Cascade)
-  /// Restrict, like photos: the account-deletion policy will decide what happens to comments.
+  /// Restrict, like photos: deleting an account deletes the person's comments first.
   author    User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
 
   /// Oldest-first listing per photo with a (createdAt, id) keyset cursor.

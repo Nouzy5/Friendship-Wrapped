@@ -24,4 +24,8 @@ export const updateProfileSchema = z.object({
 
 export const userParamsSchema = z.object({ userId: z.uuid() });
 
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1, "Enter your password to confirm"),
+});
+
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

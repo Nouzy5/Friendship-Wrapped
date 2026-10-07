@@ -59,24 +59,53 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     });
   } catch (cause) {
     if (signal?.aborted) throw cause;
-    throw new ApiError(0, "NETWORK_ERROR", "Can't reach the server. Check your connection and try again.");
+    throw networkError();
   }
 
   const data = await readJson(res);
-
-  if (!res.ok) {
-    const envelope = (data ?? {}) as ErrorEnvelope;
-    // A non-JSON 5xx usually means the dev proxy couldn't reach the API.
-    if (!envelope.error && res.status >= 500) {
-      throw new ApiError(0, "NETWORK_ERROR", "Can't reach the server. Check your connection and try again.");
-    }
-    throw new ApiError(
-      res.status,
-      envelope.error?.code ?? "HTTP_ERROR",
-      envelope.error?.message ?? `Request failed with status ${res.status}`,
-      envelope.error?.details,
-    );
-  }
-
+  if (!res.ok) throw toApiError(res.status, data);
   return data as T;
+}
+
+const networkError = () =>
+  new ApiError(0, "NETWORK_ERROR", "Can't reach the server. Check your connection and try again.");
+
+function toApiError(status: number, data: unknown): ApiError {
+  const envelope = (data ?? {}) as ErrorEnvelope;
+  // A non-JSON 5xx usually means the dev proxy couldn't reach the API.
+  if (!envelope.error && status >= 500) return networkError();
+  return new ApiError(
+    status,
+    envelope.error?.code ?? "HTTP_ERROR",
+    envelope.error?.message ?? `Request failed with status ${status}`,
+    envelope.error?.details,
+  );
+}
+
+/**
+ * POSTs a multipart form like apiRequest, reporting upload progress (0–1) as it goes.
+ * fetch() can't report upload progress, so this one uses XMLHttpRequest.
+ */
+export function apiUpload<T>(path: string, form: FormData, onProgress?: (fraction: number) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", `/api${path}`);
+    request.setRequestHeader("Accept", "application/json");
+    request.withCredentials = true;
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress?.(event.loaded / event.total);
+    };
+    request.onerror = () => reject(networkError());
+    request.onload = () => {
+      let data: unknown = null;
+      try {
+        data = request.responseText ? JSON.parse(request.responseText) : null;
+      } catch {
+        // Not JSON: handled as an error below.
+      }
+      if (request.status >= 200 && request.status < 300) resolve(data as T);
+      else reject(toApiError(request.status, data));
+    };
+    request.send(form);
+  });
 }

@@ -40,3 +40,8 @@ export function findComment(commentId: string, db: DbClient = prisma) {
 export function deleteComment(commentId: string, db: DbClient = prisma) {
   return db.comment.deleteMany({ where: { id: commentId } });
 }
+
+/** Everything someone wrote, on any photo (for deleting their account). */
+export function deleteCommentsByAuthor(authorId: string, db: DbClient = prisma) {
+  return db.comment.deleteMany({ where: { authorId } });
+}

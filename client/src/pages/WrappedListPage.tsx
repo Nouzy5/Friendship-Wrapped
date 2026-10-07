@@ -8,6 +8,7 @@ import { StateMessage } from "../components/ui/StateMessage";
 import { WrappedCard } from "../features/wrapped/components/WrappedCard";
 import { useWrappedList } from "../features/wrapped/hooks";
 import type { WrappedSummary } from "../features/wrapped/types";
+import { usePageTitle } from "../lib/usePageTitle";
 
 /** The list is newest year first, so consecutive runs are the years. */
 function byYear(list: WrappedSummary[]): { year: number; final: boolean; items: WrappedSummary[] }[] {
@@ -22,6 +23,7 @@ function byYear(list: WrappedSummary[]): { year: number; final: boolean; items: 
 
 /** Every Wrapped you can play: one per group and year with photos. */
 export function WrappedListPage() {
+  usePageTitle("Wrapped");
   const list = useWrappedList();
 
   let content;
@@ -31,7 +33,7 @@ export function WrappedListPage() {
         <Spinner />
       </div>
     );
-  } else if (list.isError) {
+  } else if (list.isLoadingError) {
     content = (
       <Card>
         <StateMessage

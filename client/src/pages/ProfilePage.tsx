@@ -6,8 +6,10 @@ import { useCurrentUser } from "../features/auth/hooks";
 import { AvatarEditor } from "../features/profile/components/AvatarEditor";
 import { EditProfileForm } from "../features/profile/components/EditProfileForm";
 import { formatMonthYear } from "../lib/format";
+import { usePageTitle } from "../lib/usePageTitle";
 
 export function ProfilePage() {
+  usePageTitle("Profile");
   const user = useCurrentUser();
 
   return (
@@ -23,7 +25,7 @@ export function ProfilePage() {
 
       <section className="flex flex-col items-center text-center" aria-label="Your profile">
         <AvatarEditor user={user} />
-        <p className="mt-4 text-2xl font-bold">{user.displayName}</p>
+        <p className="mt-4 text-2xl font-bold wrap-anywhere">{user.displayName}</p>
         <p className="text-ink-400">@{user.username}</p>
         <p className="mt-1 text-xs text-ink-400">Joined {formatMonthYear(user.createdAt)}</p>
       </section>

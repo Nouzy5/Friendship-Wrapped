@@ -31,6 +31,7 @@ export function useReact(photo: Pick<Photo, "id" | "groupId">) {
   return useMutation({
     mutationKey,
     scope: { id: `react:${photo.id}` },
+    meta: { errorToast: "Couldn't save your reaction." },
     mutationFn: (type: ReactionType | null) => (type ? setReaction(photo.id, type) : removeReaction(photo.id)),
     onMutate: (type) => {
       patchCachedPhoto(queryClient, photo, (current) => ({ reactions: withReaction(current.reactions, type) }));

@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { sessionQueryKey } from "../../lib/query-client";
 import { fetchSessionUser, login, logout, register } from "./api";
+import { markSignedOut } from "./sign-out";
 import type { User } from "./types";
 
 /** The signed-in user, `null` when signed out. */
@@ -35,14 +36,20 @@ export function useRegister() {
   });
 }
 
+/** Signs out locally: no session, and nothing cached from this account for the next one to see. */
+export function forgetSignedInUser(queryClient: QueryClient): void {
+  queryClient.setQueryData(sessionQueryKey, null);
+  queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== sessionQueryKey[0] });
+}
+
+/** The auth guard then shows the login page. */
 export function useLogout() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: logout,
     onSuccess: () => {
-      queryClient.setQueryData(sessionQueryKey, null);
-      // Drop every other cached response so the next account sees nothing of this one's data.
-      queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== sessionQueryKey[0] });
+      markSignedOut("logout");
+      forgetSignedInUser(queryClient);
     },
   });
 }

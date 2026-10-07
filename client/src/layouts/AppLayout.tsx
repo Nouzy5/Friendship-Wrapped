@@ -11,7 +11,7 @@ function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: C
     <NavLink
       to={to}
       className={({ isActive }) =>
-        `flex w-20 flex-col items-center gap-0.5 rounded-xl px-3 py-1 text-xs font-medium transition ${
+        `flex flex-col items-center gap-0.5 rounded-xl px-1 py-1 text-xs font-medium transition ${
           isActive ? "text-ink-50" : "text-ink-400 hover:text-ink-200"
         }`
       }
@@ -31,7 +31,7 @@ function BottomNav() {
       aria-label="Main"
       className="fixed inset-x-0 bottom-0 z-10 border-t border-ink-800/80 bg-ink-950/90 pb-[env(safe-area-inset-bottom)] backdrop-blur"
     >
-      <ul className="mx-auto flex h-16 w-full max-w-md items-center justify-around px-6">
+      <ul className="mx-auto grid h-16 w-full max-w-md auto-cols-fr grid-flow-col items-center px-2">
         <li>
           <NavItem to="/home" label="Home" icon={HomeIcon} />
         </li>
@@ -41,7 +41,7 @@ function BottomNav() {
             to="/camera"
             aria-label="Camera"
             className={({ isActive }) =>
-              `-mt-6 grid size-16 place-items-center rounded-full bg-linear-to-br from-brand-rose via-brand-orange to-brand-gold text-ink-950 shadow-lg shadow-brand-rose/30 ring-4 ring-ink-950 transition active:scale-95 ${
+              `mx-auto -mt-6 grid size-16 place-items-center rounded-full bg-linear-to-br from-brand-rose via-brand-orange to-brand-gold text-ink-950 shadow-lg shadow-brand-rose/30 ring-4 ring-ink-950 transition active:scale-95 ${
                 isActive ? "brightness-110" : "hover:brightness-110"
               }`
             }
@@ -74,7 +74,7 @@ export function AppLayout() {
             <img src="/favicon.svg" alt="" className="size-7 rounded-lg" />
             <Wordmark className="text-lg" />
           </Link>
-          <Link to="/profile" aria-label="Your profile" className="rounded-full">
+          <Link to="/profile" aria-label="Your profile" className="-m-1.5 rounded-full p-1.5">
             <Avatar name={user.displayName} seed={user.id} src={user.avatarUrl} size="sm" />
           </Link>
         </div>

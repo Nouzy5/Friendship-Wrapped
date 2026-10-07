@@ -26,7 +26,13 @@ export function FullscreenPhoto({ photo, open, onClose }: FullscreenPhotoProps) 
     >
       {open && (
         <>
-          <div className="relative size-full" onClick={onClose}>
+          <div
+            className="relative size-full"
+            // Tapping closes it, but not while pinch-zoomed in (that tap is for looking around).
+            onClick={() => {
+              if ((window.visualViewport?.scale ?? 1) <= 1.01) onClose();
+            }}
+          >
             <img src={photo.imageUrls.medium} alt="" className="absolute inset-0 size-full object-contain" />
             <img
               src={photo.imageUrls.full}

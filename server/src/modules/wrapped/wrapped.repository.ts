@@ -20,6 +20,15 @@ export function saveWrapped(key: WrappedKey, stats: Prisma.InputJsonValue, gener
 }
 
 /**
+ * Drops every saved Wrapped whose numbers include the user (as a photographer, reactor or
+ * commenter), so those years are counted again without them. The table holds one row per
+ * group, year and zone, so scanning it is cheap.
+ */
+export function deleteWrappedMentioning(userId: string, db: DbClient = prisma) {
+  return db.$executeRaw`DELETE FROM wrapped WHERE JSON_SEARCH(stats, 'one', ${userId}) IS NOT NULL`;
+}
+
+/**
  * When each group's first and last photos were posted (groups without photos are absent).
  * MIN and MAX per group come straight off the (group_id, created_at, id) index.
  */

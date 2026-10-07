@@ -29,7 +29,7 @@ export function MemberList({ members, currentUserId, onRemove }: MemberListProps
             {onRemove && !isYou && (
               <Button
                 variant="ghost"
-                className="min-h-9 px-3 text-xs"
+                className="min-h-10 px-3 text-xs"
                 onClick={() => onRemove(member)}
                 aria-label={`Remove ${member.user.displayName}`}
               >

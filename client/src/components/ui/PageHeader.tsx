@@ -14,7 +14,7 @@ type PageHeaderProps = {
 };
 
 const backClasses =
-  "-ml-2 grid size-10 place-items-center rounded-full text-ink-200 transition hover:bg-ink-800 hover:text-ink-50";
+  "-ml-2.5 grid size-11 place-items-center rounded-full text-ink-200 transition hover:bg-ink-800 hover:text-ink-50";
 
 export function PageHeader({ title, backTo, onBack, backLabel = "Back", action }: PageHeaderProps) {
   return (
@@ -36,7 +36,7 @@ export function PageHeader({ title, backTo, onBack, backLabel = "Back", action }
   );
 }
 
-const headerIconShape = "grid size-10 place-items-center rounded-full transition hover:bg-ink-800";
+const headerIconShape = "grid size-11 place-items-center rounded-full transition hover:bg-ink-800";
 
 /** Round icon button or link for page headers. */
 export const headerIconClasses = `${headerIconShape} text-ink-200 hover:text-ink-50`;
@@ -45,4 +45,4 @@ export const headerIconClasses = `${headerIconShape} text-ink-200 hover:text-ink
 export const headerIconActiveClasses = `${headerIconShape} text-brand-gold`;
 
 /** A single header icon, pulled to the edge so its glyph lines up with the content (settings, etc.). */
-export const headerIconLinkClasses = `-mr-2 ${headerIconClasses}`;
+export const headerIconLinkClasses = `-mr-2.5 ${headerIconClasses}`;

@@ -1,7 +1,9 @@
 import { Link, useLocation } from "react-router";
 import { RegisterForm } from "../features/auth/components/RegisterForm";
+import { usePageTitle } from "../lib/usePageTitle";
 
 export function RegisterPage() {
+  usePageTitle("Create account");
   const location = useLocation();
 
   return (

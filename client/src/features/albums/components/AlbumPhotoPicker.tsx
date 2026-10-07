@@ -44,7 +44,7 @@ function Picker({ album, onClose }: { album: Album; onClose: () => void }) {
         <Spinner />
       </div>
     );
-  } else if (photos.isError) {
+  } else if (photos.isLoadingError) {
     content = <p className="py-6 text-sm text-ink-400">Couldn't load the group's photos.</p>;
   } else if (photos.data.length === 0) {
     content = <p className="py-6 text-sm text-ink-400">This group has no photos yet.</p>;

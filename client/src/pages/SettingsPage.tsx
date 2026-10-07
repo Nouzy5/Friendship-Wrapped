@@ -1,19 +1,22 @@
-import { useNavigate } from "react-router";
+import { useState } from "react";
 import { Alert } from "../components/ui/Alert";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { PageHeader } from "../components/ui/PageHeader";
 import { useCurrentUser, useLogout } from "../features/auth/hooks";
+import { DeleteAccountDialog } from "../features/profile/components/DeleteAccountDialog";
 import { SystemStatusCard } from "../features/system/SystemStatusCard";
 import { getFormError } from "../lib/form-errors";
+import { usePageTitle } from "../lib/usePageTitle";
 
 export function SettingsPage() {
+  usePageTitle("Settings");
   const user = useCurrentUser();
   const logout = useLogout();
-  const navigate = useNavigate();
+  const [deleting, setDeleting] = useState(false);
 
   function handleLogout() {
-    logout.mutate(undefined, { onSuccess: () => navigate("/auth/login", { replace: true }) });
+    logout.mutate();
   }
 
   return (
@@ -34,9 +37,22 @@ export function SettingsPage() {
           </div>
         )}
 
-        <Button variant="danger" className="mt-4 w-full" onClick={handleLogout} disabled={logout.isPending}>
+        <Button variant="secondary" className="mt-4 w-full" onClick={handleLogout} disabled={logout.isPending}>
           {logout.isPending ? "Logging out…" : "Log out"}
         </Button>
+      </Card>
+
+      <Card aria-labelledby="delete-heading">
+        <h2 id="delete-heading" className="text-sm font-semibold tracking-wide text-ink-200 uppercase">
+          Delete account
+        </h2>
+        <p className="mt-2 text-sm text-ink-400">
+          Permanently deletes your account, your photos and everything else you've posted.
+        </p>
+        <Button variant="danger" className="mt-4 w-full" onClick={() => setDeleting(true)}>
+          Delete account…
+        </Button>
+        <DeleteAccountDialog open={deleting} onClose={() => setDeleting(false)} />
       </Card>
 
       <SystemStatusCard />

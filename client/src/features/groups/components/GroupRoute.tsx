@@ -22,7 +22,7 @@ export function GroupRoute() {
     );
   }
 
-  if (group.isError) {
+  if (group.isLoadingError) {
     const notFound = group.error instanceof ApiError && [400, 404].includes(group.error.status);
     return notFound ? (
       <StateMessage
