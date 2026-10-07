@@ -64,6 +64,7 @@ model Group {
   invites   InviteToken[]
   photos    Photo[]
   albums    Album[]
+  wrapped   Wrapped[]
 
   @@map("groups")
 }
@@ -214,4 +215,20 @@ model PhotoAlbum {
   @@index([albumId, addedAt])
   @@index([photoId])
   @@map("photo_albums")
+}
+
+/// A finished year's Wrapped, saved the first time it's opened after the year ends, so it
+/// always tells the same story. A year still in progress is counted live and not saved.
+model Wrapped {
+  groupId     String   @map("group_id") @db.Char(36)
+  year        Int      @db.SmallInt
+  /// The IANA zone the year was counted in (canonical name). Friends elsewhere get their own.
+  timeZone    String   @map("time_zone") @db.VarChar(64)
+  /// The numbers, with people and photos as ids (analytics YearNumbers plus a format version).
+  stats       Json
+  generatedAt DateTime @default(now()) @map("generated_at")
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, year, timeZone])
+  @@map("wrapped")
 }

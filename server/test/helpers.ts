@@ -7,6 +7,7 @@ import { deletePrefix } from "../src/lib/storage.js";
 
 /** Deletes all rows, children before parents. */
 export async function resetDatabase(): Promise<void> {
+  await prisma.wrapped.deleteMany();
   await prisma.comment.deleteMany();
   await prisma.reaction.deleteMany();
   await prisma.favorite.deleteMany();
@@ -121,6 +122,29 @@ export async function uploadPhoto(agent: Agent, groupId: string, image?: Buffer,
   const res = await postPhoto(agent, groupId, image ?? (await makeImage()), caption ? { caption } : {});
   expect(res.status).toBe(201);
   return res.body.photo as PhotoBody;
+}
+
+/** Posts a photo, then backdates it (uploads are always "now"). */
+export async function photoAt(agent: Agent, groupId: string, at: string) {
+  const photo = await uploadPhoto(agent, groupId);
+  await prisma.photo.update({ where: { id: photo.id }, data: { createdAt: new Date(at) } });
+  return photo;
+}
+
+/** Reacts through the API, then backdates the reaction. */
+export async function reactAt(agent: Agent, userId: string, photoId: string, type: string, at: string) {
+  expect((await agent.put(`/api/photos/${photoId}/reaction`).send({ type })).status).toBe(200);
+  await prisma.reaction.update({
+    where: { photoId_userId: { photoId, userId } },
+    data: { createdAt: new Date(at) },
+  });
+}
+
+/** Comments through the API, then backdates the comment. */
+export async function commentAt(agent: Agent, photoId: string, at: string) {
+  const res = await agent.post(`/api/photos/${photoId}/comments`).send({ body: "🔥" });
+  expect(res.status).toBe(201);
+  await prisma.comment.update({ where: { id: res.body.comment.id }, data: { createdAt: new Date(at) } });
 }
 
 /** Decodes an image response, for asserting on what the server actually stored. */

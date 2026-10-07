@@ -21,6 +21,8 @@ import { ProfilePage } from "./pages/ProfilePage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { RouteErrorPage } from "./pages/RouteErrorPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { WrappedListPage } from "./pages/WrappedListPage";
+import { WrappedPage } from "./pages/WrappedPage";
 
 export const router = createBrowserRouter([
   {
@@ -62,6 +64,7 @@ export const router = createBrowserRouter([
               { path: "photos/:photoId", element: <PhotoPage /> },
               { path: "memories", element: <MemoriesPage /> },
               { path: "memories/albums/:albumId", element: <AlbumPage /> },
+              { path: "wrapped", element: <WrappedListPage /> },
               { path: "groups/new", element: <NewGroupPage /> },
               {
                 path: "groups/:groupId",
@@ -74,6 +77,8 @@ export const router = createBrowserRouter([
               },
             ],
           },
+          // Full screen, without the app header and navigation.
+          { path: "wrapped/:year", element: <WrappedPage /> },
         ],
       },
       { path: "*", element: <NotFoundPage /> },

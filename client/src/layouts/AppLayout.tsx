@@ -2,8 +2,9 @@ import { Link, NavLink, Outlet } from "react-router";
 import { Wordmark } from "../components/Wordmark";
 import { Avatar } from "../components/ui/Avatar";
 import type { ComponentType, SVGProps } from "react";
-import { CameraIcon, HomeIcon, MemoriesIcon } from "../components/ui/icons";
+import { CameraIcon, HomeIcon, MemoriesIcon, WrappedIcon } from "../components/ui/icons";
 import { useCurrentUser } from "../features/auth/hooks";
+import { useWrappedList } from "../features/wrapped/hooks";
 
 function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: ComponentType<SVGProps<SVGSVGElement>> }) {
   return (
@@ -23,6 +24,8 @@ function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: C
 
 /** Bottom navigation. Wrapped joins it once there's a Wrapped to show. */
 function BottomNav() {
+  const wrapped = useWrappedList();
+
   return (
     <nav
       aria-label="Main"
@@ -49,6 +52,11 @@ function BottomNav() {
         <li>
           <NavItem to="/memories" label="Memories" icon={MemoriesIcon} />
         </li>
+        {wrapped.data && wrapped.data.length > 0 && (
+          <li>
+            <NavItem to="/wrapped" label="Wrapped" icon={WrappedIcon} />
+          </li>
+        )}
       </ul>
     </nav>
   );

@@ -4,6 +4,7 @@ const dayMonth = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "sh
 const dayMonthYear = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
 const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
 const plural = new Intl.PluralRules("en");
+const wholeNumber = new Intl.NumberFormat();
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -34,6 +35,16 @@ export function formatRelativeTime(isoDate: string, now = new Date()): string {
   if (elapsed < DAY) return relative.format(-Math.floor(elapsed / HOUR), "hour");
   if (elapsed < 7 * DAY) return relative.format(-Math.round(elapsed / DAY), "day");
   return (date.getFullYear() === now.getFullYear() ? dayMonth : dayMonthYear).format(date);
+}
+
+/** e.g. "8,421" in the viewer's locale. */
+export function formatNumber(count: number): string {
+  return wholeNumber.format(count);
+}
+
+/** The word to follow a count: nounFor(1, "photo") is "photo", nounFor(3, "photo") is "photos". */
+export function nounFor(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return plural.select(count) === "one" ? singular : pluralForm;
 }
 
 /** "1 member", "5 members". */

@@ -187,3 +187,30 @@ export function SettingsIcon(props: IconProps) {
     </Icon>
   );
 }
+
+/** A wrapped present: the Wrapped tab. */
+export function WrappedIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="8" width="18" height="4" rx="1" />
+      <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7M12 8v13" />
+      <path d="M12 8C10.5 4.5 7.5 3 6.5 4.5S8 8 12 8zM12 8c1.5-3.5 4.5-5 5.5-3.5S16 8 12 8z" />
+    </Icon>
+  );
+}
+
+export function PauseIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 5v14M16 5v14" strokeWidth={3} />
+    </Icon>
+  );
+}
+
+export function PlayIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7 4.5v15L19.5 12z" fill="currentColor" />
+    </Icon>
+  );
+}

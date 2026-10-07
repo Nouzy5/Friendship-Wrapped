@@ -22,6 +22,76 @@
   --color-success: #3ddc97;
   --color-danger: #ff5c6c;
   --color-warning: #ffc93d;
+
+  /* Wrapped story motion. Pair decorative ones with motion-reduce:animate-none. */
+  --animate-rise: rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pop: pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-enter-forward: enter-forward 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-enter-back: enter-back 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-grow-up: grow-up 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-float-up: float-up 4s ease-in infinite both;
+  --animate-pan: pan 6s ease-in-out infinite alternate;
+  /* The story's progress bar; its duration is set per slide. */
+  --animate-story-progress: story-progress linear forwards;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(1.25rem);
+    }
+  }
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+  }
+  @keyframes enter-forward {
+    from {
+      opacity: 0;
+      transform: translateX(2.5rem) scale(0.98);
+    }
+  }
+  @keyframes enter-back {
+    from {
+      opacity: 0;
+      transform: translateX(-2.5rem) scale(0.98);
+    }
+  }
+  @keyframes grow-up {
+    from {
+      transform: scaleY(0);
+    }
+  }
+  @keyframes float-up {
+    0% {
+      opacity: 0;
+      transform: translateY(0) scale(0.6);
+    }
+    15% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-70dvh) scale(1.15);
+    }
+  }
+  @keyframes pan {
+    from {
+      background-position: 0% 50%;
+    }
+    to {
+      background-position: 100% 50%;
+    }
+  }
+  @keyframes story-progress {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
 }
 
 @layer base {
