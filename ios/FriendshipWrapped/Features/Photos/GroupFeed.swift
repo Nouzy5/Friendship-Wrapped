@@ -6,10 +6,9 @@ enum FeedLayout: Hashable {
 }
 
 /// One post in the group feed: who shared it and when, the photo, reactions, comments and caption.
+/// Links push onto whichever navigation stack shows it.
 struct PhotoCard: View {
     let photo: Photo
-
-    @Environment(AppRouter.self) private var router
 
     /// Feed photos keep their shape within limits: very tall or very wide ones are cropped
     /// (the viewer shows them whole).
@@ -25,9 +24,7 @@ struct PhotoCard: View {
         VStack(alignment: .leading, spacing: 10) {
             PhotoAttribution(uploader: photo.uploader, date: photo.createdAt)
 
-            Button {
-                router.homePath.append(.photo(photo.id))
-            } label: {
+            NavigationLink(value: AppRoute.photo(photo.id)) {
                 Color(.tertiarySystemFill)
                     .aspectRatio(feedAspectRatio, contentMode: .fit)
                     .overlay {
@@ -44,9 +41,7 @@ struct PhotoCard: View {
             HStack(spacing: 8) {
                 ReactionBar(photo: photo)
                 Spacer(minLength: 0)
-                Button {
-                    router.homePath.append(.photoComments(photo.id))
-                } label: {
+                NavigationLink(value: AppRoute.photoComments(photo.id)) {
                     HStack(spacing: 4) {
                         Image(systemName: "bubble.right")
                         if photo.commentCount > 0 {
@@ -73,34 +68,39 @@ struct PhotoCard: View {
     }
 }
 
-/// Square thumbnails, three across, each opening the photo viewer.
+/// Square thumbnails, three across, each opening the photo viewer (on whichever stack shows it).
 struct PhotoGrid: View {
     let photos: [Photo]
-
-    @Environment(AppRouter.self) private var router
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 2), count: 3)
 
     var body: some View {
         LazyVGrid(columns: columns, spacing: 2) {
             ForEach(photos) { photo in
-                Button {
-                    router.homePath.append(.photo(photo.id))
-                } label: {
-                    Color(.tertiarySystemFill)
-                        .aspectRatio(1, contentMode: .fit)
-                        .overlay {
-                            AuthenticatedImage(path: photo.imageUrls.thumbnail) {
-                                Color.clear
-                            }
-                        }
-                        .clipped()
-                        .contentShape(Rectangle())
+                NavigationLink(value: AppRoute.photo(photo.id)) {
+                    PhotoThumbnail(photo: photo)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(photo.altText)
             }
         }
+    }
+}
+
+/// A square, centre-cropped thumbnail.
+struct PhotoThumbnail: View {
+    let photo: Photo
+
+    var body: some View {
+        Color(.tertiarySystemFill)
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                AuthenticatedImage(path: photo.imageUrls.thumbnail) {
+                    Color.clear
+                }
+            }
+            .clipped()
+            .contentShape(Rectangle())
     }
 }
 

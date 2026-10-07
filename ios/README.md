@@ -1,6 +1,6 @@
 # Friendship Wrapped for iOS
 
-A native SwiftUI app that does everything the web client does so far: phases 1–6. It talks to the **same Express API** as the web client. The server needed no changes.
+A native SwiftUI app that does everything the web client does so far: phases 1–7. It talks to the **same Express API** as the web client. The server needed no changes.
 
 | Web | iOS |
 | --- | --- |
@@ -15,6 +15,8 @@ A native SwiftUI app that does everything the web client does so far: phases 1�
 | `/groups/:id/settings` | Group settings: edit, reset invite links, leave |
 | `/invite/:token` | Invite sheet: preview → join, or sign up and come back |
 | `/profile`, `/settings` | **Profile** tab: profile picture (add/change/remove), display name; ⚙︎ → Settings (log out, system status incl. photo storage) |
+| `/memories` | **Memories** tab: group switcher, On This Day (same date in earlier years, in your time zone), then Timeline (by month, pinned month headers, "Jump to" a month), Albums and Favorites (only you see them) |
+| `/memories/albums/:id` | Album: photos oldest first, Add photos (multi-select picker), rename/delete for its creator or the group owner. In the photo viewer, the album button adds the photo to albums or starts a new one |
 
 ## Requirements
 

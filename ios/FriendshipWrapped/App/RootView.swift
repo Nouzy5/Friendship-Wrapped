@@ -5,6 +5,7 @@ struct RootView: View {
     @Environment(SessionStore.self) private var session
     @Environment(GroupsStore.self) private var groups
     @Environment(PhotosStore.self) private var photos
+    @Environment(AlbumsStore.self) private var albums
     @Environment(AppRouter.self) private var router
 
     var body: some View {
@@ -27,6 +28,7 @@ struct RootView: View {
                 // A different account (or none) must never see the previous one's cached data.
                 groups.reset()
                 photos.reset()
+                albums.reset()
                 ImageCache.shared.removeAll()
                 if newID == nil {
                     router.didSignOut()
@@ -64,8 +66,8 @@ private struct LaunchView: View {
     }
 }
 
-/// Signed-in shell: Home, Camera (the main action, opens over the current tab) and Profile.
-/// Memories and Wrapped join the tab bar when those features exist.
+/// Signed-in shell: Home, Camera (the main action, opens over the current tab), Memories and Profile.
+/// Wrapped joins the tab bar once there's a Wrapped to show.
 struct MainTabView: View {
     @Environment(AppRouter.self) private var router
 
@@ -77,18 +79,7 @@ struct MainTabView: View {
             NavigationStack(path: $router.homePath) {
                 HomeView()
                     .navigationDestination(for: AppRoute.self) { route in
-                        switch route {
-                        case .group(let groupID):
-                            GroupDetailView(groupID: groupID)
-                        case .members(let groupID):
-                            GroupMembersView(groupID: groupID)
-                        case .groupSettings(let groupID):
-                            GroupSettingsView(groupID: groupID)
-                        case .photo(let photoID):
-                            PhotoDetailView(photoID: photoID)
-                        case .photoComments(let photoID):
-                            PhotoDetailView(photoID: photoID, scrollToComments: true)
-                        }
+                        AppRouteDestination(route: route)
                     }
             }
             .tabItem { Label("Home", systemImage: "house") }
@@ -98,6 +89,15 @@ struct MainTabView: View {
                 .tabItem { Label("Camera", systemImage: "camera.fill") }
                 .tag(AppTab.camera)
 
+            NavigationStack(path: $router.memoriesPath) {
+                MemoriesView()
+                    .navigationDestination(for: AppRoute.self) { route in
+                        AppRouteDestination(route: route)
+                    }
+            }
+            .tabItem { Label("Memories", systemImage: "photo.stack") }
+            .tag(AppTab.memories)
+
             NavigationStack {
                 ProfileView()
             }
@@ -106,6 +106,28 @@ struct MainTabView: View {
         }
         .fullScreenCover(item: $router.cameraRequest) { request in
             CaptureFlowView(preferredGroupID: request.groupID)
+        }
+    }
+}
+
+/// The screen for a route, on whichever tab's stack it was pushed.
+struct AppRouteDestination: View {
+    let route: AppRoute
+
+    var body: some View {
+        switch route {
+        case .group(let groupID):
+            GroupDetailView(groupID: groupID)
+        case .members(let groupID):
+            GroupMembersView(groupID: groupID)
+        case .groupSettings(let groupID):
+            GroupSettingsView(groupID: groupID)
+        case .photo(let photoID):
+            PhotoDetailView(photoID: photoID)
+        case .photoComments(let photoID):
+            PhotoDetailView(photoID: photoID, scrollToComments: true)
+        case .album(let albumID):
+            AlbumDetailView(albumID: albumID)
         }
     }
 }
