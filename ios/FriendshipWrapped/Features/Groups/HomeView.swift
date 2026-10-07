@@ -10,6 +10,14 @@ struct HomeView: View {
         @Bindable var router = router
 
         List {
+            if store.groups.isEmpty, store.listState == .idle || store.listState == .loading {
+                Section {
+                    ForEach(0..<3, id: \.self) { _ in
+                        GroupRowSkeleton()
+                    }
+                }
+            }
+
             if !store.groups.isEmpty {
                 Section {
                     ForEach(store.groups) { group in
@@ -57,7 +65,8 @@ struct HomeView: View {
         if store.groups.isEmpty {
             switch store.listState {
             case .idle, .loading:
-                ProgressView()
+                // Skeleton rows show in the list meanwhile.
+                EmptyView()
             case .failed:
                 EmptyStateView(
                     emoji: "📡",

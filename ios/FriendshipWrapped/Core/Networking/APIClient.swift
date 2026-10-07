@@ -67,12 +67,17 @@ final class APIClient {
     }
 
     /// Uploads a multipart form (photos, profile pictures) and decodes the JSON response.
-    func upload<Response: Decodable>(_ method: HTTPMethod, _ path: String, form: MultipartForm) async throws -> Response {
+    /// `progress` gets the fraction sent so far (0–1), on a background queue.
+    func upload<Response: Decodable>(
+        _ method: HTTPMethod,
+        _ path: String,
+        form: MultipartForm,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> Response {
         var request = try makeRequest(method, url: apiURL(path))
         request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
-        request.httpBody = form.encoded()
         request.timeoutInterval = 120
-        let data = try await execute(request)
+        let data = try await execute(request, uploading: form.encoded(), progress: progress)
         return try decode(Response.self, from: data)
     }
 
@@ -115,10 +120,21 @@ final class APIClient {
         return request
     }
 
-    private func execute(_ request: URLRequest) async throws -> Data {
+    /// Sends the request (with `body` as an upload, if given) and returns the response body,
+    /// or throws the API's error.
+    private func execute(
+        _ request: URLRequest,
+        uploading body: Data? = nil,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> Data {
         let result: (Data, URLResponse)
         do {
-            result = try await session.data(for: request)
+            if let body {
+                let delegate = progress.map { UploadProgressDelegate(onProgress: $0) }
+                result = try await session.upload(for: request, from: body, delegate: delegate)
+            } else {
+                result = try await session.data(for: request)
+            }
         } catch {
             if Task.isCancelled || (error as? URLError)?.code == .cancelled { throw CancellationError() }
             throw APIError.network
@@ -177,6 +193,26 @@ final class APIClient {
             message: body.message ?? "Request failed with status \(status)",
             issues: body.details ?? []
         )
+    }
+}
+
+/// Reports how much of an upload has been sent.
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+    private let onProgress: @Sendable (Double) -> Void
+
+    init(onProgress: @escaping @Sendable (Double) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64,
+        totalBytesExpectedToSend: Int64
+    ) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        onProgress(min(1, Double(totalBytesSent) / Double(totalBytesExpectedToSend)))
     }
 }
 

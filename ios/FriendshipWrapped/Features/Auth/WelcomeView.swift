@@ -2,8 +2,20 @@ import SwiftUI
 
 /// Signed-out home: brand, tagline, and the way in.
 struct WelcomeView: View {
+    @Environment(SessionStore.self) private var session
+
     var body: some View {
         VStack(spacing: 0) {
+            if let notice = session.signOutNotice {
+                Label(notice, systemImage: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.green)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .padding(.top, 8)
+            }
+
             Spacer()
 
             VStack(spacing: 16) {
@@ -35,6 +47,8 @@ struct WelcomeView: View {
         .padding(.bottom, 16)
         .background { BrandGlow() }
         .toolbar(.hidden, for: .navigationBar)
+        // Said once: gone when you move on to log in or sign up.
+        .onDisappear { session.clearSignOutNotice() }
     }
 }
 
@@ -59,4 +73,5 @@ struct AuthFlowView: View {
 
 #Preview {
     NavigationStack { WelcomeView() }
+        .environment(SessionStore())
 }

@@ -115,11 +115,14 @@ extension WrappedSlide {
     }
 }
 
-/// How long the current slide has played, across pauses.
-private struct SlideClock: Equatable {
+/// How long the current slide has played, across pauses. Slides read it from the environment,
+/// so their looping decorations freeze while the story is paused.
+struct StoryClock: Equatable {
     var played: TimeInterval = 0
     /// When it last started or resumed; nil while paused.
     var resumedAt: Date?
+
+    var isPaused: Bool { resumedAt == nil }
 
     func elapsed(at now: Date) -> TimeInterval {
         played + (resumedAt.map { now.timeIntervalSince($0) } ?? 0)
@@ -132,6 +135,18 @@ private struct SlideClock: Equatable {
 
     mutating func resume(at now: Date) {
         if resumedAt == nil { resumedAt = now }
+    }
+}
+
+private struct StoryClockKey: EnvironmentKey {
+    static let defaultValue = StoryClock(resumedAt: .distantPast)
+}
+
+extension EnvironmentValues {
+    /// The clock of the slide on screen.
+    var storyClock: StoryClock {
+        get { self[StoryClockKey.self] }
+        set { self[StoryClockKey.self] = newValue }
     }
 }
 
@@ -175,7 +190,7 @@ private struct StoryPlayer: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var position = StoryPosition()
-    @State private var clock = SlideClock()
+    @State private var clock = StoryClock()
     @State private var userPaused = false
     @State private var holding = false
     @State private var press = Press()
@@ -192,16 +207,20 @@ private struct StoryPlayer: View {
         GeometryReader { geometry in
             ZStack {
                 StorySlideView(slide: slide, wrapped: wrapped)
+                    .environment(\.storyClock, clock)
                     .id(position.visit)
+                    // The incoming slide on top, the outgoing one fading out underneath.
+                    .zIndex(Double(position.visit))
                     .transition(slideTransition)
                     .allowsHitTesting(false)
 
                 Color.clear
                     .contentShape(Rectangle())
+                    .ignoresSafeArea()
                     .gesture(storyGesture(width: geometry.size.width))
                     .accessibilityElement()
-                    .accessibilityLabel("Slide \(index + 1) of \(slides.count)")
-                    .accessibilityHint("Swipe up or down to change slides.")
+                    .accessibilityLabel(Text(verbatim: "\(wrapped.group.name), \(wrapped.year) Wrapped"))
+                    .accessibilityValue("Slide \(index + 1) of \(slides.count)")
                     .accessibilityAdjustableAction { direction in
                         switch direction {
                         case .increment: next()
@@ -224,7 +243,7 @@ private struct StoryPlayer: View {
         .onAppear {
             // VoiceOver users start paused, so the story doesn't move on while it's being read.
             if UIAccessibility.isVoiceOverRunning { userPaused = true }
-            clock = SlideClock(resumedAt: paused ? nil : .now)
+            clock = StoryClock(resumedAt: paused ? nil : .now)
         }
         .task { prefetchImages() }
         .task(id: PlaybackKey(visit: position.visit, paused: paused)) { await playCurrentSlide() }
@@ -254,6 +273,7 @@ private struct StoryPlayer: View {
                     Text(verbatim: "\(wrapped.group.name) · \(wrapped.year)")
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .allowsHitTesting(false)
@@ -261,7 +281,7 @@ private struct StoryPlayer: View {
                 Button { userPaused.toggle() } label: {
                     Image(systemName: userPaused ? "play.fill" : "pause.fill")
                         .font(.body.weight(.semibold))
-                        .frame(width: 40, height: 40)
+                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .accessibilityLabel(pauseLabel)
@@ -269,7 +289,7 @@ private struct StoryPlayer: View {
                 Button(action: onClose) {
                     Image(systemName: "xmark")
                         .font(.title3.weight(.semibold))
-                        .frame(width: 40, height: 40)
+                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .accessibilityLabel("Close")
@@ -287,12 +307,12 @@ private struct StoryPlayer: View {
         }
     }
 
-    /// Slides in from the side it's coming from; the old one fades out quickly.
+    /// Slides in from the side it's coming from, crossfading with the outgoing slide.
     private var slideTransition: AnyTransition {
         let insertion = AnyTransition.opacity
             .combined(with: .offset(x: position.forward ? 40 : -40))
             .combined(with: .scale(scale: 0.98))
-        return .asymmetric(insertion: insertion, removal: .opacity.animation(.easeOut(duration: 0.15)))
+        return .asymmetric(insertion: insertion, removal: .opacity)
     }
 
     // MARK: - Playback
@@ -300,9 +320,11 @@ private struct StoryPlayer: View {
     /// Moves on when the slide's time is up. Restarted on every move, pause and resume.
     private func playCurrentSlide() async {
         guard !paused else { return }
+        let visit = position.visit
         let remaining = slide.duration - clock.elapsed(at: .now)
         try? await Task.sleep(for: .seconds(max(0, remaining)))
-        guard !Task.isCancelled, !isLast else { return }
+        // A tap or pause may land in the same moment, before this task is cancelled.
+        guard !Task.isCancelled, position.visit == visit, !paused, !isLast else { return }
         next()
     }
 
@@ -316,7 +338,7 @@ private struct StoryPlayer: View {
                 position = destination
             }
         }
-        clock = SlideClock(resumedAt: paused ? nil : .now)
+        clock = StoryClock(resumedAt: paused ? nil : .now)
     }
 
     private func next() {
@@ -365,7 +387,8 @@ private struct StoryPlayer: View {
         press = Press(active: true)
         press.holdTimer = Task {
             try? await Task.sleep(for: Self.holdDelay)
-            guard !Task.isCancelled else { return }
+            // `touching` too: a touch the system cancels straight away never reaches endPress().
+            guard !Task.isCancelled, touching else { return }
             press.held = true
             holding = true
         }
@@ -397,7 +420,7 @@ private struct StoryPlayer: View {
 private struct StoryProgress: View {
     let count: Int
     let index: Int
-    let clock: SlideClock
+    let clock: StoryClock
     let duration: TimeInterval
     let paused: Bool
 

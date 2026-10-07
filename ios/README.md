@@ -1,26 +1,36 @@
 # Friendship Wrapped for iOS
 
-A native SwiftUI app that does everything the web client does so far: phases 1–9. It talks to the **same Express API** as the web client. The server needed no changes.
+A native SwiftUI app that does everything the web client does so far: phases 1–10. It talks to the **same Express API** as the web client. The server needed no changes.
 
 | Web | iOS |
 | --- | --- |
 | `/auth/login`, `/auth/register` | Welcome screen → Log in / Create account |
 | `/onboarding` | Full-screen "Welcome!" sheet after sign-up |
 | `/home` | **Home** tab: your groups, `+` → New group / Join with invite link |
-| Bottom-nav camera button, `/camera` | **Camera** tab: take a photo (system camera) or choose one from the library → caption → choose group → Post |
+| Bottom-nav camera button, `/camera` | **Camera** tab: take a photo (system camera) or choose one from the library → caption → choose group → Post, with a progress bar. Offline, posting says "Waiting for connection…" and carries on when you're back |
 | `/groups/:id` | Group screen: emoji, members, then the photo feed. Switch between posts and a grid; more photos load as you scroll |
 | Feed post | Who posted it and when, the photo, the five reactions, comment count, caption ("more" for long ones) |
 | `/photos/:id` | Photo viewer: swipe or use the arrows to step through the feed, tap for full size (pinch or double-tap to zoom), ☆ favourite (private), reactions with "see who", comments (oldest first, delete your own) with the composer pinned to the bottom; the uploader can delete the photo |
 | `/groups/:id/members` | Members (owner swipes left to remove) |
 | `/groups/:id/settings` | Group settings: edit, reset invite links, leave |
 | `/invite/:token` | Invite sheet: preview → join, or sign up and come back |
-| `/profile`, `/settings` | **Profile** tab: profile picture (add/change/remove), display name; ⚙︎ → Settings (log out, system status incl. photo storage) |
+| `/profile`, `/settings` | **Profile** tab: profile picture (add/change/remove), display name; ⚙︎ → Settings: log out, **Delete account…** (spells out what goes, confirmed with your password; the welcome screen then says it's done), App status (folded away unless something's wrong) |
 | `/memories` | **Memories** tab: group switcher, On This Day (same date in earlier years, in your time zone), then Timeline (by month, pinned month headers, "Jump to" a month), Albums and Favorites (only you see them) |
 | `/memories/albums/:id` | Album: photos oldest first, Add photos (multi-select picker), rename/delete for its creator or the group owner. In the photo viewer, the album button adds the photo to albums or starts a new one |
 | `/wrapped` | **Wrapped** tab, shown once you have one: a card per group and year, newest year first ("In progress" for this year) |
 | `/wrapped/:year?group=` | The story, full screen: the same eight slides as the web, with the same timings, count-ups and animations. Tap the right side (or swipe left) for the next slide and the left third (or swipe right) for the previous; press and hold to pause; swipe down to close. It pauses while the app is in the background. With Reduce Motion, slides appear without animating, and VoiceOver users start paused |
 
 The server decides which slides there are and the app writes the words around the numbers, as the web client does. Slide types the app doesn't know yet (from a newer server) are skipped, so an older TestFlight build keeps working. Phase 8's year stats (`GET /groups/:id/stats/:year`) load through `APIClient.fetchYearStats`, and the slides reuse its `YearStats.PersonCount`.
+
+Phase 10's polish, as it applies to a native app:
+- **Offline.** A banner shows along the top while the device is offline (`NetworkMonitor`, from `NWPathMonitor`). Coming back online reloads your groups and Wrapped.
+- **Loading.** Home and the group feed show skeletons, not spinners. Content already on screen stays when a refresh fails.
+- **Wrapped.** Slides crossfade. The floating reactions and the drifting sunset freeze while the story is paused. Taps work right to the edges of the screen, and the buttons are 44 pt.
+- **Long group names** wrap.
+- **Not needed here:**
+  - The system camera already has flash and flip.
+  - Failed reactions and favorites already show an alert, and destructive actions already ask first.
+  - iOS screens have titles anyway, and the app installs from TestFlight.
 
 ## Requirements
 

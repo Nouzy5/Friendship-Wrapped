@@ -5,6 +5,7 @@ struct SettingsView: View {
 
     @State private var confirmingLogout = false
     @State private var isLoggingOut = false
+    @State private var deletingAccount = false
     @State private var alertMessage: String?
 
     var body: some View {
@@ -26,6 +27,14 @@ struct SettingsView: View {
                 .disabled(isLoggingOut)
             }
 
+            Section {
+                Button("Delete account…", role: .destructive) {
+                    deletingAccount = true
+                }
+            } footer: {
+                Text("Permanently deletes your account, your photos and everything else you've posted.")
+            }
+
             SystemStatusSection()
 
             Section("About") {
@@ -40,6 +49,9 @@ struct SettingsView: View {
             }
         }
         .errorAlert("Couldn't log out", message: $alertMessage)
+        .sheet(isPresented: $deletingAccount) {
+            DeleteAccountView()
+        }
     }
 
     private func logout() async {
@@ -53,7 +65,8 @@ struct SettingsView: View {
     }
 }
 
-/// Live check of the app → API → database chain (the web app's System status card).
+/// Whether the app's server, database and photo storage are reachable (the web app's App status
+/// card): folded away unless something's wrong.
 struct SystemStatusSection: View {
     private struct Service {
         let status: ServiceStatus
@@ -63,27 +76,45 @@ struct SystemStatusSection: View {
     @State private var report: HealthReport?
     @State private var failure: APIError?
     @State private var isChecking = false
+    @State private var expanded = false
 
     var body: some View {
         Section {
-            row("API server", api)
-                .task { await check() }
-            row("Database", database)
-            row("Photo storage", storage)
-        } header: {
-            HStack {
-                Text("System status")
-                Spacer()
-                Button(isChecking ? "Checking…" : "Recheck") {
-                    Task { await check() }
+            DisclosureGroup(isExpanded: $expanded) {
+                row("API server", api)
+                row("Database", database)
+                row("Photo storage", storage)
+                HStack(spacing: 12) {
+                    Text(summary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Button(isChecking ? "Checking…" : "Recheck") {
+                        Task { await check() }
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .buttonStyle(.borderless)
+                    .disabled(isChecking)
                 }
-                .font(.caption.weight(.semibold))
-                .textCase(nil)
-                .disabled(isChecking)
+            } label: {
+                // On the label, which is always on screen, so the check runs once.
+                LabeledContent("App status", value: headline)
+                    .task { await check() }
+                    .onChange(of: isChecking) { _, checking in
+                        // Opens by itself when a check finds something wrong.
+                        if !checking, !allOK { expanded = true }
+                    }
             }
-        } footer: {
-            Text(summary)
         }
+    }
+
+    private var allOK: Bool {
+        api.status == .ok && database.status == .ok && storage.status == .ok
+    }
+
+    private var headline: String {
+        if isChecking { return "Checking…" }
+        return allOK ? "Everything's working" : "Something's wrong"
     }
 
     // The API checks the database first, so when it reports storage down the database was fine.
@@ -118,7 +149,7 @@ struct SystemStatusSection: View {
 
     private var summary: String {
         if isChecking { return "Running checks…" }
-        if api.status == .ok && database.status == .ok && storage.status == .ok { return "All systems connected." }
+        if allOK { return "All systems connected." }
         return "Something isn't connected right now, so some features may not work."
     }
 

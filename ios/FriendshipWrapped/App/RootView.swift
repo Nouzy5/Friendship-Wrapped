@@ -77,13 +77,32 @@ private struct LaunchView: View {
 struct MainTabView: View {
     @Environment(AppRouter.self) private var router
     @Environment(WrappedStore.self) private var wrapped
+    @Environment(GroupsStore.self) private var groups
+    @Environment(NetworkMonitor.self) private var network
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
+        VStack(spacing: 0) {
+            if !network.isOnline {
+                OfflineBanner()
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            tabs
+        }
+        .animation(.easeInOut(duration: 0.25), value: network.isOnline)
+        .onChange(of: network.isOnline) { _, online in
+            // Back online: catch up on what changed meanwhile.
+            guard online else { return }
+            Task { await groups.loadGroups() }
+            wrapped.setNeedsRefresh()
+        }
+    }
+
+    private var tabs: some View {
         @Bindable var router = router
 
         // Tapping Camera opens the camera over the current tab instead of switching to it.
-        TabView(selection: Binding(get: { self.router.selectedTab }, set: { self.router.selectTab($0) })) {
+        return TabView(selection: Binding(get: { self.router.selectedTab }, set: { self.router.selectTab($0) })) {
             NavigationStack(path: $router.homePath) {
                 HomeView()
                     .navigationDestination(for: AppRoute.self) { route in
@@ -131,8 +150,10 @@ struct MainTabView: View {
             if !hasAny, router.selectedTab == .wrapped { router.selectedTab = .home }
         }
         .onChange(of: scenePhase) { _, phase in
-            // A new year, or friends' photos while the app was away.
-            if phase == .active { wrapped.setNeedsRefresh() }
+            // A new year, new groups, or friends' photos while the app was away.
+            guard phase == .active else { return }
+            Task { await groups.loadGroups() }
+            wrapped.setNeedsRefresh()
         }
     }
 }

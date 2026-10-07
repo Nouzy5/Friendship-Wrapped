@@ -19,7 +19,7 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 9 | Wrapped: the year as a full-screen story, saved once the year is over | ✅ Done |
 | 10 | Polish: loading, empty, error and offline states, accessibility, camera and upload, Wrapped transitions, account deletion, home screen install | ✅ Done |
 
-The native iOS app in [`ios/`](ios/README.md) covers phases 1–9 too.
+The native iOS app in [`ios/`](ios/README.md) covers phases 1–10 too.
 
 ## Stack
 

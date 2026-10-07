@@ -87,8 +87,14 @@ final class PhotosStore {
 
     // MARK: - Changes
 
-    func upload(_ jpeg: Data, caption: String, to groupID: String) async throws -> Photo {
-        let photo = try await api.uploadPhoto(toGroup: groupID, jpeg: jpeg, caption: caption)
+    /// `progress` gets the fraction sent so far (0–1), on a background queue.
+    func upload(
+        _ jpeg: Data,
+        caption: String,
+        to groupID: String,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> Photo {
+        let photo = try await api.uploadPhoto(toGroup: groupID, jpeg: jpeg, caption: caption, progress: progress)
         feeds[groupID]?.photos.insert(photo, at: 0)
         return photo
     }
