@@ -9,6 +9,7 @@ struct PhotoDetailView: View {
 
     @Environment(PhotosStore.self) private var photos
     @Environment(GroupsStore.self) private var groups
+    @Environment(WrappedStore.self) private var wrapped
     @Environment(\.dismiss) private var dismiss
 
     /// The photo on screen; changes as you step through the feed.
@@ -318,6 +319,7 @@ struct PhotoDetailView: View {
             // Close first so the feed updates underneath, not this screen.
             dismiss()
             photos.forget(photo.id)
+            wrapped.setNeedsRefresh()
         } catch {
             alertMessage = error.asAPIError.message
             isDeleting = false

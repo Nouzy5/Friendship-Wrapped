@@ -7,6 +7,16 @@ enum Format {
         count == 1 ? "1 member" : "\(count) members"
     }
 
+    /// e.g. "8,421" in the viewer's locale.
+    static func number(_ count: Int) -> String {
+        count.formatted()
+    }
+
+    /// The word to follow a count: noun(1, "photo") is "photo", noun(3, "photo") is "photos".
+    static func noun(_ count: Int, _ singular: String, plural: String? = nil) -> String {
+        count == 1 ? singular : (plural ?? singular + "s")
+    }
+
     /// e.g. "October 2026" in the viewer's locale.
     static func monthYear(_ date: Date) -> String {
         date.formatted(.dateTime.month(.wide).year())

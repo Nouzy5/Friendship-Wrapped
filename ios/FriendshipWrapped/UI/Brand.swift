@@ -16,6 +16,7 @@ extension Color {
     static let brandOrange = Color(hex: 0xFF8A3D)
     static let brandGold = Color(hex: 0xFFC93D)
     static let ink950 = Color(hex: 0x0C0A14)
+    static let ink50 = Color(hex: 0xF7F5FC)
 }
 
 extension LinearGradient {

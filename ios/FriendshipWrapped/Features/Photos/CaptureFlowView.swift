@@ -188,6 +188,7 @@ struct PhotoComposer: View {
     let onPosted: (Photo) -> Void
 
     @Environment(PhotosStore.self) private var photos
+    @Environment(WrappedStore.self) private var wrapped
 
     @State private var caption = ""
     @State private var groupID: String?
@@ -295,6 +296,8 @@ struct PhotoComposer: View {
 
         do {
             let photo = try await photos.upload(jpeg, caption: caption, to: target)
+            // It may start this year's Wrapped, and it counts in it.
+            wrapped.setNeedsRefresh()
             onPosted(photo)
         } catch {
             failure = error.asAPIError

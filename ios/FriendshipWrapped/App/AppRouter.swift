@@ -6,6 +6,8 @@ enum AppTab: Hashable {
     /// Never actually selected: tapping it opens the camera over the current tab.
     case camera
     case memories
+    /// Only in the tab bar once there's a Wrapped to show.
+    case wrapped
     case profile
 }
 
@@ -50,6 +52,8 @@ final class AppRouter {
     var cameraRequest: CameraRequest?
     var showingNewGroup = false
     var showingJoin = false
+    /// The Wrapped story playing full screen.
+    var playingWrapped: WrappedSummary?
 
     /// An invite to reopen once the person has logged in or signed up.
     private var inviteAfterAuth: String?
@@ -59,12 +63,14 @@ final class AppRouter {
         guard let token = InviteLink.token(from: url) else { return }
 
         // SwiftUI shows one presentation at a time, so close whatever is open first.
-        let somethingOpen = cameraRequest != nil || showOnboarding || showingNewGroup || showingJoin || presentedInvite != nil
+        let somethingOpen = cameraRequest != nil || showOnboarding || showingNewGroup || showingJoin
+            || presentedInvite != nil || playingWrapped != nil
         cameraRequest = nil
         showOnboarding = false
         showingNewGroup = false
         showingJoin = false
         presentedInvite = nil
+        playingWrapped = nil
 
         guard somethingOpen else {
             presentedInvite = PendingInvite(token: token)
@@ -126,5 +132,6 @@ final class AppRouter {
         cameraRequest = nil
         showingNewGroup = false
         showingJoin = false
+        playingWrapped = nil
     }
 }
