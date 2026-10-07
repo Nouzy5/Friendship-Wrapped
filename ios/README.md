@@ -1,6 +1,6 @@
 # Friendship Wrapped for iOS
 
-A native SwiftUI app that does everything the web client does so far: phases 1–8. It talks to the **same Express API** as the web client. The server needed no changes.
+A native SwiftUI app that does everything the web client does so far: phases 1–9. It talks to the **same Express API** as the web client. The server needed no changes.
 
 | Web | iOS |
 | --- | --- |
@@ -17,8 +17,10 @@ A native SwiftUI app that does everything the web client does so far: phases 1�
 | `/profile`, `/settings` | **Profile** tab: profile picture (add/change/remove), display name; ⚙︎ → Settings (log out, system status incl. photo storage) |
 | `/memories` | **Memories** tab: group switcher, On This Day (same date in earlier years, in your time zone), then Timeline (by month, pinned month headers, "Jump to" a month), Albums and Favorites (only you see them) |
 | `/memories/albums/:id` | Album: photos oldest first, Add photos (multi-select picker), rename/delete for its creator or the group owner. In the photo viewer, the album button adds the photo to albums or starts a new one |
+| `/wrapped` | **Wrapped** tab, shown once you have one: a card per group and year, newest year first ("In progress" for this year) |
+| `/wrapped/:year?group=` | The story, full screen: the same eight slides as the web, with the same timings, count-ups and animations. Tap the right side (or swipe left) for the next slide and the left third (or swipe right) for the previous; press and hold to pause; swipe down to close. It pauses while the app is in the background. With Reduce Motion, slides appear without animating, and VoiceOver users start paused |
 
-Phase 8 (analytics) has no screens on either client yet. `APIClient.fetchYearStats` (`Features/Analytics`) loads `GET /groups/:id/stats/:year` in the device's time zone into `YearStats`, ready for the Wrapped slides in Phase 9.
+The server decides which slides there are and the app writes the words around the numbers, as the web client does. Slide types the app doesn't know yet (from a newer server) are skipped, so an older TestFlight build keeps working. Phase 8's year stats (`GET /groups/:id/stats/:year`) load through `APIClient.fetchYearStats`, and the slides reuse its `YearStats.PersonCount`.
 
 ## Requirements
 

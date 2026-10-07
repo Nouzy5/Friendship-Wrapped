@@ -21,6 +21,7 @@ private struct GroupSettingsForm: View {
     let group: FriendGroup
 
     @Environment(GroupsStore.self) private var store
+    @Environment(WrappedStore.self) private var wrapped
     @Environment(AppRouter.self) private var router
 
     @State private var name: String
@@ -167,6 +168,7 @@ private struct GroupSettingsForm: View {
             // Navigate away first so no screen tries to reload a group you're no longer in.
             router.popToHome()
             store.forget(group.id)
+            wrapped.setNeedsRefresh()
         } catch {
             alertMessage = error.asAPIError.message
             isLeaving = false

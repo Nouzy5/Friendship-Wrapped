@@ -6,6 +6,7 @@ struct RootView: View {
     @Environment(GroupsStore.self) private var groups
     @Environment(PhotosStore.self) private var photos
     @Environment(AlbumsStore.self) private var albums
+    @Environment(WrappedStore.self) private var wrapped
     @Environment(AppRouter.self) private var router
 
     var body: some View {
@@ -29,11 +30,16 @@ struct RootView: View {
                 groups.reset()
                 photos.reset()
                 albums.reset()
+                wrapped.reset()
                 ImageCache.shared.removeAll()
                 if newID == nil {
                     router.didSignOut()
-                } else if oldID == nil {
-                    router.didSignIn(isNewAccount: session.justRegistered)
+                } else {
+                    // Decides whether the Wrapped tab shows.
+                    wrapped.setNeedsRefresh()
+                    if oldID == nil {
+                        router.didSignIn(isNewAccount: session.justRegistered)
+                    }
                 }
             }
     }
@@ -70,6 +76,8 @@ private struct LaunchView: View {
 /// Wrapped joins the tab bar once there's a Wrapped to show.
 struct MainTabView: View {
     @Environment(AppRouter.self) private var router
+    @Environment(WrappedStore.self) private var wrapped
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         @Bindable var router = router
@@ -98,6 +106,14 @@ struct MainTabView: View {
             .tabItem { Label("Memories", systemImage: "photo.stack") }
             .tag(AppTab.memories)
 
+            if wrapped.hasAny {
+                NavigationStack {
+                    WrappedListView()
+                }
+                .tabItem { Label("Wrapped", systemImage: "gift") }
+                .tag(AppTab.wrapped)
+            }
+
             NavigationStack {
                 ProfileView()
             }
@@ -106,6 +122,17 @@ struct MainTabView: View {
         }
         .fullScreenCover(item: $router.cameraRequest) { request in
             CaptureFlowView(preferredGroupID: request.groupID)
+        }
+        .fullScreenCover(item: $router.playingWrapped) { summary in
+            WrappedStoryView(groupID: summary.group.id, year: summary.year)
+        }
+        .onChange(of: wrapped.hasAny) { _, hasAny in
+            // Leaving your last group with photos takes the tab away.
+            if !hasAny, router.selectedTab == .wrapped { router.selectedTab = .home }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // A new year, or friends' photos while the app was away.
+            if phase == .active { wrapped.setNeedsRefresh() }
         }
     }
 }

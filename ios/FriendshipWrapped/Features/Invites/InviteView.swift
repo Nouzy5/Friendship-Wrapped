@@ -8,6 +8,7 @@ struct InviteView: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(GroupsStore.self) private var store
+    @Environment(WrappedStore.self) private var wrapped
     @Environment(AppRouter.self) private var router
 
     @State private var preview: InvitePreview?
@@ -120,6 +121,8 @@ struct InviteView: View {
         do {
             let group = try await APIClient.shared.acceptInvite(token)
             store.didJoin(group)
+            // The group's Wrapped are yours now too.
+            wrapped.setNeedsRefresh()
             onOpenGroup(group.id)
         } catch {
             joinFailure = error.asAPIError.message
