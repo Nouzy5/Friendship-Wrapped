@@ -8,6 +8,7 @@ import {
   removeMember,
   updateGroup,
 } from "./api";
+import { wrappedKeys } from "../wrapped/hooks";
 import type { GroupInput } from "./types";
 
 export const groupKeys = {
@@ -70,6 +71,7 @@ export function useLeaveGroup(groupId: string) {
         groups?.filter((group) => group.id !== groupId),
       );
       void queryClient.invalidateQueries({ queryKey: groupKeys.list() });
+      void queryClient.invalidateQueries({ queryKey: wrappedKeys.all });
     },
   });
 }

@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { useEffect } from "react";
 import { deletePhoto, fetchGroupPhotos, fetchPhoto, uploadPhoto, type GroupPhotosFilter } from "./api";
 import { photoKeys, updateCachedFeed, type FeedData } from "./cache";
+import { wrappedKeys } from "../wrapped/hooks";
 import type { Photo } from "./types";
 
 /** Photos per feed page: eight rows of the three-column grid. */
@@ -64,6 +65,8 @@ export function useUploadPhoto() {
       void queryClient.invalidateQueries({ queryKey: photoKeys.group(photo.groupId) });
       // The previous newest photo now has a newer neighbour.
       void queryClient.invalidateQueries({ queryKey: photoKeys.details() });
+      // It may start this year's Wrapped, and it counts in it.
+      void queryClient.invalidateQueries({ queryKey: wrappedKeys.all });
     },
   });
 }
@@ -80,8 +83,9 @@ export function useDeletePhoto(photo: Pick<Photo, "id" | "groupId">) {
         pages.map((page) => ({ ...page, photos: page.photos.filter(({ id }) => id !== photo.id) })),
       );
       void queryClient.invalidateQueries({ queryKey: photoKeys.group(photo.groupId) });
-      // Album counts and covers may have included it.
+      // Album counts and covers may have included it, and so may Wrapped.
       void queryClient.invalidateQueries({ queryKey: ["albums"] });
+      void queryClient.invalidateQueries({ queryKey: wrappedKeys.all });
     },
   });
 }

@@ -4,6 +4,7 @@ import { getYearStats } from "../analytics/analytics.controller.js";
 import { requireAuth } from "../auth/auth.middleware.js";
 import { createInvite, resetInvites } from "../invites/invites.controller.js";
 import { listGroupPhotos, listOnThisDay, uploadPhoto } from "../photos/photos.controller.js";
+import { getWrapped } from "../wrapped/wrapped.controller.js";
 import {
   createGroup,
   getGroup,
@@ -33,3 +34,4 @@ groupsRouter.get("/:groupId/photos/on-this-day", listOnThisDay);
 groupsRouter.get("/:groupId/albums", listAlbums);
 groupsRouter.post("/:groupId/albums", createAlbum);
 groupsRouter.get("/:groupId/stats/:year", getYearStats);
+groupsRouter.get("/:groupId/wrapped/:year", getWrapped);

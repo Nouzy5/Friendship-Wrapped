@@ -2,7 +2,16 @@ import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
-import { groupWith, resetDatabase, resetStorage, signUp, uploadPhoto, type Agent } from "./helpers.js";
+import {
+  commentAt,
+  groupWith,
+  photoAt,
+  reactAt,
+  resetDatabase,
+  resetStorage,
+  signUp,
+  type Agent,
+} from "./helpers.js";
 
 const app = createApp();
 
@@ -16,27 +25,6 @@ afterAll(async () => {
   await resetStorage();
   await prisma.$disconnect();
 });
-
-/** Posts a photo, then backdates it (uploads are always "now"). */
-async function photoAt(agent: Agent, groupId: string, at: string) {
-  const photo = await uploadPhoto(agent, groupId);
-  await prisma.photo.update({ where: { id: photo.id }, data: { createdAt: new Date(at) } });
-  return photo;
-}
-
-async function reactAt(agent: Agent, userId: string, photoId: string, type: string, at: string) {
-  expect((await agent.put(`/api/photos/${photoId}/reaction`).send({ type })).status).toBe(200);
-  await prisma.reaction.update({
-    where: { photoId_userId: { photoId, userId } },
-    data: { createdAt: new Date(at) },
-  });
-}
-
-async function commentAt(agent: Agent, photoId: string, at: string) {
-  const res = await agent.post(`/api/photos/${photoId}/comments`).send({ body: "🔥" });
-  expect(res.status).toBe(201);
-  await prisma.comment.update({ where: { id: res.body.comment.id }, data: { createdAt: new Date(at) } });
-}
 
 function statsOf(agent: Agent, groupId: string, year: number | string, tz = "Europe/Bratislava") {
   return agent.get(`/api/groups/${groupId}/stats/${year}?tz=${encodeURIComponent(tz)}`);
