@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The server validates everything; its field messages are shown under each field.
+/// The server validates everything; its field messages are shown under each field. A new
+/// account goes on to onboarding, or straight back to the invite it came from.
 struct RegisterView: View {
     @Environment(SessionStore.self) private var session
     @Environment(AppRouter.self) private var router
@@ -17,74 +18,62 @@ struct RegisterView: View {
     }
 
     var body: some View {
-        Form {
+        SignedOutForm(title: "Create your account") {
             if let message = failure?.formMessage {
-                FormErrorSection(message: message)
+                InlineAlert(message: message)
             }
 
-            Section {
-                TextField("e.g. Nicolas", text: $displayName)
-                    .textContentType(.nickname)
-                    .characterLimit(40, text: $displayName)
-                    .focused($focusedField, equals: .displayName)
-                    .submitLabel(.next)
-                    .onSubmit { focusedField = .username }
-            } header: {
-                Text("Display name")
-            } footer: {
-                FieldFooter(error: failure?.fieldErrors["displayName"], hint: "What your friends will see.")
-            }
+            FWTextField(
+                label: "Display name",
+                text: $displayName,
+                error: failure?.fieldErrors["displayName"],
+                hint: "What your friends will see, e.g. Nicolas",
+                contentType: .nickname,
+                autocapitalization: .words,
+                submitLabel: .next,
+                onSubmit: { focusedField = .username }
+            )
+            .characterLimit(40, text: $displayName)
+            .focused($focusedField, equals: .displayName)
 
-            Section {
-                TextField("username", text: $username)
-                    .textContentType(.username)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .characterLimit(20, text: $username)
-                    .focused($focusedField, equals: .username)
-                    .submitLabel(.next)
-                    .onSubmit { focusedField = .password }
-            } header: {
-                Text("Username")
-            } footer: {
-                FieldFooter(
-                    error: failure?.fieldErrors["username"],
-                    hint: "3–20 characters: letters, numbers, periods and underscores."
-                )
-            }
+            FWTextField(
+                label: "Username",
+                text: $username,
+                error: failure?.fieldErrors["username"],
+                hint: "3–20 characters: letters, numbers, periods and underscores",
+                contentType: .username,
+                autocapitalization: .never,
+                submitLabel: .next,
+                onSubmit: { focusedField = .password }
+            )
+            .characterLimit(20, text: $username)
+            .focused($focusedField, equals: .username)
 
-            Section {
-                SecureField("Password", text: $password)
-                    .textContentType(.newPassword)
-                    .focused($focusedField, equals: .password)
-                    .submitLabel(.go)
-                    .onSubmit(submit)
-            } header: {
-                Text("Password")
-            } footer: {
-                FieldFooter(error: failure?.fieldErrors["password"], hint: "At least 8 characters.")
-            }
+            FWTextField(
+                label: "Password",
+                text: $password,
+                error: failure?.fieldErrors["password"],
+                hint: "At least 8 characters",
+                isSecure: true,
+                contentType: .newPassword,
+                submitLabel: .go,
+                onSubmit: submit
+            )
+            .focused($focusedField, equals: .password)
 
-            Section {
-                PrimaryButton(
-                    title: "Create account",
-                    pendingTitle: "Creating account…",
-                    isPending: isPending,
-                    action: submit
-                )
+            PrimaryButton(
+                title: "Create account",
+                pendingTitle: "Creating account…",
+                isPending: isPending,
+                action: submit
+            )
+            .padding(.top, 8)
+        } footer: {
+            SignedOutSwitchLink(prompt: "Already have an account?", link: "Log in") {
+                router.authPath = [.login]
             }
-            .buttonRow()
-
-            Section {
-                Button("Already have an account? Log in") {
-                    router.authPath = [.login]
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .listRowBackground(Color.clear)
         }
-        .navigationTitle("Create account")
-        .scrollDismissesKeyboard(.interactively)
+        .motion(.fwQuick, value: failure)
     }
 
     private func submit() {

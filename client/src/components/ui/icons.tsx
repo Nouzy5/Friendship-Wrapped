@@ -188,13 +188,11 @@ export function SettingsIcon(props: IconProps) {
   );
 }
 
-/** A wrapped present: the Wrapped tab. */
+/** Bars of different heights, like everyone's share of the year: the Wrapped tab. */
 export function WrappedIcon(props: IconProps) {
   return (
-    <Icon {...props}>
-      <rect x="3" y="8" width="18" height="4" rx="1" />
-      <path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7M12 8v13" />
-      <path d="M12 8C10.5 4.5 7.5 3 6.5 4.5S8 8 12 8zM12 8c1.5-3.5 4.5-5 5.5-3.5S16 8 12 8z" />
+    <Icon strokeWidth={2.6} {...props}>
+      <path d="M5 20v-5M10 20V7M15 20v-9M20 20V4" />
     </Icon>
   );
 }
@@ -211,6 +209,173 @@ export function PlayIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M7 4.5v15L19.5 12z" fill="currentColor" />
+    </Icon>
+  );
+}
+
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </Icon>
+  );
+}
+
+/** Marks an error or a warning (instead of red). */
+export function AlertIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5v5.5M12 16.5h.01" />
+    </Icon>
+  );
+}
+
+export function InfoIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v6M12 7.5h.01" />
+    </Icon>
+  );
+}
+
+export function PersonIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0 1 16 0" />
+    </Icon>
+  );
+}
+
+export function BellIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M6 16v-5a6 6 0 1 1 12 0v5l2 2H4z" />
+      <path d="M10 21h4" />
+    </Icon>
+  );
+}
+
+/** A circle half filled: light and dark. */
+export function AppearanceIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" />
+    </Icon>
+  );
+}
+
+export function ShieldIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3 5 6v5c0 4.5 3 8.5 7 10 4-1.5 7-5.5 7-10V6z" />
+    </Icon>
+  );
+}
+
+export function HelpIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7M12 17h.01" />
+    </Icon>
+  );
+}
+
+export function DocumentIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7 3h7l5 5v13H7z" />
+      <path d="M14 3v5h5" />
+    </Icon>
+  );
+}
+
+export function PhoneIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="6.5" y="2.5" width="11" height="19" rx="2.5" />
+      <path d="M10.5 18.5h3" />
+    </Icon>
+  );
+}
+
+export function ComputerIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="4.5" width="18" height="12" rx="2" />
+      <path d="M8 20h8M12 16.5V20" />
+    </Icon>
+  );
+}
+
+export function FlashIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M13.5 2 5 13.5h6L10 22l9-12h-6.2z" />
+    </Icon>
+  );
+}
+
+export function MoreIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth={3.6} />
+    </Icon>
+  );
+}
+
+/** A smiley with a plus: add or change your reaction. */
+export function ReactIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M20.5 11.5a8.5 8.5 0 1 1-8-8.5" />
+      <path d="M8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01M19 2.5v5M16.5 5h5" />
+    </Icon>
+  );
+}
+
+export function DownloadIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 4v11M7 10.5 12 15.5l5-5M5 20h14" />
+    </Icon>
+  );
+}
+
+export function BlockIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m5.6 5.6 12.8 12.8" />
+    </Icon>
+  );
+}
+
+export function FlagIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 21V4M5 4h11l-2 4 2 4H5" />
+    </Icon>
+  );
+}
+
+export function LinkIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+      <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+    </Icon>
+  );
+}
+
+export function SignOutIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10" />
     </Icon>
   );
 }

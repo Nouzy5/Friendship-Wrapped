@@ -1,27 +1,61 @@
 @import "tailwindcss";
+@import "@fontsource-variable/fredoka/standard.css";
+
+/*
+ * Colour-coded: white (or black) paper, black (or white) ink, and one colour per friend.
+ * Colour only ever means a person. Your own colour is your accent (shutter, switches, your reactions).
+ *
+ * The theme is chosen in Settings → Appearance and applied as html[data-theme] before the first paint
+ * (see index.html and lib/theme.ts). "Match device" follows prefers-color-scheme live.
+ */
+:root {
+  --bg: #ffffff;
+  --fg: #000000;
+  --sub: #6e6e6a;
+  --surface: #f2f2f0;
+  --line: #e0e0dc;
+  --raised: #ffffff;
+  --inverse: #000000;
+  --on-inverse: #ffffff;
+  --switch-off: #d0d0cc;
+  /* Your colour in the group you're looking at; set from JS (lib/accent.ts). */
+  --accent: #3355ff;
+  --on-accent: #ffffff;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #000000;
+  --fg: #ffffff;
+  --sub: #a3a39e;
+  --surface: #1c1c1b;
+  --line: #2e2e2c;
+  --raised: #3a3a38;
+  --inverse: #ffffff;
+  --on-inverse: #000000;
+  --switch-off: #3a3a38;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-fg: var(--fg);
+  --color-sub: var(--sub);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-raised: var(--raised);
+  --color-inverse: var(--inverse);
+  --color-on-inverse: var(--on-inverse);
+  --color-switch-off: var(--switch-off);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+
+}
 
 @theme {
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans",
-    sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-
-  /* Surfaces: a warm near-black so photos and gradients pop. */
-  --color-ink-950: #0c0a14;
-  --color-ink-900: #15121f;
-  --color-ink-800: #1e1a2b;
-  --color-ink-700: #2c2640;
-  --color-ink-400: #8d87a3;
-  --color-ink-200: #cfcbe0;
-  --color-ink-50: #f7f5fc;
-
-  /* Brand: the "Wrapped" sunset gradient. */
-  --color-brand-rose: #ff3d7f;
-  --color-brand-orange: #ff8a3d;
-  --color-brand-gold: #ffc93d;
-
-  --color-success: #3ddc97;
-  --color-danger: #ff5c6c;
-  --color-warning: #ffc93d;
+    "Fredoka Variable", ui-rounded, "SF Pro Rounded", "Nunito", system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji";
 
   /* Motion (mostly the Wrapped story). Pair decorative ones with motion-reduce:animate-none. */
   --animate-rise: rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
@@ -31,10 +65,27 @@
   --animate-exit: exit 0.45s ease-in forwards;
   --animate-flash: flash 0.35s ease-out forwards;
   --animate-grow-up: grow-up 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-grow-right: grow-right 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-float-up: float-up 4s ease-in infinite both;
   --animate-pan: pan 6s ease-in-out infinite alternate;
   /* The story's progress bar; its duration is set per slide. */
   --animate-story-progress: story-progress linear forwards;
+
+  /*
+   * App-wide motion. "backwards" fill: nothing is left transformed once an entrance ends (a leftover
+   * transform would trap fixed and sticky children). Reduce motion switches all of it off (below).
+   */
+  --animate-page-forward: page-forward 0.34s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  --animate-page-back: page-back 0.34s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  --animate-page-fade: page-fade 0.28s ease-out backwards;
+  --animate-slide-from-right: slide-from-right 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  --animate-slide-from-left: slide-from-left 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  --animate-sheet-up: sheet-up 0.42s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  --animate-menu-in: menu-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  --animate-pop-in: pop-in 0.38s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  --animate-bounce-once: bounce-once 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+  --animate-fade-in: fade-in 0.3s ease-out backwards;
+  --animate-list-in: list-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 
   @keyframes rise {
     from {
@@ -79,6 +130,11 @@
       transform: scaleY(0);
     }
   }
+  @keyframes grow-right {
+    from {
+      transform: scaleX(0);
+    }
+  }
   @keyframes float-up {
     0% {
       opacity: 0;
@@ -100,6 +156,70 @@
       background-position: 100% 50%;
     }
   }
+  @keyframes page-forward {
+    from {
+      opacity: 0;
+      transform: translateX(1.5rem);
+    }
+  }
+  @keyframes page-back {
+    from {
+      opacity: 0;
+      transform: translateX(-1.5rem);
+    }
+  }
+  @keyframes page-fade {
+    from {
+      opacity: 0;
+      transform: translateY(0.5rem);
+    }
+  }
+  @keyframes slide-from-right {
+    from {
+      opacity: 0.3;
+      transform: translateX(3rem);
+    }
+  }
+  @keyframes slide-from-left {
+    from {
+      opacity: 0.3;
+      transform: translateX(-3rem);
+    }
+  }
+  @keyframes sheet-up {
+    from {
+      opacity: 0;
+      transform: translateY(2.5rem) scale(0.98);
+    }
+  }
+  @keyframes menu-in {
+    from {
+      opacity: 0;
+      transform: translateY(-0.25rem) scale(0.96);
+    }
+  }
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
+  @keyframes bounce-once {
+    40% {
+      transform: scale(1.28);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes list-in {
+    from {
+      opacity: 0;
+      transform: translateY(0.75rem);
+    }
+  }
   @keyframes story-progress {
     from {
       transform: scaleX(0);
@@ -110,22 +230,93 @@
   }
 }
 
+/* Settings → Appearance → Reduce motion: "On" turns off decorative animation even when the device doesn't ask. */
+@custom-variant motion-reduce {
+  @media (prefers-reduced-motion: reduce) {
+    :root:not([data-motion="full"]) & {
+      @slot;
+    }
+  }
+  :root[data-motion="reduce"] & {
+    @slot;
+  }
+}
+@custom-variant motion-safe {
+  @media (prefers-reduced-motion: no-preference) {
+    :root:not([data-motion="reduce"]) & {
+      @slot;
+    }
+  }
+  :root[data-motion="full"] & {
+    @slot;
+  }
+}
+
+/*
+ * Reduce motion (the device's setting, or Settings → Appearance): entrances, pops and slides are
+ * skipped and transitions are instant. The Wrapped progress bar keeps running (it times the slides)
+ * and spinners keep spinning (they say something is happening).
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) *:not(.animate-story-progress, .animate-spin),
+  :root:not([data-motion="full"]) *::before,
+  :root:not([data-motion="full"]) *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+:root[data-motion="reduce"] *:not(.animate-story-progress, .animate-spin),
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  animation-delay: 0ms !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* Changing the theme crossfades the whole screen (lib/theme.ts starts the view transition). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 0.35s;
+}
+
+/* Disclosure panels (App status) fold open and shut instead of jumping. */
+:root {
+  interpolate-size: allow-keywords;
+}
+details::details-content {
+  block-size: 0;
+  overflow-y: clip;
+  transition:
+    block-size 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    content-visibility 0.3s allow-discrete;
+}
+details[open]::details-content {
+  block-size: auto;
+}
+
 @layer base {
   html {
-    color-scheme: dark;
     -webkit-tap-highlight-color: transparent;
   }
 
   body {
-    @apply min-h-dvh bg-ink-950 font-sans text-ink-50 antialiased;
+    @apply min-h-dvh bg-bg font-sans text-fg antialiased;
   }
 
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-brand-orange;
+    @apply outline-2 outline-offset-2 outline-fg;
   }
 
   /* Headings get focus after navigation (for screen readers); no ring needed. */
   h1[tabindex="-1"]:focus {
     @apply outline-none;
+  }
+
+  ::selection {
+    background: var(--accent);
+    color: var(--on-accent);
   }
 }

@@ -8,6 +8,7 @@ import {
   listPhotosQuerySchema,
   onThisDayQuerySchema,
   photoImageParamsSchema,
+  photoImageQuerySchema,
   photoParamsSchema,
 } from "./photos.schemas.js";
 import * as photosService from "./photos.service.js";
@@ -45,10 +46,14 @@ export const getPhoto: RequestHandler = async (req, res) => {
   res.json({ photo });
 };
 
+/** GET /photos/:photoId/images/:variant — `?download=1` as an attachment, if the viewer may save it. */
 export const getPhotoImage: RequestHandler = async (req, res) => {
   const { photoId, variant } = photoImageParamsSchema.parse(req.params);
-  const image = await photosService.getPhotoImage(photoId, currentUser(req).id, variant);
-  await sendImage(res, image);
+  const { download } = photoImageQuerySchema.parse(req.query);
+  const { image, downloadName } = await photosService.getPhotoImage(photoId, currentUser(req).id, variant, {
+    download: download ?? false,
+  });
+  await sendImage(res, image, { downloadName });
 };
 
 export const deletePhoto: RequestHandler = async (req, res) => {

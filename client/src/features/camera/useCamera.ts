@@ -27,10 +27,11 @@ function stopStream(stream: MediaStream): void {
 /**
  * Owns the live camera stream while `enabled` is true: starts it, attaches it to
  * `videoRef`, and releases the camera (turning off its light) when disabled or unmounted.
+ * It opens with `initialFacing` (Settings → Photos & data → Camera opens with).
  */
-export function useCamera(enabled: boolean) {
+export function useCamera(enabled: boolean, initialFacing: FacingMode = "environment") {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [facingMode, setFacingMode] = useState<FacingMode>("environment");
+  const [facingMode, setFacingMode] = useState<FacingMode>(initialFacing);
   const [state, setState] = useState<CameraState>({ status: "idle" });
   const [attempt, setAttempt] = useState(0);
   const [cameraCount, setCameraCount] = useState(0);

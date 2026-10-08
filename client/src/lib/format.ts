@@ -59,3 +59,19 @@ export function nounFor(count: number, singular: string, pluralForm = `${singula
 export function formatMemberCount(count: number): string {
   return `${count} ${plural.select(count) === "one" ? "member" : "members"}`;
 }
+
+const weekday = new Intl.DateTimeFormat(undefined, { weekday: "long" });
+
+/** For name tags on photos: "Now", "5 min", "2 h", "Yesterday", "Monday", then a date. */
+export function formatShortAgo(isoDate: string, now = new Date()): string {
+  const date = new Date(isoDate);
+  const elapsed = now.getTime() - date.getTime();
+  if (elapsed < MINUTE) return "Now";
+  if (elapsed < HOUR) return `${Math.floor(elapsed / MINUTE)} min`;
+  if (elapsed < DAY) return `${Math.floor(elapsed / HOUR)} h`;
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const daysAgo = Math.ceil((startOfToday - date.getTime()) / DAY);
+  if (daysAgo <= 1) return "Yesterday";
+  if (daysAgo < 7) return weekday.format(date);
+  return (date.getFullYear() === now.getFullYear() ? dayMonth : dayMonthYear).format(date);
+}

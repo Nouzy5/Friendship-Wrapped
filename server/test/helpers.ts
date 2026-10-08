@@ -7,6 +7,11 @@ import { deletePrefix } from "../src/lib/storage.js";
 
 /** Deletes all rows, children before parents. */
 export async function resetDatabase(): Promise<void> {
+  await prisma.queuedNotification.deleteMany();
+  await prisma.pushSubscription.deleteMany();
+  await prisma.report.deleteMany();
+  await prisma.block.deleteMany();
+  await prisma.userSettings.deleteMany();
   await prisma.wrapped.deleteMany();
   await prisma.comment.deleteMany();
   await prisma.reaction.deleteMany();

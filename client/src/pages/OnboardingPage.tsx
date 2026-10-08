@@ -13,21 +13,21 @@ export function OnboardingPage() {
   return (
     <div className="flex flex-col gap-6 py-2">
       <div>
-        <h1 className="text-3xl font-black tracking-tight wrap-anywhere">Welcome, {firstName}! 🎉</h1>
-        <p className="mt-2 text-ink-200">
+        <h1 className="text-3xl font-semibold font-stretch-112% tracking-tight wrap-anywhere">Welcome, {firstName}! 🎉</h1>
+        <p className="mt-2 text-sub">
           Friendship Wrapped happens in private groups. Start one for your friends, and you'll get a link to invite
           them.
         </p>
       </div>
 
       <Card>
-        <h2 className="mb-4 text-sm font-semibold tracking-wide text-ink-200 uppercase">Create your first group</h2>
+        <h2 className="mb-4 text-sm font-semibold text-sub">Create your first group</h2>
         <CreateGroupForm />
       </Card>
 
-      <p className="text-center text-sm text-ink-400">
+      <p className="text-center text-sm text-sub">
         Got an invite link from a friend? Just open it to join.{" "}
-        <Link to="/home" className="font-semibold text-brand-orange hover:underline">
+        <Link to="/home" className="font-semibold text-fg underline underline-offset-2 hover:underline">
           Skip for now
         </Link>
       </p>

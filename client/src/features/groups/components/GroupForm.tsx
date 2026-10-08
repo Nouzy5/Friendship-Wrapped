@@ -72,7 +72,7 @@ export function GroupForm({
         <Button type="submit" disabled={isPending}>
           {isPending ? pendingLabel : submitLabel}
         </Button>
-        <p role="status" className="text-sm text-success">
+        <p role="status" className="text-sm text-fg">
           {statusMessage}
         </p>
       </div>

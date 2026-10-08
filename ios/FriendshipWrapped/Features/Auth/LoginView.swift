@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// On success the session changes and RootView swaps to the signed-in app; no navigation needed here.
+/// On success the session changes and RootView swaps to the signed-in app (and reopens an
+/// invite you came from); no navigation needed here.
 struct LoginView: View {
     @Environment(SessionStore.self) private var session
     @Environment(AppRouter.self) private var router
@@ -16,48 +17,42 @@ struct LoginView: View {
     }
 
     var body: some View {
-        Form {
+        SignedOutForm(title: "Log in") {
             if let message = failure?.formMessage {
-                FormErrorSection(message: message)
+                InlineAlert(message: message)
             }
 
-            Section {
-                TextField("Username", text: $username)
-                    .textContentType(.username)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .focused($focusedField, equals: .username)
-                    .submitLabel(.next)
-                    .onSubmit { focusedField = .password }
-            } footer: {
-                FieldFooter(error: failure?.fieldErrors["username"])
-            }
+            FWTextField(
+                label: "Username",
+                text: $username,
+                error: failure?.fieldErrors["username"],
+                contentType: .username,
+                autocapitalization: .never,
+                submitLabel: .next,
+                onSubmit: { focusedField = .password }
+            )
+            .focused($focusedField, equals: .username)
 
-            Section {
-                SecureField("Password", text: $password)
-                    .textContentType(.password)
-                    .focused($focusedField, equals: .password)
-                    .submitLabel(.go)
-                    .onSubmit(submit)
-            } footer: {
-                FieldFooter(error: failure?.fieldErrors["password"])
-            }
+            FWTextField(
+                label: "Password",
+                text: $password,
+                error: failure?.fieldErrors["password"],
+                isSecure: true,
+                contentType: .password,
+                submitLabel: .go,
+                onSubmit: submit
+            )
+            .focused($focusedField, equals: .password)
 
-            Section {
-                PrimaryButton(title: "Log in", pendingTitle: "Logging in…", isPending: isPending, action: submit)
+            PrimaryButton(title: "Log in", pendingTitle: "Logging in…", isPending: isPending, action: submit)
+                .padding(.top, 8)
+        } footer: {
+            // Keeps the way back to an invite: the router remembers it until you're signed in.
+            SignedOutSwitchLink(prompt: "New here?", link: "Create an account") {
+                router.authPath = [.register]
             }
-            .buttonRow()
-
-            Section {
-                Button("New here? Create an account") {
-                    router.authPath = [.register]
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .listRowBackground(Color.clear)
         }
-        .navigationTitle("Log in")
-        .scrollDismissesKeyboard(.interactively)
+        .motion(.fwQuick, value: failure)
     }
 
     private func submit() {

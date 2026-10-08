@@ -15,10 +15,18 @@ export const reactionByType = Object.fromEntries(REACTIONS.map((reaction) => [re
 >;
 
 /** The summary after switching your reaction to `next` (null removes it), for showing a tap instantly. */
-export function withReaction(summary: ReactionSummary, next: ReactionType | null): ReactionSummary {
+export function withReaction(summary: ReactionSummary, next: ReactionType | null, myId: string): ReactionSummary {
   const counts = { ...summary.counts };
   if (summary.mine) counts[summary.mine] -= 1;
   if (next) counts[next] += 1;
   const total = summary.total - (summary.mine ? 1 : 0) + (next ? 1 : 0);
-  return { counts, total, mine: next };
+  // Changing your reaction keeps your place in the order; a new one goes last.
+  const reactors = summary.reactors ?? [];
+  const existing = reactors.some((reactor) => reactor.userId === myId);
+  const updated = next
+    ? existing
+      ? reactors.map((reactor) => (reactor.userId === myId ? { userId: myId, type: next } : reactor))
+      : [...reactors, { userId: myId, type: next }]
+    : reactors.filter((reactor) => reactor.userId !== myId);
+  return { counts, total, mine: next, reactors: updated };
 }

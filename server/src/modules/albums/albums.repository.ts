@@ -1,5 +1,6 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma, type DbClient } from "../../lib/prisma.js";
+import { notBlockedWith } from "../blocks/blocks.repository.js";
 import { albumSelect } from "./album.dto.js";
 
 /** Newest albums first. */
@@ -28,28 +29,41 @@ export function deleteAlbum(albumId: string, db: DbClient = prisma) {
   return db.album.deleteMany({ where: { id: albumId } });
 }
 
-/** Photo counts per album, in one grouped query (empty albums are absent). */
-export async function countPhotos(albumIds: string[], db: DbClient = prisma): Promise<Map<string, number>> {
+/** Photo counts per album as the viewer sees them, in one grouped query (empty albums are absent). */
+export async function countPhotos(
+  albumIds: string[],
+  viewerId: string,
+  db: DbClient = prisma,
+): Promise<Map<string, number>> {
   if (albumIds.length === 0) return new Map();
   const rows = await db.photoAlbum.groupBy({
     by: ["albumId"],
-    where: { albumId: { in: albumIds } },
+    where: { albumId: { in: albumIds }, photo: { uploader: notBlockedWith(viewerId) } },
     _count: { _all: true },
   });
   return new Map(rows.map((row) => [row.albumId, row._count._all]));
 }
 
 /**
- * Each album's cover: the photo most recently added to it. One index lookup per album on
- * (album_id, added_at), however big the albums get. (Picking the newest photo by date
- * meant joining and sorting every photo in every album: ~26 ms for 20 albums of 100.)
+ * Each album's cover: the photo most recently added to it (that the viewer can see). One
+ * index lookup per album on (album_id, added_at), however big the albums get. (Picking the
+ * newest photo by date meant joining and sorting every photo in every album: ~26 ms for 20
+ * albums of 100.)
  */
-export async function findCoverPhotoIds(albumIds: string[], db: DbClient = prisma): Promise<Map<string, string>> {
+export async function findCoverPhotoIds(
+  albumIds: string[],
+  viewerId: string,
+  db: DbClient = prisma,
+): Promise<Map<string, string>> {
   if (albumIds.length === 0) return new Map();
   const rows = await db.$queryRaw<{ album_id: string; photo_id: string | null }[]>`
     SELECT a.id AS album_id,
-           (SELECT pa.photo_id FROM photo_albums pa
+           (SELECT pa.photo_id FROM photo_albums pa JOIN photos p ON p.id = pa.photo_id
             WHERE pa.album_id = a.id
+              AND NOT EXISTS (
+                SELECT 1 FROM blocks b
+                WHERE (b.blocker_id = ${viewerId} AND b.blocked_id = p.uploader_id)
+                   OR (b.blocker_id = p.uploader_id AND b.blocked_id = ${viewerId}))
             ORDER BY pa.added_at DESC, pa.photo_id DESC
             LIMIT 1) AS photo_id
     FROM albums a

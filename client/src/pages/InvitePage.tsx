@@ -4,7 +4,7 @@ import { Button, buttonClasses } from "../components/ui/Button";
 import { Spinner } from "../components/ui/Spinner";
 import { StateMessage } from "../components/ui/StateMessage";
 import { useSession } from "../features/auth/hooks";
-import { GroupEmoji } from "../features/groups/components/GroupEmoji";
+import { GroupAvatar } from "../features/groups/components/GroupAvatar";
 import { useAcceptInvite, useInvitePreview } from "../features/invites/hooks";
 import { ApiError } from "../lib/api-client";
 import { getFormError } from "../lib/form-errors";
@@ -61,17 +61,17 @@ export function InvitePage() {
 
   return (
     <div className="flex flex-col items-center gap-2 text-center">
-      <p className="text-sm text-ink-200">You've been invited to join</p>
+      <p className="text-sm text-sub">You've been invited to join</p>
       <div className="my-3">
-        <GroupEmoji emoji={group.emoji} size="lg" />
+        <GroupAvatar group={group} size={80} memberColors={false} />
       </div>
-      <h1 className="text-2xl font-black tracking-tight wrap-anywhere">{group.name}</h1>
-      <p className="text-sm text-ink-400">{formatMemberCount(group.memberCount)}</p>
+      <h1 className="text-2xl font-semibold font-stretch-112% tracking-tight wrap-anywhere">{group.name}</h1>
+      <p className="text-sm text-sub">{formatMemberCount(group.memberCount)}</p>
 
       <div className="mt-6 flex w-full flex-col gap-3">
         {memberOfGroupId ? (
           <>
-            <p className="text-sm text-ink-200">You're already in this group.</p>
+            <p className="text-sm text-sub">You're already in this group.</p>
             <Link to={`/groups/${memberOfGroupId}`} className={buttonClasses("primary", "w-full")}>
               Open group
             </Link>
@@ -88,7 +88,7 @@ export function InvitePage() {
             >
               {accept.isPending ? "Joining…" : `Join ${group.name}`}
             </Button>
-            <p className="text-xs text-ink-400">Joining as @{user.username}</p>
+            <p className="text-xs text-sub">Joining as @{user.username}</p>
           </>
         ) : (
           <>

@@ -19,6 +19,7 @@ export async function authenticate(req: Request, res: Response): Promise<PublicU
   }
 
   if (session.renewed) setSessionCookie(res, session.token, session.expiresAt);
+  req.sessionId = session.id;
   return session.user;
 }
 
@@ -35,4 +36,10 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
 export function currentUser(req: Request): PublicUser {
   if (!req.user) throw unauthorized("Please log in to continue");
   return req.user;
+}
+
+/** The stored id of the session a request that passed `requireAuth` came with. */
+export function currentSessionId(req: Request): string {
+  if (!req.sessionId) throw unauthorized("Please log in to continue");
+  return req.sessionId;
 }

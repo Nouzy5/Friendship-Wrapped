@@ -1,130 +1,74 @@
-import type { ReactNode } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link } from "react-router";
 import { Button, buttonClasses } from "../../../components/ui/Button";
-import { Card } from "../../../components/ui/Card";
-import { CameraIcon, FeedIcon, GridIcon } from "../../../components/ui/icons";
 import { LoadMore } from "../../../components/ui/LoadMore";
+import { FeedSkeleton, PhotoGridSkeleton } from "../../../components/ui/Skeleton";
 import { StateMessage } from "../../../components/ui/StateMessage";
+import type { Group } from "../../groups/types";
 import { useGroupFeed } from "../hooks";
 import { PhotoCard } from "./PhotoCard";
 import { PhotoGrid } from "./PhotoGrid";
-import { FeedSkeleton, PhotoGridSkeleton } from "../../../components/ui/Skeleton";
 
-type Layout = "feed" | "grid";
+export type FeedLayout = "feed" | "grid";
 
-const layouts: { value: Layout; label: string; icon: ReactNode }[] = [
-  { value: "feed", label: "Feed", icon: <FeedIcon className="size-4" /> },
-  { value: "grid", label: "Grid", icon: <GridIcon className="size-4" /> },
-];
+/** The group's photos, newest first, loading more as you scroll. */
+export function GroupFeed({ group, layout }: { group: Group; layout: FeedLayout }) {
+  const feed = useGroupFeed(group.id);
+  const cameraLink = `/camera?group=${encodeURIComponent(group.id)}`;
 
-/** The layout lives in the URL (?view=grid), so it survives opening a photo and coming back. */
-function useLayout(): [Layout, (layout: Layout) => void] {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const layout: Layout = searchParams.get("view") === "grid" ? "grid" : "feed";
+  if (feed.isPending) {
+    return <div className="px-2">{layout === "grid" ? <PhotoGridSkeleton /> : <FeedSkeleton />}</div>;
+  }
 
-  function setLayout(next: Layout) {
-    setSearchParams(
-      (params) => {
-        if (next === "grid") params.set("view", "grid");
-        else params.delete("view");
-        return params;
-      },
-      { replace: true, preventScrollReset: true },
+  if (feed.isLoadingError) {
+    return (
+      <StateMessage
+        emoji="📡"
+        title="Couldn't load photos"
+        description="Check your connection and try again."
+        action={<Button onClick={() => void feed.refetch()}>Try again</Button>}
+      />
     );
   }
 
-  return [layout, setLayout];
-}
-
-/** The group's photos, newest first, loading more as you scroll. */
-export function GroupFeed({ groupId }: { groupId: string }) {
-  const feed = useGroupFeed(groupId);
-  const [layout, setLayout] = useLayout();
-  const cameraLink = `/camera?group=${encodeURIComponent(groupId)}`;
-
-  let content;
-  if (feed.isPending) {
-    content = layout === "grid" ? <PhotoGridSkeleton /> : <FeedSkeleton />;
-  } else if (feed.isLoadingError) {
-    content = (
-      <Card>
-        <StateMessage
-          emoji="📡"
-          title="Couldn't load photos"
-          description="Check your connection and try again."
-          action={<Button onClick={() => void feed.refetch()}>Try again</Button>}
-        />
-      </Card>
-    );
-  } else if (feed.data.length === 0) {
-    content = (
-      <Card>
-        <StateMessage
-          emoji="📸"
-          title="No photos yet"
-          description="Be the first to share a moment with the group."
-          action={
-            <Link to={cameraLink} className={buttonClasses()}>
-              Take a photo
-            </Link>
-          }
-        />
-      </Card>
-    );
-  } else {
-    content = (
-      <>
-        {layout === "grid" ? (
-          <PhotoGrid photos={feed.data} />
-        ) : (
-          <ul className="flex flex-col gap-8">
-            {feed.data.map((photo, index) => (
-              <li key={photo.id}>
-                <PhotoCard photo={photo} priority={index === 0} />
-              </li>
-            ))}
-          </ul>
-        )}
-        <LoadMore
-          hasMore={feed.hasNextPage}
-          isLoading={feed.isFetchingNextPage}
-          isError={feed.isFetchNextPageError}
-          onLoadMore={() => void feed.fetchNextPage()}
-          label="Load more photos"
-          endMessage="You're all caught up ✨"
-        />
-      </>
+  if (feed.data.length === 0) {
+    return (
+      <StateMessage
+        emoji="📸"
+        title="No photos yet"
+        description={`Be the first to post something to ${group.name}.`}
+        action={
+          <Link to={cameraLink} className={buttonClasses("accent")}>
+            Take a photo
+          </Link>
+        }
+      />
     );
   }
 
   return (
-    <section aria-labelledby="group-photos-heading" className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <h2 id="group-photos-heading" className="flex-1 text-sm font-semibold tracking-wide text-ink-200 uppercase">
-          Photos
-        </h2>
-        <div role="group" aria-label="Layout" className="flex rounded-full border border-ink-700 p-0.5">
-          {layouts.map(({ value, label, icon }) => (
-            <button
-              key={value}
-              type="button"
-              aria-label={label}
-              aria-pressed={layout === value}
-              onClick={() => setLayout(value)}
-              className={`grid size-10 place-items-center rounded-full transition ${
-                layout === value ? "bg-ink-700 text-ink-50" : "text-ink-400 hover:text-ink-200"
-              }`}
-            >
-              {icon}
-            </button>
-          ))}
+    <section aria-label="Photos" className="flex flex-col">
+      {layout === "grid" ? (
+        <div className="px-2">
+          <PhotoGrid photos={feed.data} />
         </div>
-        <Link to={cameraLink} className={buttonClasses("ghost", "min-h-10 px-3 text-xs")}>
-          <CameraIcon className="size-4" />
-          Add photo
-        </Link>
-      </div>
-      {content}
+      ) : (
+        <ul className="flex flex-col gap-6">
+          {feed.data.map((photo, index) => (
+            // The first few arrive one after another; later pages just rise in.
+            <li key={photo.id} className="animate-list-in" style={{ animationDelay: `${Math.min(index, 4) * 70}ms` }}>
+              <PhotoCard photo={photo} groupName={group.name} priority={index === 0} />
+            </li>
+          ))}
+        </ul>
+      )}
+      <LoadMore
+        hasMore={feed.hasNextPage}
+        isLoading={feed.isFetchingNextPage}
+        isError={feed.isFetchNextPageError}
+        onLoadMore={() => void feed.fetchNextPage()}
+        label="Load more photos"
+        endMessage="You're all caught up."
+      />
     </section>
   );
 }

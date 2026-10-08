@@ -31,7 +31,7 @@ export function FavoritesTab({ groupId }: { groupId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm text-ink-400">Only you can see your favorites.</p>
+      <p className="text-sm text-sub">Only you can see your favorites.</p>
       <PhotoGrid photos={favorites.data} />
       <LoadMore
         hasMore={favorites.hasNextPage}

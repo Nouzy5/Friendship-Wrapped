@@ -152,3 +152,30 @@ export function dayRangeIn({ year, month, day }: CalendarDate, timeZone: string)
   const to = startOfDay(Date.UTC(year, month - 1, day + 1), timeZone);
   return { from: new Date(from), to: new Date(to) };
 }
+
+/**
+ * The instant the zone's clocks show `minutes` past midnight on a calendar day (days past
+ * the end of the month roll over into the next).
+ */
+export function instantIn({ year, month, day }: CalendarDate, minutes: number, timeZone: string): Date {
+  const wall = Date.UTC(year, month - 1, day, 0, minutes);
+  // The offset can change across a DST switch, so check it again at the corrected instant.
+  const first = wall - offsetMs(new Date(wall), timeZone);
+  return new Date(wall - offsetMs(new Date(first), timeZone));
+}
+
+/** The calendar date and the minute of the day (0–1439) the zone's clocks show at `instant`. */
+export function localTimeIn(instant: Date, timeZone: string): { date: CalendarDate; minutes: number } {
+  const { year, month, day, hour, minute } = wallClock(instant, timeZone);
+  return { date: { year, month, day }, minutes: hour * 60 + minute };
+}
+
+/** The calendar date `days` after this one. */
+export function addDays({ year, month, day }: CalendarDate, days: number): CalendarDate {
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+}
+
+/** "YYYY-MM-DD" */
+export const isoDate = ({ year, month, day }: CalendarDate) =>
+  [String(year).padStart(4, "0"), String(month).padStart(2, "0"), String(day).padStart(2, "0")].join("-");

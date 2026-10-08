@@ -10,7 +10,11 @@ export function useModal(open: boolean) {
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      // Reopened while still animating shut: finish that first, or the browser still counts it as shown.
+      for (const animation of dialog.getAnimations()) animation.finish();
+      dialog.showModal();
+    }
     if (!open && dialog.open) dialog.close();
   }, [open]);
 

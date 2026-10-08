@@ -137,9 +137,10 @@ final class PhotosStore {
 
     /// Reacts (or, with nil, takes your reaction back). Shows instantly; taps are sent in order
     /// and only the last one's answer is shown, so quick changes of mind don't flicker.
-    func react(to photoID: String, with type: ReactionType?) async throws {
+    /// `myID` is the signed-in user's id, so your dot joins (or leaves) the reaction straight away.
+    func react(to photoID: String, with type: ReactionType?, myID: String) async throws {
         guard let current = photo(photoID) else { return }
-        update(photoID) { $0.reactions = current.reactions.with(type) }
+        update(photoID) { $0.reactions = current.reactions.with(type, myID: myID) }
 
         let key = "reaction:\(photoID)"
         let tap = nextTap(key)
@@ -205,6 +206,14 @@ final class PhotosStore {
         for groupID in Array(feeds.keys) {
             feeds[groupID]?.photos.removeAll { $0.id == photoID }
         }
+    }
+
+    /// After blocking or unblocking someone: every list shows (or hides) their photos and
+    /// reactions, so cached photos are dropped and screens load them again.
+    func clearCachedPhotos() {
+        feeds = [:]
+        details = [:]
+        seen = [:]
     }
 
     func reset() {

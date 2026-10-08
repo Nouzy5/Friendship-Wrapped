@@ -89,7 +89,12 @@ describe("reactions", () => {
     const photo = await uploadPhoto(alice.agent, group.id);
 
     const added = await react(bob.agent, photo.id, "LAUGH");
-    expect(added.body.summary).toEqual({ counts: { ...noReactions, LAUGH: 1 }, total: 1, mine: "LAUGH" });
+    expect(added.body.summary).toEqual({
+      counts: { ...noReactions, LAUGH: 1 },
+      total: 1,
+      mine: "LAUGH",
+      reactors: [{ userId: bob.user.id, type: "LAUGH" }],
+    });
 
     await react(carol.agent, photo.id, "LAUGH");
     const changed = await react(bob.agent, photo.id, "SKULL");
@@ -97,12 +102,22 @@ describe("reactions", () => {
       counts: { ...noReactions, LAUGH: 1, SKULL: 1 },
       total: 2,
       mine: "SKULL",
+      // First reaction first: changing yours keeps your place.
+      reactors: [
+        { userId: bob.user.id, type: "SKULL" },
+        { userId: carol.user.id, type: "LAUGH" },
+      ],
     });
     expect(await prisma.reaction.count()).toBe(2);
 
     const removed = await bob.agent.delete(`/api/photos/${photo.id}/reaction`);
     expect(removed.status).toBe(200);
-    expect(removed.body.summary).toEqual({ counts: { ...noReactions, LAUGH: 1 }, total: 1, mine: null });
+    expect(removed.body.summary).toEqual({
+      counts: { ...noReactions, LAUGH: 1 },
+      total: 1,
+      mine: null,
+      reactors: [{ userId: carol.user.id, type: "LAUGH" }],
+    });
 
     // Removing again is harmless.
     expect((await bob.agent.delete(`/api/photos/${photo.id}/reaction`)).status).toBe(200);

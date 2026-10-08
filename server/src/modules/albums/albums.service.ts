@@ -18,8 +18,8 @@ function canManage(album: AlbumRow, userId: string, role: GroupRole): boolean {
 async function toViews(albums: AlbumRow[], userId: string, role: GroupRole): Promise<AlbumView[]> {
   const ids = albums.map((album) => album.id);
   const [counts, covers] = await Promise.all([
-    albumsRepository.countPhotos(ids),
-    albumsRepository.findCoverPhotoIds(ids),
+    albumsRepository.countPhotos(ids, userId),
+    albumsRepository.findCoverPhotoIds(ids, userId),
   ]);
   return albums.map((album) =>
     toAlbumView(album, {

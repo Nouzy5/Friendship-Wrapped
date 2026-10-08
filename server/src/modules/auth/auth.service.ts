@@ -1,15 +1,21 @@
-import { AppError } from "../../lib/errors.js";
+import { AppError, notFound } from "../../lib/errors.js";
 import { hashPassword, verifyDummyPassword, verifyPassword } from "../../lib/password.js";
 import { isUniqueConstraintError } from "../../lib/prisma.js";
 import { toPublicUser, type PublicUser } from "../users/user.dto.js";
 import * as usersRepository from "../users/users.repository.js";
 import { usernameSchema } from "../users/users.schemas.js";
-import type { LoginInput, RegisterInput } from "./auth.schemas.js";
-import { issueSession, pruneExpiredSessions, revokeSession, type IssuedSession } from "./session.service.js";
+import type { ChangePasswordInput, LoginInput, RegisterInput } from "./auth.schemas.js";
+import {
+  issueSession,
+  pruneExpiredSessions,
+  revokeOtherSessions,
+  revokeSession,
+  type IssuedSession,
+} from "./session.service.js";
 
 type AuthResult = { user: PublicUser; session: IssuedSession };
 
-export async function register(input: RegisterInput): Promise<AuthResult> {
+export async function register(input: RegisterInput, userAgent?: string): Promise<AuthResult> {
   const passwordHash = await hashPassword(input.password);
 
   let user: PublicUser;
@@ -30,10 +36,10 @@ export async function register(input: RegisterInput): Promise<AuthResult> {
     throw error;
   }
 
-  return { user, session: await issueSession(user.id) };
+  return { user, session: await issueSession(user.id, userAgent) };
 }
 
-export async function login(input: LoginInput): Promise<AuthResult> {
+export async function login(input: LoginInput, userAgent?: string): Promise<AuthResult> {
   // Only a name that could have been registered can match an account. MySQL's collation
   // ignores accents, so "álice" would find "alice", and each such spelling would get its
   // own allowance of attempts from the rate limiter. Anything else is an unknown user.
@@ -53,9 +59,30 @@ export async function login(input: LoginInput): Promise<AuthResult> {
   const user = toPublicUser(row);
   await pruneExpiredSessions(user.id);
 
-  return { user, session: await issueSession(user.id) };
+  return { user, session: await issueSession(user.id, userAgent) };
 }
 
 export async function logout(token: string | undefined): Promise<void> {
   if (token) await revokeSession(token);
+}
+
+/**
+ * Changes the password once the current one is confirmed, and signs out every other
+ * session: whoever might have known the old password is out.
+ */
+export async function changePassword(
+  userId: string,
+  currentSessionId: string,
+  { currentPassword, newPassword }: ChangePasswordInput,
+): Promise<void> {
+  const account = await usersRepository.findPasswordHash(userId);
+  if (!account) throw notFound("Account not found");
+  if (!(await verifyPassword(account.passwordHash, currentPassword))) {
+    throw new AppError(400, "INCORRECT_PASSWORD", "Incorrect password", [
+      { path: "currentPassword", message: "That's not your current password" },
+    ]);
+  }
+
+  await usersRepository.setPasswordHash(userId, await hashPassword(newPassword));
+  await revokeOtherSessions(userId, currentSessionId);
 }

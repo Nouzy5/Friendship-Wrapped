@@ -8,11 +8,15 @@ import { getWrapped } from "../wrapped/wrapped.controller.js";
 import {
   createGroup,
   getGroup,
+  getGroupAvatar,
   leaveGroup,
   listMembers,
   listMyGroups,
+  removeGroupAvatar,
   removeMember,
   updateGroup,
+  updateMyMembership,
+  uploadGroupAvatar,
 } from "./groups.controller.js";
 
 export const groupsRouter = Router();
@@ -23,7 +27,11 @@ groupsRouter.get("/", listMyGroups);
 groupsRouter.post("/", createGroup);
 groupsRouter.get("/:groupId", getGroup);
 groupsRouter.patch("/:groupId", updateGroup);
+groupsRouter.put("/:groupId/avatar", uploadGroupAvatar);
+groupsRouter.delete("/:groupId/avatar", removeGroupAvatar);
+groupsRouter.get("/:groupId/avatar", getGroupAvatar);
 groupsRouter.get("/:groupId/members", listMembers);
+groupsRouter.patch("/:groupId/members/me", updateMyMembership);
 groupsRouter.delete("/:groupId/members/:userId", removeMember);
 groupsRouter.post("/:groupId/leave", leaveGroup);
 groupsRouter.post("/:groupId/invites", createInvite);

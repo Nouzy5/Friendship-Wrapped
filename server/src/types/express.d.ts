@@ -5,6 +5,8 @@ declare global {
     interface Request {
       /** Set by `requireAuth`; read it through `currentUser(req)`. */
       user?: PublicUser;
+      /** The stored id (token hash) of the session the request came with, set alongside `user`. */
+      sessionId?: string;
     }
   }
 }

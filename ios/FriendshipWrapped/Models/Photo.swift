@@ -36,6 +36,9 @@ struct Photo: Codable, Identifiable, Hashable {
     var commentCount: Int
     /// Your private bookmark.
     var isFavorite: Bool
+    /// Whether you may save it to your phone: your own photos, or the uploader allows it
+    /// (Settings → Privacy & safety → "Let friends save your photos").
+    let canSave: Bool
     /// Only included by `GET /photos/:photoId`.
     let group: GroupInfo?
     /// The photos either side of this one in its group feed. Only included by `GET /photos/:photoId`,
@@ -48,6 +51,21 @@ struct Photo: Codable, Identifiable, Hashable {
 
     var altText: String {
         caption ?? "Photo by \(uploader.displayName)"
+    }
+
+    enum Variant {
+        case thumbnail, medium, full
+    }
+
+    /// The image path to show at a size, minding Settings → Photos & data → Data saver
+    /// (never the full-size photo).
+    @MainActor
+    func imagePath(_ variant: Variant) -> String {
+        switch variant {
+        case .thumbnail: return imageUrls.thumbnail
+        case .medium: return imageUrls.medium
+        case .full: return DeviceSettings.shared.values.dataSaver ? imageUrls.medium : imageUrls.full
+        }
     }
 }
 

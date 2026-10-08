@@ -1,6 +1,6 @@
 # Friendship Wrapped
 
-A private social memory app for friend groups: capture photos together through the year, react and comment, browse shared memories, then relive it all as a Spotify Wrapped–style recap.
+A private social memory app for friend groups: capture photos together through the year, react and comment, browse shared memories, then relive it all as a Spotify Wrapped–style recap. Everyone in a group has their own colour (see [Redesign: Colour-coded](#redesign-colour-coded)).
 
 ## Build status
 
@@ -19,7 +19,7 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 9 | Wrapped: the year as a full-screen story, saved once the year is over | ✅ Done |
 | 10 | Polish: loading, empty, error and offline states, accessibility, camera and upload, Wrapped transitions, account deletion, home screen install | ✅ Done |
 
-The native iOS app in [`ios/`](ios/README.md) covers phases 1–10 too.
+The native iOS app in [`ios/`](ios/README.md) covers phases 1–10 and the Colour-coded redesign too.
 
 ## Stack
 
@@ -68,6 +68,8 @@ cp server/.env.example server/.env.test   # then point DATABASE_URL at friendshi
 ```
 
 The server validates its environment at startup and refuses to boot with a clear message if anything is missing. Server variables are namespaced (`API_PORT`, `API_HOST`) so a generic `PORT` exported by other tools can't hijack the API.
+
+For push notifications, generate a key pair with `npx web-push generate-vapid-keys` (from `server/`) and set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (a `mailto:` address); leave them empty to run without push. Tests don't need them.
 
 Pick your own `S3_SECRET_ACCESS_KEY` (8+ characters). For local MinIO the `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` pair becomes MinIO's root login. Use the same pair in `.env.test`, with `S3_BUCKET=friendship-wrapped-test`. Buckets are created automatically.
 
@@ -406,7 +408,7 @@ A group's year, played as a full-screen story of slides. There's a Wrapped for e
   - **When it's saved:** once the year has ended in that time zone (and 10 more minutes have passed, so photos still uploading at midnight count), the first opening saves the numbers in the `wrapped` table, keyed by group, year and canonical zone name. If two friends open it at the same moment, the first save stands.
   - **After that:** every later opening shows the same story.
   - **What's stored:** the analytics numbers, with people and photos as ids. Names, avatars and photos are looked up when it's shown, so a photo deleted since simply drops out.
-  - **Format changes:** a format version in the stored JSON means a change to the numbers recounts older saves (version 2 recounted days in zones where clocks skip midnight). A save in a newer format than the server knows is left alone.
+  - **Format changes:** a format version in the stored JSON means a change to the numbers recounts older saves (version 2 recounted days in zones where clocks skip midnight; version 3 added the per-person counts below). A save in a newer format than the server knows is left alone.
   - **Speed:** at the spec's full scale, a saved Wrapped loads in about 6 ms, against about 270 ms to count it.
 - **The story (web).** `/wrapped` lists them by year; `/wrapped/:year?group=…` plays one full screen, outside the app shell.
   - **Playback:** each slide plays for 4.5 to 8 seconds behind a progress bar. Slides enter with a transition, numbers count up, and charts and photos animate in.
@@ -454,6 +456,45 @@ The finishing pass for giving the app to a real group of friends:
   - **Long names:** group and display names wrap.
   - **Home screen:** a web app manifest and icons let friends add the app to their home screen; it then opens full screen.
 - **Settings.** Account deletion (above), and the server status check is folded into "App status" (it opens by itself if something's wrong).
+
+## Redesign: Colour-coded
+
+The web app's look, chosen from two design directions. Everyone in a group has their own colour, and colour only ever means a person: their name tag on a photo, the dots on the reactions they left, their part of Wrapped. Your own colour is your accent (the shutter, switches, your reaction). Everything else is black and white in the Fredoka rounded font (self-hosted with `@fontsource-variable/fredoka`, width and weight axes). There's no red: destructive actions say what they do and ask first.
+
+- **Themes.** Settings → Appearance: Match device (the default), Light or Dark.
+  - **How it works:** `html[data-theme]` swaps the CSS colour tokens in `index.css` (`bg`, `fg`, `sub`, `surface`, `line`, `raised`, `inverse`, `accent`), which Tailwind uses as `bg-bg`, `text-sub` and so on.
+  - **No flash:** an inline script in `index.html` sets the theme and your last colour before the first paint; `lib/theme.ts` then follows the device live.
+- **Member colours.** 12 colours (`lib/member-colors.ts`), one per person per group, so you can have different colours in different groups. You get the first free one when you join and can change it in the group's settings; colours someone else has show their initial and can't be picked. Members beyond 12 are grey until a colour is free.
+- **Group picture.** A group photo if the owner set one, otherwise a badge of everyone's colours in the order they joined, with the group's emoji on top (`GroupAvatar`).
+- **Screens.**
+  - **Home** is the feed of the group you last looked at, with a group switcher in the header. `/home` redirects there.
+  - **Camera:** full screen with a square viewfinder (photos are cropped square), the group you're posting to, and who will see it.
+  - **Memories:** adds a "Taken by" filter (one person's photos).
+  - **Photo menu:** save (when allowed), report, block, delete, add to an album.
+  - **Group settings:** your colour, the group photo, members (report, block, remove), name and emoji, mute, invite links, leave.
+- **Settings** (`/settings/*`):
+  - **Account:** profile photo, display name, username, password (signs out your other devices), signed-in devices, download your photos (zip), delete account.
+  - **Notifications:** turn on push for this device, a master switch, photos, reactions, comments, new members, On this day, Wrapped, quiet hours, and mute per group.
+  - **Appearance:** theme, app icon (the browser tab icon; the iPhone app can change its Home Screen icon), reduce motion (Match device, On or Off; it also overrides the `motion-reduce:` variant), haptics (where the browser can vibrate).
+  - **Privacy & safety:** location is always removed; let friends save your photos; show my name in Wrapped; blocked people; invite links you've made; report a problem.
+  - **Photos & data:** which camera opens first, mirror the front camera, grid lines, save a copy of what you post, photo quality (standard 1920 px or high 2560 px), upload on mobile data (where the browser can tell), data saver (never the full-size photo), and the photos saved on this device (with Clear).
+
+  Appearance and Photos & data are per device (`lib/device-settings.ts`, in localStorage). Account, notification and privacy settings are stored with your account.
+- **Service worker** (`client/public/sw.js`): shows push notifications and opens the right page when you tap one, and keeps photo images you've seen in a cache (photos never change once posted). Signing out empties it and unsubscribes the device.
+- **API additions.** All additive, so older app builds keep working. The iOS app uses them all except push (the iPhone app can't receive notifications yet; its notification settings still apply to the web app).
+  - **Colours:** `PATCH /api/groups/:groupId/members/me` `{ color?, muted? }` (`409 COLOR_TAKEN`). `color` on members, and `myColor`, `muted` and `avatarUrl` on groups.
+  - **Group photo:** `PUT`, `DELETE` and `GET /api/groups/:groupId/avatar` (owner sets it; members see it).
+  - **Photos:** `reactions.reactors` (`{ userId, type }[]`), `canSave`, `GET /api/photos/:id/images/full?download=1`, `GET /api/groups/:groupId/photos?uploaderId=…`.
+  - **Settings:** `GET` and `PATCH /api/users/me/settings` (deep partial).
+  - **Account:** `PATCH /api/users/me` also takes `username` (`409 USERNAME_TAKEN`). `PUT /api/users/me/password`. `GET /api/users/me/sessions`, `DELETE /api/users/me/sessions/:sessionId`, `DELETE /api/users/me/sessions` (all others). `GET /api/users/me/photos/archive` (zip). `GET /api/users/me/invites`, `DELETE /api/users/me/invites/:inviteId`.
+  - **Safety:** `GET /api/users/me/blocks`, `PUT` and `DELETE /api/users/me/blocks/:userId`. A block hides photos, comments and reactions both ways, everywhere, and stops notifications between the two people. `POST /api/reports` (stored; rate limited).
+  - **Wrapped:** `byUser` on the photos and busiest-month slides, and `color` on every person. People who turn off "Show my name in Wrapped" count in the totals but are left off person slides. Saved Wrapped are format version 3.
+  - **Push:** `GET /api/notifications/push-key`, and `POST` and `DELETE /api/notifications/subscriptions`.
+- **Push notifications** (Web Push, `web-push`). New photos, reactions to your photos, comments, new members, On this day (09:00 your time) and Wrapped (1 January, 10:00).
+  - **Never sent:** to the person who did it, between blocked people, or from a group you've muted.
+  - **Quiet hours:** notifications are queued and sent when quiet hours end (only the latest per kind).
+  - **Scheduler:** runs every minute in the server process, only when push is configured. It needs `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT`; without them push is simply off.
+  - **On iPhone:** web push only works once the app is added to the Home Screen.
 
 ## Local machine notes
 

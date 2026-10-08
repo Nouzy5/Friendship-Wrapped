@@ -1,7 +1,7 @@
 import { AppError, badRequest, notFound } from "../../lib/errors.js";
 import { IMAGE_CONTENT_TYPE, processAvatar } from "../../lib/images.js";
 import { verifyPassword } from "../../lib/password.js";
-import { withTransaction } from "../../lib/prisma.js";
+import { isUniqueConstraintError, withTransaction } from "../../lib/prisma.js";
 import * as storage from "../../lib/storage.js";
 import { generateToken } from "../../lib/tokens.js";
 import * as commentsRepository from "../comments/comments.repository.js";
@@ -14,9 +14,22 @@ import { toPublicUser, type PublicUser } from "./user.dto.js";
 import * as usersRepository from "./users.repository.js";
 import type { UpdateProfileInput } from "./users.schemas.js";
 
+/** Display name and/or username; a username someone else has is a 409. */
 export async function updateProfile(userId: string, input: UpdateProfileInput): Promise<PublicUser> {
-  const user = await usersRepository.updateUserProfile(userId, { displayName: input.displayName });
-  return toPublicUser(user);
+  try {
+    const user = await usersRepository.updateUserProfile(userId, {
+      displayName: input.displayName,
+      username: input.username,
+    });
+    return toPublicUser(user);
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      throw new AppError(409, "USERNAME_TAKEN", "That username is already taken", [
+        { path: "username", message: "That username is already taken" },
+      ]);
+    }
+    throw error;
+  }
 }
 
 /** Swaps the stored avatar key and returns the user plus the key it replaced. */

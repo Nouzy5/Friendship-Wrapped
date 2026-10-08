@@ -25,6 +25,8 @@
     "helmet": "^8.3.0",
     "multer": "^2.4.0",
     "sharp": "^0.35.5",
+    "web-push": "^3.6.7",
+    "yazl": "^3.3.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -32,6 +34,8 @@
     "@types/multer": "^2.3.0",
     "@types/node": "^24.19.1",
     "@types/supertest": "^7.2.1",
+    "@types/web-push": "^3.6.4",
+    "@types/yazl": "^3.3.1",
     "prisma": "7.10.0",
     "supertest": "^7.3.1",
     "tsx": "^4.23.15",

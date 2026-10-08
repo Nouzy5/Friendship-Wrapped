@@ -1,4 +1,5 @@
 import { apiRequest, apiUpload } from "../../lib/api-client";
+import { getDeviceSettings } from "../../lib/device-settings";
 import { shrinkForUpload } from "../../lib/shrink-image";
 import type { NewPhoto, Photo, PhotoDetail, PhotoPage } from "./types";
 
@@ -11,6 +12,8 @@ export type GroupPhotosFilter = {
   before?: string;
   /** Only your favorites. */
   favorites?: boolean;
+  /** Only photos this person posted. */
+  uploaderId?: string;
 };
 
 /** One page of a group's photos, newest first. Pass the previous page's `nextCursor` to continue. */
@@ -23,6 +26,7 @@ export function fetchGroupPhotos(
   if (page.cursor) query.set("cursor", page.cursor);
   if (page.before) query.set("before", page.before);
   if (page.favorites) query.set("favorites", "true");
+  if (page.uploaderId) query.set("uploaderId", page.uploaderId);
   return apiRequest<PhotoPage>(`${groupPhotosPath(groupId)}?${query}`, { signal });
 }
 
@@ -35,7 +39,7 @@ export async function fetchPhoto(photoId: string, signal?: AbortSignal): Promise
 export async function uploadPhoto({ groupId, image, caption, onProgress }: NewPhoto): Promise<Photo> {
   const form = new FormData();
   form.append("caption", caption);
-  form.append("photo", await shrinkForUpload(image), "photo.jpg");
+  form.append("photo", await shrinkForUpload(image, getDeviceSettings().photoQuality), "photo.jpg");
   const { photo } = await apiUpload<{ photo: Photo }>(groupPhotosPath(groupId), form, onProgress);
   return photo;
 }

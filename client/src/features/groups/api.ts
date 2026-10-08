@@ -1,4 +1,5 @@
 import { apiRequest } from "../../lib/api-client";
+import type { MemberColor } from "../../lib/member-colors";
 import type { Group, GroupInput, GroupMember } from "./types";
 
 const groupPath = (groupId: string) => `/groups/${encodeURIComponent(groupId)}`;
@@ -34,4 +35,25 @@ export function leaveGroup(groupId: string): Promise<{ groupDeleted: boolean }> 
 
 export async function removeMember(groupId: string, userId: string): Promise<void> {
   await apiRequest<null>(`${groupPath(groupId)}/members/${encodeURIComponent(userId)}`, { method: "DELETE" });
+}
+
+export type MembershipInput = { color?: MemberColor; muted?: boolean };
+
+/** Your own colour and notifications in a group. */
+export async function updateMyMembership(groupId: string, input: MembershipInput): Promise<Group> {
+  const { group } = await apiRequest<{ group: Group }>(`${groupPath(groupId)}/members/me`, { method: "PATCH", body: input });
+  return group;
+}
+
+/** The group photo (owner only, like the name and emoji). */
+export async function uploadGroupAvatar(groupId: string, image: Blob): Promise<Group> {
+  const form = new FormData();
+  form.append("avatar", image, "group.jpg");
+  const { group } = await apiRequest<{ group: Group }>(`${groupPath(groupId)}/avatar`, { method: "PUT", body: form });
+  return group;
+}
+
+export async function removeGroupAvatar(groupId: string): Promise<Group> {
+  const { group } = await apiRequest<{ group: Group }>(`${groupPath(groupId)}/avatar`, { method: "DELETE" });
+  return group;
 }

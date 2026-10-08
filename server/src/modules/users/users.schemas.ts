@@ -21,9 +21,15 @@ export const displayNameSchema = z
   .regex(SINGLE_LINE_NAME_PATTERN, "Display name contains invalid characters")
   .refine(hasVisibleCharacter, "Display name is required");
 
-export const updateProfileSchema = z.object({
-  displayName: displayNameSchema,
-});
+/** Either or both. Usernames follow the registration rules. */
+export const updateProfileSchema = z
+  .object({
+    displayName: displayNameSchema.optional(),
+    username: usernameSchema.optional(),
+  })
+  .refine((input) => input.displayName !== undefined || input.username !== undefined, {
+    message: "Nothing to update",
+  });
 
 export const userParamsSchema = z.object({ userId: idSchema });
 

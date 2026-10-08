@@ -19,7 +19,7 @@ export function OfflineBanner() {
   return (
     <div role="status" aria-live="polite">
       {!online && (
-        <p className="fixed inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] z-20 bg-warning px-4 py-1.5 text-center text-sm font-semibold text-ink-950">
+        <p className="fixed inset-x-0 top-0 z-20 bg-inverse px-4 pt-[calc(0.375rem+env(safe-area-inset-top))] pb-1.5 text-center text-sm font-semibold text-on-inverse">
           You're offline. Anything you do will be sent when you're back.
         </p>
       )}

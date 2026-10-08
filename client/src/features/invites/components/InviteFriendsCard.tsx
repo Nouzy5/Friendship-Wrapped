@@ -25,11 +25,11 @@ export function InviteFriendsCard({ group, highlight = false }: { group: Group; 
   }
 
   return (
-    <Card className={highlight ? "border-brand-orange/50 shadow-brand-rose/10" : ""} aria-labelledby={headingId}>
-      <h2 id={headingId} className="text-lg font-bold">
+    <Card aria-labelledby={headingId}>
+      <h2 id={headingId} className="text-xl font-semibold font-stretch-112%">
         {highlight ? "It's just you so far" : "Invite friends"}
       </h2>
-      <p className="mt-1 text-sm text-ink-200">
+      <p className="mt-1 text-[0.9375rem] text-sub">
         {highlight
           ? "Send your friends an invite link so they can join the group."
           : "Anyone with an invite link can join this group."}
@@ -51,7 +51,7 @@ export function InviteFriendsCard({ group, highlight = false }: { group: Group; 
             readOnly
             value={url}
             onFocus={(e) => e.currentTarget.select()}
-            className="h-12 w-full rounded-2xl border border-ink-700 bg-ink-800/80 px-4 font-mono text-sm text-ink-200"
+            className="h-12 w-full rounded-2xl bg-bg px-4 text-[0.9375rem] text-sub"
           />
           <div className="flex gap-2">
             <Button className="flex-1" onClick={() => void handleCopy()}>
@@ -63,7 +63,7 @@ export function InviteFriendsCard({ group, highlight = false }: { group: Group; 
               </Button>
             )}
           </div>
-          <p role="status" className="text-xs text-ink-400">
+          <p role="status" className="text-[0.8125rem] text-sub">
             {copyState === "failed"
               ? "Couldn't copy automatically. Select the link above and copy it."
               : `Link works until ${formatDayMonth(invite.expiresAt)}. Make a new one any time.`}

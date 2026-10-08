@@ -1,7 +1,9 @@
+import type { MemberColor } from "../../lib/member-colors";
 import type { UserSummary } from "../auth/types";
 import type { Photo } from "../photos/types";
 
-export type PersonCount = { user: UserSummary; count: number };
+/** `color` is their colour in the group now; null for people who have left. */
+export type PersonCount = { user: UserSummary; count: number; color: MemberColor | null };
 
 /**
  * One slide of the story. The server decides which slides there are (a year without
@@ -9,7 +11,7 @@ export type PersonCount = { user: UserSummary; count: number };
  */
 export type WrappedSlide =
   | { type: "intro" }
-  | { type: "photos"; total: number; photographerCount: number }
+  | { type: "photos"; total: number; photographerCount: number; byUser: PersonCount[] }
   | { type: "topPhotographer"; top: PersonCount; runnersUp: PersonCount[] }
   | {
       type: "busiestMonth";
@@ -20,6 +22,8 @@ export type WrappedSlide =
       byMonth: number[];
       /** "YYYY-MM-DD". */
       busiestDay: { date: string; count: number } | null;
+      /** Who posted in that month, most first. */
+      byUser: PersonCount[];
     }
   | { type: "mostReactedPhoto"; photo: Photo; count: number }
   | { type: "reactions"; total: number; comments: number; topReactor: PersonCount | null }

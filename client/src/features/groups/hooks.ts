@@ -1,18 +1,24 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
+import type { MemberColor } from "../../lib/member-colors";
 import {
   createGroup,
   fetchGroup,
   fetchGroupMembers,
   fetchMyGroups,
   leaveGroup,
+  removeGroupAvatar,
   removeMember,
   updateGroup,
+  updateMyMembership,
+  uploadGroupAvatar,
+  type MembershipInput,
 } from "./api";
 import { albumKeys } from "../albums/hooks";
 import { onThisDayKeys } from "../memories/hooks";
 import { photoKeys } from "../photos/cache";
 import { wrappedKeys } from "../wrapped/hooks";
-import type { GroupInput } from "./types";
+import type { Group, GroupInput, GroupMember } from "./types";
 
 export const groupKeys = {
   all: ["groups"] as const,
@@ -35,10 +41,12 @@ export function useGroup(groupId: string) {
   });
 }
 
-export function useGroupMembers(groupId: string) {
+export function useGroupMembers(groupId: string, { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: groupKeys.members(groupId),
     queryFn: ({ signal }) => fetchGroupMembers(groupId, signal),
+    enabled,
+    staleTime: 60_000,
   });
 }
 
@@ -101,4 +109,49 @@ export function useRemoveMember(groupId: string) {
       void queryClient.invalidateQueries({ queryKey: groupKeys.list() });
     },
   });
+}
+
+/** After your colour, mute or the group photo changes: the group everywhere, and the members (your colour). */
+function applyUpdatedGroup(queryClient: QueryClient, group: Group) {
+  queryClient.setQueryData(groupKeys.detail(group.id), group);
+  queryClient.setQueryData(groupKeys.list(), (groups: Group[] | undefined) =>
+    groups?.map((other) => (other.id === group.id ? group : other)),
+  );
+  void queryClient.invalidateQueries({ queryKey: groupKeys.members(group.id) });
+}
+
+export function useUpdateMyMembership(groupId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: MembershipInput) => updateMyMembership(groupId, input),
+    onSuccess: (group) => applyUpdatedGroup(queryClient, group),
+  });
+}
+
+export function useUploadGroupAvatar(groupId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (image: Blob) => uploadGroupAvatar(groupId, image),
+    onSuccess: (group) => applyUpdatedGroup(queryClient, group),
+  });
+}
+
+export function useRemoveGroupAvatar(groupId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => removeGroupAvatar(groupId),
+    onSuccess: (group) => applyUpdatedGroup(queryClient, group),
+  });
+}
+
+/**
+ * Who's who in a group: each member's name and colour, so photos, reactions and comments can show
+ * them. People who have left aren't in the list (`memberOf` gives undefined) and come out neutral.
+ */
+export function useGroupPeople(groupId: string | undefined) {
+  const members = useGroupMembers(groupId ?? "", { enabled: Boolean(groupId) });
+  const byId = useMemo(() => new Map((members.data ?? []).map((member) => [member.user.id, member])), [members.data]);
+  const memberOf = useCallback((userId: string): GroupMember | undefined => byId.get(userId), [byId]);
+  const colorOf = useCallback((userId: string): MemberColor | null => byId.get(userId)?.color ?? null, [byId]);
+  return { memberOf, colorOf, members: members.data };
 }

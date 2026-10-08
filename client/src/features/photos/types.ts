@@ -22,6 +22,8 @@ export type Photo = {
   commentCount: number;
   /** Your private bookmark. */
   isFavorite: boolean;
+  /** Whether you may download it: your own photos, or the uploader allows saving. */
+  canSave: boolean;
 };
 
 /** The photos either side of one in its group feed (newest first); null at either end. */

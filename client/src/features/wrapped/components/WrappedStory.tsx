@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, PauseIcon, PlayIcon } from "../../../components/ui/icons";
 import { usePageHidden } from "../../../lib/usePageHidden";
+import { GroupAvatar } from "../../groups/components/GroupAvatar";
+import { useGroupPeople } from "../../groups/hooks";
 import type { Wrapped, WrappedSlideType } from "../types";
 import { useStoryGestures } from "../useStoryGestures";
-import { slideImageUrls, StorySlide } from "./StorySlide";
+import { slideImageUrls, slideTone, StorySlide } from "./StorySlide";
 
 /** How long each slide stays up before the next, long enough to read it as it animates in. */
 const SLIDE_MS: Record<WrappedSlideType, number> = {
@@ -22,18 +24,18 @@ const CROSSFADE_MS = 450;
 
 type ProgressProps = { count: number; index: number; visit: number; durationMs: number; paused: boolean; onDone: () => void };
 
-/** One bar per slide: the ones seen are full, the current one fills while it plays. */
+/** One bar per slide: the ones seen are full, the current one fills while it plays. In the slide's ink colour. */
 function StoryProgress({ count, index, visit, durationMs, paused, onDone }: ProgressProps) {
   return (
     <div aria-hidden className="flex gap-1">
       {Array.from({ length: count }, (_, bar) => (
-        <div key={bar} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/35">
-          {bar < index && <div className="size-full bg-white" />}
+        <div key={bar} className="h-1 flex-1 overflow-hidden rounded-full bg-current/25">
+          {bar < index && <div className="size-full bg-current" />}
           {bar === index && (
             <div
               // A new key restarts the fill whenever the slide is (re)entered.
               key={visit}
-              className="size-full origin-left animate-story-progress bg-white"
+              className="size-full origin-left animate-story-progress bg-current"
               style={{ animationDuration: `${durationMs}ms`, animationPlayState: paused ? "paused" : "running" }}
               onAnimationEnd={onDone}
             />
@@ -44,13 +46,12 @@ function StoryProgress({ count, index, visit, durationMs, paused, onDone }: Prog
   );
 }
 
-const roundButton =
-  "pointer-events-auto grid size-11 place-items-center rounded-full text-ink-50 transition hover:bg-white/15";
+const roundButton = "pointer-events-auto grid size-11 place-items-center rounded-full transition hover:bg-current/15";
 const sideButton =
-  "hidden size-12 shrink-0 place-items-center rounded-full bg-ink-800 text-ink-50 transition hover:bg-ink-700 disabled:invisible sm:grid";
+  "hidden size-12 shrink-0 place-items-center rounded-full bg-surface text-fg transition hover:bg-line disabled:invisible sm:grid";
 /** On phones, previous/next are taps and swipes; these buttons are for screen readers (and show when focused). */
 const hiddenStepButton =
-  "sr-only rounded-full bg-ink-950/80 px-4 py-2 text-sm font-semibold text-ink-50 focus:not-sr-only focus:absolute focus:bottom-4 focus:z-10 sm:hidden";
+  "sr-only rounded-full bg-inverse px-4 py-2 text-sm font-semibold text-on-inverse focus:not-sr-only focus:absolute focus:bottom-4 focus:z-10 sm:hidden";
 
 type WrappedStoryProps = { wrapped: Wrapped; onClose: () => void };
 
@@ -70,12 +71,14 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
   const [holding, setHolding] = useState(false);
   const hidden = usePageHidden();
   const rootRef = useRef<HTMLElement>(null);
+  const { colorOf } = useGroupPeople(wrapped.group.id);
 
   const index = Math.min(position.index, slides.length - 1);
   const slide = slides[index]!;
   const isFirst = index === 0;
   const isLast = index === slides.length - 1;
   const paused = userPaused || holding || hidden;
+  const tone = slideTone(slide, colorOf);
 
   function goTo(target: number) {
     if (target < 0 || target >= slides.length || target === index) return;
@@ -133,7 +136,7 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
   const label = `${wrapped.group.name}: ${wrapped.year} Wrapped`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center gap-6 bg-black sm:bg-ink-950 sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center gap-6 bg-bg sm:p-4">
       <button type="button" onClick={previous} disabled={isFirst} aria-label="Previous slide" className={sideButton}>
         <ChevronLeftIcon className="size-6" />
       </button>
@@ -143,7 +146,7 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
         tabIndex={-1}
         aria-roledescription="story"
         aria-label={label}
-        className={`@container relative size-full touch-none overflow-hidden outline-none select-none [-webkit-touch-callout:none] sm:aspect-9/16 sm:h-[min(100%,52rem)] sm:w-auto sm:rounded-3xl sm:shadow-2xl sm:shadow-black/60 ${
+        className={`@container relative size-full touch-none overflow-hidden outline-none select-none [-webkit-touch-callout:none] sm:aspect-9/16 sm:h-[min(100%,52rem)] sm:w-auto sm:rounded-[2rem] sm:shadow-[0_0_0_1px_var(--line)] ${
           // Pausing also freezes the looping decorations (entrances still play, or a slide
           // you step to while paused would stay invisible).
           paused ? "[&_.animate-float-up]:[animation-play-state:paused] [&_.animate-pan]:[animation-play-state:paused]" : ""
@@ -178,7 +181,7 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
           })}
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 bg-linear-to-b from-black/40 to-transparent px-3 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-8">
+        <div className="pointer-events-none absolute inset-x-0 top-0 px-3 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-4 transition-colors duration-300" style={{ color: tone.ink }}>
           <StoryProgress
             count={slides.length}
             index={index}
@@ -189,12 +192,10 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
               if (!isLast) next();
             }}
           />
-          <div className="mt-2 flex items-center gap-1 text-ink-50 [text-shadow:0_1px_4px_rgb(0_0_0/0.4)]">
-            <span aria-hidden className="text-lg">
-              {wrapped.group.emoji}
-            </span>
-            <span className="ml-1 min-w-0 flex-1 truncate text-sm font-semibold">
-              {wrapped.group.name} · {wrapped.year}
+          <div className="mt-2 flex items-center gap-2">
+            <GroupAvatar group={wrapped.group} size={28} />
+            <span className="min-w-0 flex-1 truncate text-[0.9375rem]">
+              <span className="font-semibold">{wrapped.group.name}</span> {wrapped.year}
             </span>
             <button
               type="button"

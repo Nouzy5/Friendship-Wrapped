@@ -5,6 +5,7 @@ import { ConfirmDialog } from "../../../components/ui/ConfirmDialog";
 import { LoadMore } from "../../../components/ui/LoadMore";
 import { Spinner } from "../../../components/ui/Spinner";
 import { getFormError } from "../../../lib/form-errors";
+import { useGroupPeople } from "../../groups/hooks";
 import type { Photo } from "../../photos/types";
 import { useComments, useDeleteComment } from "../hooks";
 import type { Comment } from "../types";
@@ -20,6 +21,7 @@ type CommentsSectionProps = { photo: Pick<Photo, "id" | "groupId" | "commentCoun
 export function CommentsSection({ photo }: CommentsSectionProps) {
   const comments = useComments(photo.id);
   const remove = useDeleteComment(photo);
+  const { colorOf } = useGroupPeople(photo.groupId);
   const [toDelete, setToDelete] = useState<Comment | null>(null);
   const ref = useRef<HTMLElement>(null);
   const { hash } = useLocation();
@@ -44,20 +46,20 @@ export function CommentsSection({ photo }: CommentsSectionProps) {
   } else if (comments.isLoadingError) {
     list = (
       <div className="flex flex-col items-start gap-3">
-        <p className="text-sm text-ink-400">Couldn't load comments.</p>
+        <p className="text-sm text-sub">Couldn't load comments.</p>
         <Button variant="secondary" onClick={() => void comments.refetch()}>
           Try again
         </Button>
       </div>
     );
   } else if (comments.data.length === 0) {
-    list = <p className="text-sm text-ink-400">No comments yet.</p>;
+    list = <p className="text-[0.9375rem] text-sub">No comments yet. Say something nice.</p>;
   } else {
     list = (
       <>
         <ul className="flex flex-col gap-4">
           {comments.data.map((comment) => (
-            <CommentItem key={comment.id} comment={comment} onDelete={setToDelete} />
+            <CommentItem key={comment.id} comment={comment} color={colorOf(comment.author.id)} onDelete={setToDelete} />
           ))}
         </ul>
         <LoadMore
@@ -78,14 +80,14 @@ export function CommentsSection({ photo }: CommentsSectionProps) {
       aria-labelledby="comments-heading"
       className="flex scroll-mt-20 flex-col gap-4"
     >
-      <h2 id="comments-heading" className="text-sm font-semibold tracking-wide text-ink-200 uppercase">
-        Comments{photo.commentCount > 0 && <span className="text-ink-400"> · {photo.commentCount}</span>}
+      <h2 id="comments-heading" className="text-xl font-semibold font-stretch-112%">
+        Comments{photo.commentCount > 0 && <span className="font-normal text-sub"> {photo.commentCount}</span>}
       </h2>
       {list}
       {photo.canInteract ? (
         <CommentComposer photo={photo} />
       ) : (
-        <p className="text-sm text-ink-400">You've left this group, so you can't comment any more.</p>
+        <p className="text-sm text-sub">You've left this group, so you can't comment any more.</p>
       )}
 
       <ConfirmDialog

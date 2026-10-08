@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { PlayIcon } from "../../../components/ui/icons";
+import { GroupAvatar } from "../../groups/components/GroupAvatar";
 import { fromListState, wrappedPath } from "../links";
 import type { WrappedSummary } from "../types";
 
@@ -10,18 +11,14 @@ export function WrappedCard({ wrapped: { group, year, final } }: { wrapped: Wrap
       to={wrappedPath(year, group.id)}
       state={fromListState}
       aria-label={`Play ${group.name}: ${year} Wrapped${final ? "" : " so far"}`}
-      className="flex items-center gap-4 rounded-3xl bg-linear-to-br from-brand-rose via-brand-orange to-brand-gold p-4 text-ink-950 shadow-xl shadow-brand-rose/20 transition hover:brightness-105 active:scale-[0.99]"
+      className="group flex items-center gap-4 rounded-3xl bg-surface p-3 pr-4 transition hover:bg-line active:scale-[0.98]"
     >
-      <span aria-hidden className="grid size-14 shrink-0 place-items-center rounded-2xl bg-white/30 text-3xl">
-        {group.emoji}
-      </span>
+      <GroupAvatar group={group} size={60} />
       <span className="min-w-0 flex-1">
-        <span className="block text-xs font-bold tracking-[0.2em] uppercase opacity-75">
-          {final ? `${year} Wrapped` : `${year} so far`}
-        </span>
-        <span className="block truncate text-xl font-black">{group.name}</span>
+        <span className="block truncate text-xl font-semibold font-stretch-112%">{group.name}</span>
+        <span className="block text-sm text-sub">{final ? `${year} Wrapped` : `${year} so far`}</span>
       </span>
-      <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-full bg-ink-950 text-ink-50">
+      <span aria-hidden className="grid size-11 shrink-0 place-items-center rounded-full bg-inverse text-on-inverse transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] group-hover:scale-110">
         <PlayIcon className="size-5" />
       </span>
     </Link>

@@ -5,22 +5,31 @@ export const REACTION_TYPES = Object.values(ReactionType);
 
 export type ReactionCounts = Record<ReactionType, number>;
 
-/** How a photo has been reacted to, as one viewer sees it. */
+/** Who reacted, and how: enough for clients to colour-code reactions by member. */
+export type Reactor = { userId: string; type: ReactionType };
+
+/**
+ * How a photo has been reacted to, as one viewer sees it. Reactions from people the viewer
+ * blocked, or who blocked them, are left out of everything here.
+ */
 export type ReactionSummary = {
   /** Every type is present, zero included. */
   counts: ReactionCounts;
   total: number;
   /** The viewer's own reaction. */
   mine: ReactionType | null;
+  /** First reaction first. */
+  reactors: Reactor[];
 };
 
 export function emptyCounts(): ReactionCounts {
   return Object.fromEntries(REACTION_TYPES.map((type) => [type, 0])) as ReactionCounts;
 }
 
-export function toReactionSummary(counts: ReactionCounts | undefined, mine: ReactionType | null): ReactionSummary {
-  const all = counts ?? emptyCounts();
-  return { counts: all, total: REACTION_TYPES.reduce((sum, type) => sum + all[type], 0), mine };
+export function toReactionSummary(reactors: Reactor[] | undefined, mine: ReactionType | null): ReactionSummary {
+  const counts = emptyCounts();
+  for (const { type } of reactors ?? []) counts[type] += 1;
+  return { counts, total: reactors?.length ?? 0, mine, reactors: reactors ?? [] };
 }
 
 export const reactionEntrySelect = {

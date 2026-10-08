@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MemberColor } from "../../generated/prisma/client.js";
 import { idSchema } from "../../lib/ids.js";
 import { hasVisibleCharacter, SINGLE_LINE_NAME_PATTERN } from "../../lib/user-text.js";
 
@@ -38,8 +39,19 @@ export const updateGroupSchema = z
     message: "Nothing to update",
   });
 
+/** PATCH /groups/:groupId/members/me — your own colour and whether the group is muted. */
+export const updateMyMembershipSchema = z
+  .object({
+    color: z.enum(MemberColor, { error: "Choose one of the colours" }).optional(),
+    muted: z.boolean().optional(),
+  })
+  .refine((input) => input.color !== undefined || input.muted !== undefined, {
+    message: "Nothing to update",
+  });
+
 export const groupParamsSchema = z.object({ groupId: idSchema });
 export const memberParamsSchema = z.object({ groupId: idSchema, userId: idSchema });
 
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;
+export type UpdateMyMembershipInput = z.infer<typeof updateMyMembershipSchema>;

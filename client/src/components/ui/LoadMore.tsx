@@ -26,7 +26,7 @@ export function LoadMore({ hasMore, isLoading, isError, onLoadMore, label, endMe
   if (isError && !isLoading) {
     return (
       <div className="flex flex-col items-center gap-3 py-6 text-center">
-        <p className="text-sm text-ink-400">Couldn't load more. Check your connection.</p>
+        <p className="text-sm text-sub">Couldn't load more. Check your connection.</p>
         <Button variant="secondary" onClick={onLoadMore}>
           Try again
         </Button>
@@ -35,7 +35,7 @@ export function LoadMore({ hasMore, isLoading, isError, onLoadMore, label, endMe
   }
 
   if (!hasMore) {
-    return endMessage ? <p className="py-6 text-center text-sm text-ink-400">{endMessage}</p> : null;
+    return endMessage ? <p className="py-6 text-center text-sm text-sub">{endMessage}</p> : null;
   }
 
   return (

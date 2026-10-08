@@ -1,67 +1,69 @@
 import { useState } from "react";
+import { memberFill } from "../../lib/member-colors";
+import type { MemberColor } from "../../lib/member-colors";
 
-type AvatarSize = "sm" | "md" | "lg" | "xl";
+type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl";
 
 const sizeClasses: Record<AvatarSize, string> = {
-  sm: "size-8 text-xs",
-  md: "size-10 text-sm",
-  lg: "size-16 text-xl",
-  xl: "size-24 text-3xl",
+  xs: "size-6 text-[0.6875rem]",
+  sm: "size-8 text-[0.9375rem]",
+  md: "size-10 text-base",
+  lg: "size-16 text-[1.75rem]",
+  xl: "size-22 text-[2.375rem]",
 };
 
-const gradients = [
-  "from-brand-rose to-brand-orange",
-  "from-brand-orange to-brand-gold",
-  "from-violet-500 to-brand-rose",
-  "from-sky-500 to-violet-500",
-  "from-emerald-400 to-sky-500",
-  "from-brand-gold to-emerald-400",
-];
+/** The ring around a photo avatar, in the person's colour. */
+const ringClasses: Record<AvatarSize, string> = {
+  xs: "ring-[1.5px]",
+  sm: "ring-2",
+  md: "ring-2",
+  lg: "ring-3",
+  xl: "ring-4",
+};
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
 /** The first user-perceived character, so an emoji like 👩🏽‍🚀 or 🇸🇰 isn't cut in half. */
-function firstCharacter(word: string): string {
-  return graphemes.segment(word)[Symbol.iterator]().next().value?.segment ?? "";
-}
-
-function initialsOf(name: string): string {
-  const words = name.trim().split(/\s+/).filter(Boolean);
-  const first = firstCharacter(words[0] ?? "") || "?";
-  const last = words.length > 1 ? firstCharacter(words.at(-1)!) : "";
-  return (first + last).toUpperCase();
-}
-
-/** Stable per user, so each friend keeps the same colour everywhere. */
-function gradientFor(seed: string): string {
-  let hash = 0;
-  for (const char of seed) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return gradients[hash % gradients.length]!;
+function initialOf(name: string): string {
+  const first = graphemes.segment(name.trim())[Symbol.iterator]().next().value?.segment;
+  return (first ?? "?").toUpperCase();
 }
 
 type AvatarProps = {
   name: string;
-  /** Usually the user id. */
-  seed: string;
-  /** Profile picture URL; falls back to initials when missing or broken. */
+  /** Profile picture URL; falls back to the initial when missing or broken. */
   src?: string | null;
+  /** Their colour in the group on screen. Without one (outside a group, or people who left) it's neutral. */
+  color?: MemberColor | null;
   size?: AvatarSize;
+  className?: string;
 };
 
-/** Profile picture or initials. Decorative: always render the person's name next to it or label its container. */
-export function Avatar({ name, seed, src, size = "md" }: AvatarProps) {
+/**
+ * A person: their initial on their colour, or their photo ringed in it.
+ * Decorative: always render the person's name next to it or label its container.
+ */
+export function Avatar({ name, src, color, size = "md", className = "" }: AvatarProps) {
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const showImage = src && src !== failedSrc;
+  const fill = memberFill(color);
 
   return (
     <span
       aria-hidden
-      className={`inline-grid shrink-0 place-items-center overflow-hidden rounded-full bg-linear-to-br font-bold text-ink-950 select-none ${sizeClasses[size]} ${gradientFor(seed)}`}
+      style={
+        showImage
+          ? { ["--tw-ring-color" as string]: color ? fill.background : "transparent" }
+          : { backgroundColor: fill.background, color: fill.ink }
+      }
+      className={`inline-grid shrink-0 place-items-center overflow-hidden rounded-full font-semibold transition-colors duration-500 select-none ${sizeClasses[size]} ${
+        showImage && color ? `${ringClasses[size]} ring-offset-0` : ""
+      } ${className}`}
     >
       {showImage ? (
         <img src={src} alt="" loading="lazy" decoding="async" className="size-full object-cover" onError={() => setFailedSrc(src)} />
       ) : (
-        initialsOf(name)
+        initialOf(name)
       )}
     </span>
   );

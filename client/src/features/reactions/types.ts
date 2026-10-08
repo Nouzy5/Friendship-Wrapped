@@ -9,6 +9,8 @@ export type ReactionSummary = {
   total: number;
   /** Your own reaction. */
   mine: ReactionType | null;
+  /** Who reacted with what, oldest first (one reaction per person). */
+  reactors: { userId: string; type: ReactionType }[];
 };
 
 /** One person's reaction, for "who reacted". */

@@ -97,6 +97,30 @@ final class APIClient {
         return try await execute(request)
     }
 
+    /// Downloads a file the API serves (your photo archive) to a temporary file with this name,
+    /// for sharing or saving to Files.
+    func downloadFile(_ path: String, named filename: String) async throws -> URL {
+        var request = try makeRequest(.get, url: apiURL(path))
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 600
+        let result: (URL, URLResponse)
+        do {
+            result = try await session.download(for: request)
+        } catch {
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled { throw CancellationError() }
+            throw APIError.network
+        }
+        let (location, response) = result
+        guard let http = response as? HTTPURLResponse else { throw APIError.network }
+        guard (200..<300).contains(http.statusCode) else {
+            throw makeError(status: http.statusCode, data: (try? Data(contentsOf: location)) ?? Data())
+        }
+        let destination = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.moveItem(at: location, to: destination)
+        return destination
+    }
+
     /// Forgets the session token on this device.
     func clearSession() {
         tokens.clear()

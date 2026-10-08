@@ -10,10 +10,11 @@ import * as wrappedRepository from "./wrapped.repository.js";
 
 /**
  * Bumped when YearNumbers changes shape or how it's counted: saved Wrappeds in an older
- * format are counted again.
+ * format are counted again (and saved again).
  * - 2: days start at the right moment where clocks skip midnight (Chile, Cuba, the Azores).
+ * - 3: the busiest month's people and each photographer's best photo.
  */
-const FORMAT_VERSION = 2;
+const FORMAT_VERSION = 3;
 
 type SavedNumbers = YearNumbers & { version: number };
 

@@ -4,12 +4,14 @@ import { logger } from "../../lib/logger.js";
 import { toPage, type Cursor } from "../../lib/pagination.js";
 import { withTransaction } from "../../lib/prisma.js";
 import * as storage from "../../lib/storage.js";
-import { dayRangeIn, isRealDate, todayIn, type CalendarDate } from "../../lib/time-zone.js";
+import { dayRangeIn, isoDate, isRealDate, todayIn } from "../../lib/time-zone.js";
 import { getGroup, isMember, requireMembership } from "../groups/groups.service.js";
 import * as commentsRepository from "../comments/comments.repository.js";
+import * as notifications from "../notifications/notifications.service.js";
 import * as reactionsRepository from "../reactions/reactions.repository.js";
 import { newPhotoKeys } from "./photo-keys.js";
 import {
+  canSavePhoto,
   toPhotoDetailView,
   toPhotoView,
   type PhotoDetailView,
@@ -22,21 +24,27 @@ import type { ListPhotosQuery, OnThisDayQuery } from "./photos.schemas.js";
 
 const VARIANTS = Object.keys(PHOTO_VARIANTS) as PhotoVariant[];
 
-/** Reaction and comment counts for a set of photos: one grouped query each, on indexed photo_id. */
-async function loadCounts(photoIds: string[]) {
-  const [reactions, comments] = await Promise.all([
-    reactionsRepository.countByPhoto(photoIds),
-    commentsRepository.countByPhoto(photoIds),
+/**
+ * Who reacted and how many comments, for a set of photos as the viewer sees them: one query
+ * each, on indexed photo_id.
+ */
+async function loadCounts(photoIds: string[], viewerId: string) {
+  const [reactors, comments] = await Promise.all([
+    reactionsRepository.listReactorsByPhoto(photoIds, viewerId),
+    commentsRepository.countByPhoto(photoIds, viewerId),
   ]);
-  return (photoId: string): Pick<ViewContext, "reactionCounts" | "commentCount"> => ({
-    reactionCounts: reactions.get(photoId),
+  return (photoId: string): Pick<ViewContext, "reactors" | "commentCount"> => ({
+    reactors: reactors.get(photoId),
     commentCount: comments.get(photoId) ?? 0,
   });
 }
 
 /** Views for photos listed to a member (so they can join in). */
 async function toViews(rows: PhotoRow[], viewerId: string): Promise<PhotoView[]> {
-  const countsOf = await loadCounts(rows.map((photo) => photo.id));
+  const countsOf = await loadCounts(
+    rows.map((photo) => photo.id),
+    viewerId,
+  );
   return rows.map((photo) => toPhotoView(photo, { viewerId, canInteract: true, ...countsOf(photo.id) }));
 }
 
@@ -91,24 +99,26 @@ export async function createPhoto(
       );
     });
 
-    return toPhotoView(photo, { viewerId: uploaderId, canInteract: true, reactionCounts: undefined, commentCount: 0 });
+    notifications.photoPosted(photo.id, groupId, uploaderId);
+    return toPhotoView(photo, { viewerId: uploaderId, canInteract: true, reactors: undefined, commentCount: 0 });
   } catch (error) {
     await storage.discardObjects(Object.values(keys));
     throw error;
   }
 }
 
-/** Newest first: the feed, the timeline (optionally from a given point) and your favorites. */
+/** Newest first: the feed, the timeline (optionally from a given point), your favorites, and one person's photos. */
 export async function listGroupPhotos(
   groupId: string,
   viewerId: string,
-  { cursor, limit, before, favorites }: ListPhotosQuery,
+  { cursor, limit, before, favorites, uploaderId }: ListPhotosQuery,
 ): Promise<PhotoPage> {
   await requireMembership(groupId, viewerId);
   const rows = await photosRepository.listGroupPhotos(groupId, viewerId, {
     cursor,
     startBefore: before,
     onlyFavorites: favorites,
+    uploaderId,
     take: limit + 1,
   });
   return toPageOfViews(rows, limit, viewerId);
@@ -137,9 +147,6 @@ export async function listAlbumPhotos(
 
 /** At most this many photos from each earlier year, so one busy year can't crowd out the rest. */
 const ON_THIS_DAY_PER_YEAR = 50;
-
-const isoDate = ({ year, month, day }: CalendarDate) =>
-  [String(year).padStart(4, "0"), String(month).padStart(2, "0"), String(day).padStart(2, "0")].join("-");
 
 /**
  * Photos from the same calendar day in earlier years, newest year first. Days are the
@@ -185,8 +192,8 @@ export async function getPhoto(photoId: string, viewerId: string): Promise<Photo
   // Only members browse the group feed and join in; an uploader who has left just sees their own photo.
   const member = await isMember(photo.groupId, viewerId);
   const [feed, countsOf] = await Promise.all([
-    member ? photosRepository.findFeedNeighbors(photo) : null,
-    loadCounts([photo.id]),
+    member ? photosRepository.findFeedNeighbors(photo, viewerId) : null,
+    loadCounts([photo.id], viewerId),
   ]);
   return toPhotoDetailView(photo, { viewerId, canInteract: member, ...countsOf(photo.id) }, feed);
 }
@@ -212,13 +219,21 @@ export async function requireMemberAccess(photoId: string, userId: string) {
   return photo;
 }
 
+/**
+ * A rendition of a photo. As a download (an attachment named after the day it was posted),
+ * only for viewers who may save it: 403 when the uploader turned saving off.
+ */
 export async function getPhotoImage(
   photoId: string,
   viewerId: string,
   variant: PhotoVariant,
-): Promise<storage.StoredObject> {
+  { download }: { download: boolean } = { download: false },
+): Promise<{ image: storage.StoredObject; downloadName: string | undefined }> {
   const photo = await photosRepository.findVisiblePhotoKeys(photoId, viewerId);
   if (!photo) throw notFound("Photo not found");
+  if (download && !canSavePhoto(photo.uploader, viewerId)) {
+    throw forbidden("The person who posted this photo doesn't allow saving it");
+  }
 
   const key = { full: photo.storageKey, medium: photo.mediumKey, thumbnail: photo.thumbnailKey }[variant];
   const image = await storage.getObject(key);
@@ -226,7 +241,8 @@ export async function getPhotoImage(
     logger.warn(`Photo ${photoId} has no stored ${variant} image (${key})`);
     throw notFound("Photo not found");
   }
-  return image;
+  const downloadName = download ? `friendship-wrapped-${photo.createdAt.toISOString().slice(0, 10)}.webp` : undefined;
+  return { image, downloadName };
 }
 
 export async function deletePhoto(photoId: string, userId: string): Promise<void> {

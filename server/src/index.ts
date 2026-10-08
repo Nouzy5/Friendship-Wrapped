@@ -4,6 +4,8 @@ import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { prisma } from "./lib/prisma.js";
 import { checkDatabase, checkStorage } from "./modules/health/health.service.js";
+import { startNotificationScheduler } from "./modules/notifications/notification-scheduler.js";
+import { settleNotifications } from "./modules/notifications/notifications.service.js";
 
 const app = createApp();
 
@@ -31,6 +33,9 @@ const server = app.listen(env.API_PORT, env.API_HOST, async (error) => {
   else logger.warn("Object storage is unreachable — check the S3_* settings and that MinIO is running");
 });
 
+// Queued (quiet-hours) notifications, On This Day and Wrapped announcements.
+const stopScheduler = startNotificationScheduler();
+
 let shuttingDown = false;
 
 async function shutdown(signal: string): Promise<void> {
@@ -39,6 +44,8 @@ async function shutdown(signal: string): Promise<void> {
   logger.info(`${signal} received, shutting down`);
 
   server.close();
+  stopScheduler();
+  await settleNotifications();
   await prisma.$disconnect();
   process.exit(0);
 }

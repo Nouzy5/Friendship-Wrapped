@@ -3,6 +3,7 @@ import { sendImage } from "../../lib/send-image.js";
 import { readImageUpload } from "../../lib/upload.js";
 import { currentUser } from "../auth/auth.middleware.js";
 import { clearSessionCookie } from "../auth/session-cookie.js";
+import { writePhotoArchive } from "../photos/photo-archive.js";
 import { deleteAccountSchema, updateProfileSchema, userParamsSchema } from "./users.schemas.js";
 import * as usersService from "./users.service.js";
 
@@ -29,6 +30,15 @@ export const uploadAvatar: RequestHandler = async (req, res) => {
 export const removeAvatar: RequestHandler = async (req, res) => {
   const user = await usersService.removeAvatar(currentUser(req).id);
   res.json({ user });
+};
+
+/** GET /users/me/photos/archive — a zip of every photo you posted, streamed as it's built. */
+export const downloadPhotoArchive: RequestHandler = async (req, res) => {
+  res.set({
+    "Content-Type": "application/zip",
+    "Content-Disposition": 'attachment; filename="friendship-wrapped-photos.zip"',
+  });
+  await writePhotoArchive(currentUser(req).id, res);
 };
 
 export const getAvatar: RequestHandler = async (req, res) => {
