@@ -4,7 +4,7 @@ A native SwiftUI app that does everything the web client does: phases 1–10 and
 
 ## Colour-coded
 
-The same design as the web app (README → "Redesign: Colour-coded"): black and white paper and ink, and one colour per friend. Colour only ever means a person; your own colour in the group you're looking at is your accent (the shutter, switches, your reaction). Type is Apple's rounded system font, which the web design names as Fredoka's fallback (Fredoka itself only ships here as web fonts).
+The same design as the web app ([technical reference](../docs/REFERENCE.md#redesign-colour-coded)): black and white paper and ink, and one colour per friend. Colour only ever means a person; your own colour in the group you're looking at is your accent (the shutter, switches, your reaction). Type is Apple's rounded system font, which the web design names as Fredoka's fallback (Fredoka itself only ships here as web fonts).
 
 | Web | iOS |
 | --- | --- |
