@@ -13,7 +13,7 @@ export function OnboardingPage() {
   return (
     <div className="flex flex-col gap-6 py-2">
       <div>
-        <h1 className="text-3xl font-black tracking-tight">Welcome, {firstName}! 🎉</h1>
+        <h1 className="text-3xl font-black tracking-tight wrap-anywhere">Welcome, {firstName}! 🎉</h1>
         <p className="mt-2 text-ink-200">
           Friendship Wrapped happens in private groups. Start one for your friends, and you'll get a link to invite
           them.

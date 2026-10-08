@@ -27,7 +27,9 @@ struct GroupDetailView: View {
                     }
                 }
             }
-            .task { await load() }
+            // Runs again whenever the screen reappears (back from a photo, the camera closing):
+            // only newer photos come in then, so the pages you scrolled through stay.
+            .task { await load(restartFeed: false) }
     }
 
     @ViewBuilder private var content: some View {
@@ -47,7 +49,7 @@ struct GroupDetailView: View {
                 .padding(.horizontal)
                 .padding(.bottom, 24)
             }
-            .refreshable { await load() }
+            .refreshable { await load(restartFeed: true) }
         } else if let failure {
             if failure.status == 404 || failure.status == 400 {
                 EmptyStateView(
@@ -64,7 +66,7 @@ struct GroupDetailView: View {
                     title: "Couldn't load this group",
                     message: "Check your connection and try again."
                 ) {
-                    Button("Try again") { Task { await load() } }
+                    Button("Try again") { Task { await load(restartFeed: true) } }
                         .buttonStyle(.borderedProminent)
                 }
             }
@@ -170,7 +172,7 @@ struct GroupDetailView: View {
                 title: "Couldn't load photos",
                 message: "Check your connection and try again."
             ) {
-                Button("Try again") { Task { await loadFeed() } }
+                Button("Try again") { Task { await loadFeed(restart: true) } }
                     .buttonStyle(.borderedProminent)
             }
         } else {
@@ -204,7 +206,8 @@ struct GroupDetailView: View {
         }
     }
 
-    private func load() async {
+    /// `restartFeed` loads the feed from its first page again (pull to refresh).
+    private func load(restartFeed: Bool) async {
         do {
             try await store.loadGroup(groupID)
             failure = nil
@@ -212,15 +215,21 @@ struct GroupDetailView: View {
             return
         } catch {
             failure = error.asAPIError
-            return
+            // Gone (404) drops the group from the store. Offline with it cached, the feed still
+            // gets its turn, so it shows "Try again" instead of a skeleton that never ends.
+            guard store.group(groupID) != nil else { return }
         }
         try? await store.loadMembers(of: groupID)
-        await loadFeed()
+        await loadFeed(restart: restartFeed)
     }
 
-    private func loadFeed() async {
+    private func loadFeed(restart: Bool) async {
         do {
-            try await photos.refreshFeed(in: groupID)
+            if restart || photos.feed(for: groupID) == nil {
+                try await photos.refreshFeed(in: groupID)
+            } else {
+                try await photos.refreshNewest(in: groupID)
+            }
             feedFailed = false
         } catch is CancellationError {
             return

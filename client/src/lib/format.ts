@@ -25,6 +25,12 @@ export function formatDateTime(isoDate: string): string {
   return dateTime.format(new Date(isoDate));
 }
 
+/** Calendar days from one instant's date to another's, here (DST days are 23 or 25 hours long). */
+function calendarDaysBetween(earlier: Date, later: Date): number {
+  const midnight = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  return Math.round((midnight(later) - midnight(earlier)) / DAY);
+}
+
 /** "now", "5 minutes ago", "yesterday", "3 days ago", then a date: "12 Oct" (or "12 Oct 2025" in another year). */
 export function formatRelativeTime(isoDate: string, now = new Date()): string {
   const date = new Date(isoDate);
@@ -33,7 +39,9 @@ export function formatRelativeTime(isoDate: string, now = new Date()): string {
   if (elapsed < MINUTE) return relative.format(0, "second");
   if (elapsed < HOUR) return relative.format(-Math.floor(elapsed / MINUTE), "minute");
   if (elapsed < DAY) return relative.format(-Math.floor(elapsed / HOUR), "hour");
-  if (elapsed < 7 * DAY) return relative.format(-Math.round(elapsed / DAY), "day");
+  // By the calendar: 23:00 the day before yesterday is "2 days ago" even if it was 26 hours ago.
+  const days = calendarDaysBetween(date, now);
+  if (days < 7) return relative.format(-days, "day");
   return (date.getFullYear() === now.getFullYear() ? dayMonth : dayMonthYear).format(date);
 }
 

@@ -73,8 +73,9 @@ struct PhotoDetailView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 if photo?.canInteract == true {
-                    CommentComposer(thread: thread) {
-                        photos.adjustCommentCount(of: thread.photoID, by: 1)
+                    // The photo is captured now: by the time the comment is saved you may have swiped on.
+                    CommentComposer(thread: thread) { [photoID = thread.photoID] in
+                        photos.adjustCommentCount(of: photoID, by: 1)
                     }
                     // A fresh, empty composer for each photo you step to.
                     .id(currentID)
@@ -143,8 +144,8 @@ struct PhotoDetailView: View {
                                 thread: thread,
                                 commentCount: photo.commentCount,
                                 canInteract: photo.canInteract
-                            ) { delta in
-                                photos.adjustCommentCount(of: thread.photoID, by: delta)
+                            ) { [photoID = thread.photoID] delta in
+                                photos.adjustCommentCount(of: photoID, by: delta)
                             }
                             .id("comments")
                         }

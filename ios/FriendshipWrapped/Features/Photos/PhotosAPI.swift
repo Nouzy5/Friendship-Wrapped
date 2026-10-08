@@ -24,8 +24,21 @@ extension APIClient {
     }
 
     /// Photos from today's date in earlier years. Days begin at midnight in your own time zone.
-    func fetchOnThisDay(_ groupID: String, timeZone: TimeZone = .current) async throws -> OnThisDay {
-        try await send(.get, "/groups/\(groupID.pathSegment)/photos/on-this-day?tz=\(timeZone.identifier.queryValue)")
+    /// Today is the phone's own date, so the photos match the date the card shows.
+    func fetchOnThisDay(_ groupID: String, timeZone: TimeZone = .current, today: Date = Date()) async throws -> OnThisDay {
+        let date = Self.calendarDay(today, in: timeZone)
+        return try await send(
+            .get,
+            "/groups/\(groupID.pathSegment)/photos/on-this-day?tz=\(timeZone.identifier.queryValue)&date=\(date)"
+        )
+    }
+
+    /// "2026-10-08": the date in `timeZone`, by the Gregorian calendar the server counts in.
+    private static func calendarDay(_ date: Date, in timeZone: TimeZone) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", parts.year ?? 1970, parts.month ?? 1, parts.day ?? 1)
     }
 
     /// 404 for photos you can't see, so their existence isn't revealed.

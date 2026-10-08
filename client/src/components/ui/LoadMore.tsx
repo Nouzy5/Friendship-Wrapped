@@ -22,7 +22,8 @@ type LoadMoreProps = {
 export function LoadMore({ hasMore, isLoading, isError, onLoadMore, label, endMessage }: LoadMoreProps) {
   const ref = useWhenVisible<HTMLDivElement>(onLoadMore, hasMore && !isLoading && !isError);
 
-  if (isError) {
+  // While "Try again" is loading the page, the last attempt's error is still reported.
+  if (isError && !isLoading) {
     return (
       <div className="flex flex-col items-center gap-3 py-6 text-center">
         <p className="text-sm text-ink-400">Couldn't load more. Check your connection.</p>

@@ -2,7 +2,7 @@ import { Link, Outlet, useOutletContext, useParams } from "react-router";
 import { Button, buttonClasses } from "../../../components/ui/Button";
 import { Spinner } from "../../../components/ui/Spinner";
 import { StateMessage } from "../../../components/ui/StateMessage";
-import { ApiError } from "../../../lib/api-client";
+import { isNotFoundError } from "../../../lib/api-client";
 import { useGroup } from "../hooks";
 import type { Group } from "../types";
 
@@ -22,9 +22,9 @@ export function GroupRoute() {
     );
   }
 
-  if (group.isLoadingError) {
-    const notFound = group.error instanceof ApiError && [400, 404].includes(group.error.status);
-    return notFound ? (
+  // A refetch that finds it gone (deleted, or you've been removed) counts too, even with the group cached.
+  if (group.isLoadingError || (group.isRefetchError && isNotFoundError(group.error))) {
+    return isNotFoundError(group.error) ? (
       <StateMessage
         headingLevel="h1"
         emoji="🔒"

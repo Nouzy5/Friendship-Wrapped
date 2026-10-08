@@ -17,3 +17,11 @@ export const logger = {
   warn: (message: string, meta?: unknown) => write("warn", message, meta),
   error: (message: string, meta?: unknown) => write("error", message, meta),
 };
+
+/**
+ * The request's URL for logs, with invite tokens hidden: an invite link is a credential,
+ * and only its hash is stored, so it mustn't end up in log files either.
+ */
+export function loggableUrl(req: { originalUrl: string }): string {
+  return req.originalUrl.replace(/(\/invites\/)[^/?#]+/, "$1…");
+}

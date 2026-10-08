@@ -5,7 +5,7 @@ import { Dialog } from "../../../components/ui/Dialog";
 import { CheckIcon } from "../../../components/ui/icons";
 import { LoadMore } from "../../../components/ui/LoadMore";
 import { Spinner } from "../../../components/ui/Spinner";
-import { getFormError } from "../../../lib/form-errors";
+import { getFieldErrors, getFormError } from "../../../lib/form-errors";
 import { PhotoImage, photoAlt } from "../../photos/components/PhotoImage";
 import { useGroupFeed } from "../../photos/hooks";
 import type { Photo } from "../../photos/types";
@@ -13,6 +13,9 @@ import { useAddToAlbum } from "../hooks";
 import type { Album } from "../types";
 
 type AlbumPhotoPickerProps = { album: Album; open: boolean; onClose: () => void };
+
+/** The most photos the server adds in one go. */
+const MAX_PHOTOS_PER_ADD = 100;
 
 /** Pick photos from the group (newest first) to add to an album. */
 export function AlbumPhotoPicker({ album, open, onClose }: AlbumPhotoPickerProps) {
@@ -32,7 +35,7 @@ function Picker({ album, onClose }: { album: Album; onClose: () => void }) {
   function toggle(photoId: string) {
     setSelected((current) => {
       const next = new Set(current);
-      if (!next.delete(photoId)) next.add(photoId);
+      if (!next.delete(photoId) && next.size < MAX_PHOTOS_PER_ADD) next.add(photoId);
       return next;
     });
   }
@@ -72,11 +75,15 @@ function Picker({ album, onClose }: { album: Album; onClose: () => void }) {
   const count = selected.size;
   return (
     <>
-      <p className="mt-1 text-sm text-ink-400">Photos already in the album are skipped.</p>
+      <p className="mt-1 text-sm text-ink-400" role="status">
+        {count === MAX_PHOTOS_PER_ADD
+          ? `You can add up to ${MAX_PHOTOS_PER_ADD} photos at a time.`
+          : "Photos already in the album are skipped."}
+      </p>
       <div className="-mx-2 mt-4 min-h-0 flex-1 overflow-y-auto px-2">{content}</div>
       {add.isError && (
         <div className="mt-3">
-          <Alert>{getFormError(add.error)}</Alert>
+          <Alert>{getFieldErrors(add.error).photoIds ?? getFormError(add.error)}</Alert>
         </div>
       )}
       <div className="mt-4 flex gap-2">

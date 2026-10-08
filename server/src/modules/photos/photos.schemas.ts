@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { idSchema } from "../../lib/ids.js";
 import { PHOTO_VARIANTS, type PhotoVariant } from "../../lib/images.js";
 import { pageQuerySchema } from "../../lib/pagination.js";
 import { isRealDate, isValidTimeZone, type CalendarDate } from "../../lib/time-zone.js";
@@ -14,12 +15,12 @@ export const createPhotoSchema = z.object({
   caption: captionSchema.optional(),
 });
 
-export const photoParamsSchema = z.object({ photoId: z.uuid() });
+export const photoParamsSchema = z.object({ photoId: idSchema });
 
 const variants = Object.keys(PHOTO_VARIANTS) as [PhotoVariant, ...PhotoVariant[]];
 
 export const photoImageParamsSchema = z.object({
-  photoId: z.uuid(),
+  photoId: idSchema,
   variant: z.enum(variants),
 });
 

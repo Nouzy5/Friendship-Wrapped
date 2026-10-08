@@ -282,7 +282,7 @@ function MostReactedPhotoSlide({ photo, count }: { photo: Photo; count: number }
             ))}
           </span>
         )}
-        <span className="mt-2 block text-sm opacity-70">
+        <span className="mt-2 block text-sm wrap-anywhere opacity-70">
           by {photo.uploader.displayName} · {formatDayMonth(photo.createdAt)}
         </span>
       </Rise>

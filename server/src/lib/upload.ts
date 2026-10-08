@@ -24,7 +24,8 @@ export type ImageUpload = {
 function toUploadError(error: unknown, field: string): AppError {
   if (error instanceof multer.MulterError) {
     if (error.code === "LIMIT_FILE_SIZE") {
-      return new AppError(413, "FILE_TOO_LARGE", `Photos can be at most ${MAX_UPLOAD_MB} MB`);
+      const what = field === "avatar" ? "Pictures" : "Photos";
+      return new AppError(413, "FILE_TOO_LARGE", `${what} can be at most ${MAX_UPLOAD_MB} MB`);
     }
     if (error.code === "LIMIT_UNEXPECTED_FILE" || error.code === "LIMIT_FILE_COUNT") {
       return badRequest(`Upload exactly one image, in the “${field}” field`);

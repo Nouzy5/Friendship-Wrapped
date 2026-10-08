@@ -113,6 +113,16 @@ describe("POST /api/auth/login", () => {
     expect(sessionSetCookie(res)).toBeDefined();
   });
 
+  it("doesn't let spellings MySQL treats as the same name sign in", async () => {
+    // The database's collation ignores accents, so "álice" would otherwise find "alice"
+    // (and get its own allowance of attempts from the rate limiter).
+    for (const username of ["álice", "a\u0301lice", "alicé"]) {
+      const res = await request(app).post("/api/auth/login").send({ username, password: testUser.password });
+      expect(res.status).toBe(401);
+      expect(res.body.error.code).toBe("INVALID_CREDENTIALS");
+    }
+  });
+
   it("gives wrong passwords and unknown usernames the same response", async () => {
     const wrongPassword = await request(app)
       .post("/api/auth/login")

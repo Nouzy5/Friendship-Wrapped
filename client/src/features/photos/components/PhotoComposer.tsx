@@ -85,7 +85,7 @@ export function PhotoComposer({ image, groups, initialGroupId, discardLabel, onD
       {onlyGroup ? (
         <p className="flex items-center gap-3 text-sm text-ink-200">
           <GroupEmoji emoji={onlyGroup.emoji} />
-          <span>
+          <span className="min-w-0 wrap-anywhere">
             Sharing with <strong className="text-ink-50">{onlyGroup.name}</strong>
           </span>
         </p>

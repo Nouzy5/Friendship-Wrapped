@@ -101,6 +101,9 @@ describe("uploading", () => {
     expect([small.width, small.height]).toEqual([300, 200]);
     const medium = await getImage(owner.agent, small.imageUrls.medium);
     expect(await imageInfo(medium.body)).toMatchObject({ width: 300, height: 200 });
+    // Thumbnails stay square: the short side, not 480, when the photo is smaller.
+    const thumbnail = await getImage(owner.agent, small.imageUrls.thumbnail);
+    expect(await imageInfo(thumbnail.body)).toMatchObject({ width: 200, height: 200 });
   });
 
   it("applies EXIF orientation and strips all metadata (e.g. location) from stored images", async () => {

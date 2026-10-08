@@ -150,7 +150,7 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
 
       <PhotoAttribution photo={photo} group={photo.feed ? photo.group : undefined} exactTime />
 
-      {photo.caption && <p className="break-words whitespace-pre-line text-ink-50">{photo.caption}</p>}
+      {photo.caption && <p dir="auto" className="break-words whitespace-pre-line text-ink-50">{photo.caption}</p>}
 
       <div className="flex flex-col items-start gap-2">
         <ReactionBar photo={photo} />

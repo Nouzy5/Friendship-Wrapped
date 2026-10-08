@@ -103,8 +103,9 @@ function LeaveGroupCard({ group }: { group: Group }) {
         onClose={() => setConfirming(false)}
         onConfirm={() =>
           leaveGroup.mutate(undefined, {
-            onSuccess: () => {
-              toast(group.memberCount === 1 ? `${group.name} was deleted` : `You left ${group.name}`);
+            // The server says what happened: the member count shown may be out of date.
+            onSuccess: ({ groupDeleted }) => {
+              toast(groupDeleted ? `${group.name} was deleted` : `You left ${group.name}`);
               void navigate("/home", { replace: true });
             },
           })

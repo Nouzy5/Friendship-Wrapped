@@ -19,7 +19,7 @@ type AlbumNameDialogProps = {
 /** Asks for an album's name, to create or rename it. */
 export function AlbumNameDialog(props: AlbumNameDialogProps) {
   return (
-    <Dialog open={props.open} onClose={props.onClose} title={props.title}>
+    <Dialog open={props.open} onClose={props.onClose} title={props.title} busy={props.isPending}>
       {/* Mounted per opening, so the field starts from the current name each time. */}
       <AlbumNameForm {...props} />
     </Dialog>
