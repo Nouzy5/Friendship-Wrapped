@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { patchCachedPhoto, photoKeys } from "../photos/cache";
+import { cancelPhotoQueries, patchCachedPhoto, photoKeys } from "../photos/cache";
 import type { Photo } from "../photos/types";
 import { setFavorite } from "./api";
 
@@ -14,7 +14,8 @@ export function useFavorite(photo: Pick<Photo, "id" | "groupId">) {
     scope: { id: `favorite:${photo.id}` },
     meta: { errorToast: "Couldn't update your favorites." },
     mutationFn: (favorite: boolean) => setFavorite(photo.id, favorite),
-    onMutate: (favorite) => {
+    onMutate: async (favorite) => {
+      await cancelPhotoQueries(queryClient, photo);
       patchCachedPhoto(queryClient, photo, () => ({ isFavorite: favorite }));
     },
     onSuccess: (isFavorite) => {

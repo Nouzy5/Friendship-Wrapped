@@ -10,7 +10,14 @@ final class PhotoListModel {
         case loading, loaded, failed
     }
 
-    private(set) var photos: [Photo] = []
+    /// What's been loaded, minus photos deleted since (the store knows which), so a photo
+    /// deleted from the viewer doesn't linger in the timeline, an album or favorites.
+    var photos: [Photo] {
+        guard let deleted = store?.deletedPhotoIDs, !deleted.isEmpty else { return loaded }
+        return loaded.filter { !deleted.contains($0.id) }
+    }
+
+    private var loaded: [Photo] = []
     private(set) var nextCursor: String?
     private(set) var phase: Phase = .loading
     private(set) var isLoadingMore = false
@@ -29,16 +36,16 @@ final class PhotoListModel {
 
     /// Loads the first page again, replacing what was there.
     func reload() async {
-        if photos.isEmpty { phase = .loading }
+        if loaded.isEmpty { phase = .loading }
         do {
             let page = try await fetch(nil)
-            photos = page.photos
+            loaded = page.photos
             nextCursor = page.nextCursor
             phase = .loaded
             store?.remember(page.photos)
         } catch {
             // Keep showing what's already loaded when a refresh fails.
-            if photos.isEmpty { phase = .failed }
+            if loaded.isEmpty { phase = .failed }
         }
     }
 
@@ -48,8 +55,8 @@ final class PhotoListModel {
         loadMoreFailed = false
         do {
             let page = try await fetch(cursor)
-            let known = Set(photos.map(\.id))
-            photos.append(contentsOf: page.photos.filter { !known.contains($0.id) })
+            let known = Set(loaded.map(\.id))
+            loaded.append(contentsOf: page.photos.filter { !known.contains($0.id) })
             nextCursor = page.nextCursor
             store?.remember(page.photos)
         } catch {

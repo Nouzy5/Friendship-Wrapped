@@ -26,7 +26,7 @@ export function DeleteAccountDialog({ open, onClose }: { open: boolean; onClose:
   }
 
   return (
-    <Dialog open={open} onClose={close} title="Delete your account?">
+    <Dialog open={open} onClose={close} title="Delete your account?" busy={remove.isPending}>
       <form noValidate onSubmit={handleSubmit} className="mt-2 flex min-h-0 flex-col gap-4 overflow-y-auto text-sm text-sub">
         <p>This can't be undone. It permanently deletes:</p>
         <ul className="-mt-2 list-disc space-y-1 pl-5">

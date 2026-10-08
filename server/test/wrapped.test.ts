@@ -229,7 +229,31 @@ describe("a group's Wrapped", () => {
     await prisma.wrapped.updateMany({ data: { stats: { version: 0 } } });
     const { wrapped } = (await wrappedOf(owner.agent, group.id, 2025)).body;
     expect(slide(wrapped, "photos").total).toBe(1);
-    expect((await prisma.wrapped.findFirstOrThrow()).stats).toMatchObject({ version: 2, photos: { total: 1 } });
+    expect((await prisma.wrapped.findFirstOrThrow()).stats).toMatchObject({ version: 3, photos: { total: 1 } });
+  });
+
+  it("leaves a Wrapped saved by a newer server alone", async () => {
+    const { owner, group } = await groupWith(app, "alice");
+    await photoAt(owner.agent, group.id, "2025-05-01T10:00:00Z");
+    expect((await wrappedOf(owner.agent, group.id, 2025)).status).toBe(200);
+
+    await prisma.wrapped.updateMany({ data: { stats: { version: 99 } } });
+    const { wrapped } = (await wrappedOf(owner.agent, group.id, 2025)).body;
+    expect(slide(wrapped, "photos").total).toBe(1);
+    expect((await prisma.wrapped.findFirstOrThrow()).stats).toEqual({ version: 99 });
+  });
+
+  it("keeps the first save when friends open a finished year at the same moment", async () => {
+    const { owner, members, group } = await groupWith(app, "alice", "bob");
+    await photoAt(owner.agent, group.id, "2025-05-01T10:00:00Z");
+
+    const opened = await Promise.all([owner.agent, members[0]!.agent, owner.agent].map((agent) => wrappedOf(agent, group.id, 2025)));
+    expect(opened.map((res) => res.status)).toEqual([200, 200, 200]);
+    expect(await prisma.wrapped.count()).toBe(1);
+
+    const saved = await prisma.wrapped.findFirstOrThrow();
+    const later = (await wrappedOf(owner.agent, group.id, 2025)).body.wrapped as Wrapped;
+    expect(later.generatedAt).toBe(saved.generatedAt.toISOString());
   });
 
   it("counts the year in progress live, without saving it", async () => {

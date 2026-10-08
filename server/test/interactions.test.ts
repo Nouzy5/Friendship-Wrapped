@@ -137,6 +137,16 @@ describe("reactions", () => {
     expect(changed.updatedAt.getTime()).toBeGreaterThanOrEqual(first.updatedAt.getTime());
   });
 
+  it("survives several first reactions at once (a double tap)", async () => {
+    const { owner, group } = await groupWith(app, "alice");
+    const photo = await uploadPhoto(owner.agent, group.id);
+
+    const responses = await Promise.all(["HEART", "FIRE", "CRY", "LAUGH"].map((type) => react(owner.agent, photo.id, type)));
+
+    expect(responses.map((res) => res.status)).toEqual([200, 200, 200, 200]);
+    expect(await prisma.reaction.count()).toBe(1);
+  });
+
   it("lists who reacted, and how", async () => {
     const { owner: alice, members, group } = await groupWith(app, "alice", "bob");
     const bob = members[0]!;
@@ -258,6 +268,16 @@ describe("favorites", () => {
       expect((await bob.agent.delete(`/api/photos/${photo.id}/favorite`)).body).toEqual({ isFavorite: false });
     }
     expect((await photoAs(bob.agent, photo.id)).isFavorite).toBe(false);
+  });
+
+  it("survives favoriting several times at once (a double tap)", async () => {
+    const { owner, group } = await groupWith(app, "alice");
+    const photo = await uploadPhoto(owner.agent, group.id);
+
+    const responses = await Promise.all([1, 2, 3, 4].map(() => owner.agent.put(`/api/photos/${photo.id}/favorite`)));
+
+    expect(responses.map((res) => res.status)).toEqual([200, 200, 200, 200]);
+    expect(await prisma.favorite.count()).toBe(1);
   });
 });
 

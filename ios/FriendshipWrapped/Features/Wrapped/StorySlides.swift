@@ -739,7 +739,19 @@ private func bigNumberFont(_ value: Int) -> Font {
 
 /// Month and day names, in the viewer's language.
 private enum StoryDate {
-    private static let formatter = DateFormatter()
+    /// The server's months and dates are Gregorian, whatever calendar the phone uses (Buddhist,
+    /// Hebrew, Islamic…): month 3 is March, and "2026-06-14" is a Sunday, everywhere.
+    private static let gregorian: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
+        return calendar
+    }()
+
+    private static let formatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = gregorian
+        return formatter
+    }()
 
     /// "March" for 3.
     static func monthName(_ month: Int) -> String {
@@ -756,9 +768,12 @@ private enum StoryDate {
         let parts = date.split(separator: "-").compactMap { Int($0) }
         guard
             parts.count == 3,
-            let day = Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12))
+            let day = gregorian.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2], hour: 12))
         else { return nil }
-        return day.formatted(.dateTime.weekday(.wide).day().month(.wide))
+        var style = Date.FormatStyle.dateTime.weekday(.wide).day().month(.wide)
+        style.calendar = gregorian
+        style.timeZone = gregorian.timeZone
+        return day.formatted(style)
     }
 
     private static func name(_ month: Int, in names: [String]?) -> String {

@@ -1,15 +1,24 @@
 import type { ReactionType } from "../../generated/prisma/client.js";
-import { prisma, type DbClient } from "../../lib/prisma.js";
+import { isUniqueConstraintError, prisma, type DbClient } from "../../lib/prisma.js";
 import { notBlockedWith } from "../blocks/blocks.repository.js";
 import { reactionEntrySelect, type Reactor } from "./reaction.dto.js";
 
 /** Adds the person's reaction, or changes it: there's at most one per person per photo. */
-export function upsertReaction(photoId: string, userId: string, type: ReactionType, db: DbClient = prisma) {
-  return db.reaction.upsert({
-    where: { photoId_userId: { photoId, userId } },
-    create: { photoId, userId, type },
-    update: { type },
-  });
+export async function upsertReaction(photoId: string, userId: string, type: ReactionType, db: DbClient = prisma) {
+  const upsert = () =>
+    db.reaction.upsert({
+      where: { photoId_userId: { photoId, userId } },
+      create: { photoId, userId, type },
+      update: { type },
+    });
+  try {
+    return await upsert();
+  } catch (error) {
+    // On MySQL, Prisma's upsert is a read then a write: when two first reactions race, the
+    // loser's insert hits the primary key. The row exists now, so trying again updates it.
+    if (!isUniqueConstraintError(error)) throw error;
+    return upsert();
+  }
 }
 
 /** deleteMany so removing a reaction that isn't there is a no-op. */

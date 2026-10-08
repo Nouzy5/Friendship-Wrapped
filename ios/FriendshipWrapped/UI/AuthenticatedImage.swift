@@ -33,19 +33,31 @@ struct AuthenticatedImage<Placeholder: View>: View {
     private let placeholder: Placeholder
 
     @State private var image: UIImage?
+    /// The path `image` was loaded from. The view can be handed a new path while keeping its
+    /// state (swiping to the next photo), and must never show the previous picture for it.
+    @State private var imagePath: String?
 
     init(path: String?, contentMode: ContentMode = .fill, @ViewBuilder placeholder: () -> Placeholder) {
         self.path = path
         self.contentMode = contentMode
         self.placeholder = placeholder()
         // Already-loaded images show straight away, with no placeholder flash while scrolling.
-        _image = State(initialValue: path.flatMap { ImageCache.shared.image(for: $0) })
+        let cached = path.flatMap { ImageCache.shared.image(for: $0) }
+        _image = State(initialValue: cached)
+        _imagePath = State(initialValue: cached == nil ? nil : path)
+    }
+
+    /// This path's picture: the one loaded, or straight from the cache (e.g. prefetched) so a
+    /// new path doesn't flash the placeholder.
+    private var shownImage: UIImage? {
+        if let image, imagePath == path { return image }
+        return path.flatMap { ImageCache.shared.image(for: $0) }
     }
 
     var body: some View {
         ZStack {
-            if let image {
-                Image(uiImage: image)
+            if let shownImage {
+                Image(uiImage: shownImage)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
             } else {
@@ -58,11 +70,14 @@ struct AuthenticatedImage<Placeholder: View>: View {
     private func load() async {
         guard let path else {
             image = nil
+            imagePath = nil
             return
         }
-        // On failure keep the placeholder (e.g. initials for a profile picture).
-        if let loaded = await ImageLoader.load(path) {
+        // On failure keep the placeholder (e.g. initials for a profile picture). A load for a
+        // path the view has since moved on from is dropped.
+        if let loaded = await ImageLoader.load(path), !Task.isCancelled {
             image = loaded
+            imagePath = path
         }
     }
 }

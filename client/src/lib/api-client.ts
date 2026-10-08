@@ -109,3 +109,8 @@ export function apiUpload<T>(path: string, form: FormData, onProgress?: (fractio
     request.send(form);
   });
 }
+
+/** True for a 404 (or a malformed id's 400): it's gone, or it was never yours to see. */
+export function isNotFoundError(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === 404 || error.status === 400);
+}

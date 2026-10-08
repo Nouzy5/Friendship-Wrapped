@@ -131,7 +131,7 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
           )}
         </p>
 
-        {photo.caption && <p className="text-base leading-snug break-words whitespace-pre-line">{photo.caption}</p>}
+        {photo.caption && <p dir="auto" className="text-base leading-snug break-words whitespace-pre-line">{photo.caption}</p>}
 
         <div className="flex flex-col items-start gap-1.5">
           <ReactionBar photo={photo} />

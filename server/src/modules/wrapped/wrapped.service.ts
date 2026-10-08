@@ -9,14 +9,24 @@ import { toSlides, type WrappedSummary, type WrappedView } from "./wrapped.dto.j
 import * as wrappedRepository from "./wrapped.repository.js";
 
 /**
- * Bumped when YearNumbers changes shape: saved Wrappeds in an older format are counted again
- * (and saved again). 2 added the busiest month's people and each photographer's best photo.
+ * Bumped when YearNumbers changes shape or how it's counted: saved Wrappeds in an older
+ * format are counted again (and saved again).
+ * - 2: days start at the right moment where clocks skip midnight (Chile, Cuba, the Azores).
+ * - 3: the busiest month's people and each photographer's best photo.
  */
-const FORMAT_VERSION = 2;
+const FORMAT_VERSION = 3;
 
 type SavedNumbers = YearNumbers & { version: number };
 
+/**
+ * How long after the year ends before it's saved: a photo taken at 23:59 that's still
+ * uploading at midnight (or a reaction on its way) still belongs in that year's story.
+ */
+const SAVE_AFTER_MS = 10 * 60 * 1000;
+
 const isFinal = (year: number, timeZone: string, now: Date) => yearRangeIn(year, timeZone).to <= now;
+const canSave = (year: number, timeZone: string, now: Date) =>
+  yearRangeIn(year, timeZone).to.getTime() + SAVE_AFTER_MS <= now.getTime();
 
 /**
  * Every Wrapped the user can open: one for each of their groups and each year (in their
@@ -69,14 +79,19 @@ export async function getWrapped(
   const final = isFinal(year, tz, now);
 
   const saved = final ? await wrappedRepository.findWrapped(key) : null;
+  const savedVersion = saved ? (saved.stats as SavedNumbers).version : null;
   let numbers: YearNumbers;
   let generatedAt = now;
-  if (saved && (saved.stats as SavedNumbers).version === FORMAT_VERSION) {
+  if (saved && savedVersion === FORMAT_VERSION) {
     numbers = saved.stats as SavedNumbers;
     generatedAt = saved.generatedAt;
   } else {
     numbers = await computeYearNumbers(groupId, year, tz);
-    if (final && numbers.photos.total > 0) await save(key, numbers, generatedAt);
+    // A version newer than this server's (mid-deploy) is left for the newer server.
+    const outdated = savedVersion === null || savedVersion < FORMAT_VERSION;
+    if (outdated && canSave(year, tz, now) && numbers.photos.total > 0) {
+      await save(key, numbers, generatedAt, { replace: saved !== null });
+    }
   }
   if (numbers.photos.total === 0) throw notFound(`There's no Wrapped for ${year}`);
 
@@ -84,12 +99,21 @@ export async function getWrapped(
   return { group: stats.group, year, final, timeZone: tz, generatedAt, slides: toSlides(stats) };
 }
 
-async function save(key: wrappedRepository.WrappedKey, numbers: YearNumbers, generatedAt: Date) {
-  const stats: SavedNumbers = { version: FORMAT_VERSION, ...numbers };
+async function save(
+  key: wrappedRepository.WrappedKey,
+  numbers: YearNumbers,
+  generatedAt: Date,
+  { replace }: { replace: boolean },
+) {
+  const stats = { version: FORMAT_VERSION, ...numbers } satisfies SavedNumbers as unknown as Prisma.InputJsonValue;
+  if (replace) {
+    await wrappedRepository.replaceWrapped(key, stats, generatedAt);
+    return;
+  }
   try {
-    await wrappedRepository.saveWrapped(key, stats as unknown as Prisma.InputJsonValue, generatedAt);
+    await wrappedRepository.createWrapped(key, stats, generatedAt);
   } catch (error) {
-    // Two friends opened it at the same moment: the other request saved the same numbers.
+    // Two friends opened it at the same moment: the first save stands.
     if (!isUniqueConstraintError(error)) throw error;
   }
 }

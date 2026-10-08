@@ -80,7 +80,7 @@ export function InvitePage() {
           <>
             {accept.isError && <Alert>{getFormError(accept.error)}</Alert>}
             <Button
-              className="w-full"
+              className="w-full wrap-anywhere"
               disabled={accept.isPending}
               onClick={() =>
                 accept.mutate(token, { onSuccess: (joined) => navigate(`/groups/${joined.id}`, { replace: true }) })

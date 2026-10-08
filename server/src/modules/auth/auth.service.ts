@@ -3,6 +3,7 @@ import { hashPassword, verifyDummyPassword, verifyPassword } from "../../lib/pas
 import { isUniqueConstraintError } from "../../lib/prisma.js";
 import { toPublicUser, type PublicUser } from "../users/user.dto.js";
 import * as usersRepository from "../users/users.repository.js";
+import { usernameSchema } from "../users/users.schemas.js";
 import type { ChangePasswordInput, LoginInput, RegisterInput } from "./auth.schemas.js";
 import {
   issueSession,
@@ -39,7 +40,11 @@ export async function register(input: RegisterInput, userAgent?: string): Promis
 }
 
 export async function login(input: LoginInput, userAgent?: string): Promise<AuthResult> {
-  const credentials = await usersRepository.findUserCredentials(input.username);
+  // Only a name that could have been registered can match an account. MySQL's collation
+  // ignores accents, so "álice" would find "alice", and each such spelling would get its
+  // own allowance of attempts from the rate limiter. Anything else is an unknown user.
+  const canBeAccount = usernameSchema.safeParse(input.username).success;
+  const credentials = canBeAccount ? await usersRepository.findUserCredentials(input.username) : null;
 
   const valid = credentials
     ? await verifyPassword(credentials.passwordHash, input.password)

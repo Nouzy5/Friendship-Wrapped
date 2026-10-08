@@ -5,7 +5,7 @@ import { StateMessage } from "../components/ui/StateMessage";
 import { photoAlt } from "../features/photos/components/PhotoImage";
 import { PhotoViewer } from "../features/photos/components/PhotoViewer";
 import { usePhoto } from "../features/photos/hooks";
-import { ApiError } from "../lib/api-client";
+import { isNotFoundError } from "../lib/api-client";
 import { usePageTitle } from "../lib/usePageTitle";
 
 export function PhotoPage() {
@@ -21,9 +21,9 @@ export function PhotoPage() {
     );
   }
 
-  if (photo.isLoadingError) {
-    const notFound = photo.error instanceof ApiError && (photo.error.status === 404 || photo.error.status === 400);
-    return notFound ? (
+  // A refetch that finds it gone (deleted by its uploader) counts too, even with the photo cached.
+  if (photo.isLoadingError || (photo.isRefetchError && isNotFoundError(photo.error))) {
+    return isNotFoundError(photo.error) ? (
       <StateMessage
         headingLevel="h1"
         emoji="🔍"

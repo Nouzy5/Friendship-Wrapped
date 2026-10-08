@@ -39,7 +39,7 @@ export function DisplayNameDialog({ open, onClose, user }: DialogProps) {
   }
 
   return (
-    <Dialog open={open} onClose={close} title="Display name">
+    <Dialog open={open} onClose={close} title="Display name" busy={update.isPending}>
       <form noValidate onSubmit={submit} className="mt-3 flex flex-col gap-4">
         {getFormError(update.error) && <Alert>{getFormError(update.error)}</Alert>}
         <TextField
@@ -72,7 +72,7 @@ export function UsernameDialog({ open, onClose, user }: DialogProps) {
   }
 
   return (
-    <Dialog open={open} onClose={close} title="Username">
+    <Dialog open={open} onClose={close} title="Username" busy={update.isPending}>
       <form noValidate onSubmit={submit} className="mt-3 flex flex-col gap-4">
         {getFormError(update.error) && <Alert>{getFormError(update.error)}</Alert>}
         <TextField
@@ -110,7 +110,7 @@ export function PasswordDialog({ open, onClose }: Omit<DialogProps, "user">) {
   }
 
   return (
-    <Dialog open={open} onClose={close} title="Change password">
+    <Dialog open={open} onClose={close} title="Change password" busy={change.isPending}>
       <form noValidate onSubmit={submit} className="mt-3 flex flex-col gap-4">
         {getFormError(change.error) && <Alert>{getFormError(change.error)}</Alert>}
         <TextField

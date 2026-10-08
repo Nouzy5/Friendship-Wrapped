@@ -308,7 +308,7 @@ function MostReactedPhotoSlide({ photo, count, groupId }: { photo: Photo; count:
         <span className="text-2xl font-semibold">
           <AnimatedNumber value={count} delayMs={1300} /> {nounFor(count, "reaction")}
         </span>
-        <span className="text-base">
+        <span className="text-base wrap-anywhere">
           Posted by {poster} on {formatDayMonth(photo.createdAt)}
         </span>
       </Rise>

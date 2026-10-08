@@ -78,4 +78,18 @@ describe("error handling", () => {
     expect(res.status).toBe(413);
     expect(res.body.error.code).toBe("PAYLOAD_TOO_LARGE");
   });
+
+  it("answers requests it can't read with a 4xx, not a 500", async () => {
+    // Not valid percent-encoding, so the URL can't be decoded.
+    const badUrl = await request(app).get("/api/invites/%E0");
+    expect(badUrl.status).toBe(400);
+    expect(badUrl.body.error.code).toBe("BAD_REQUEST");
+
+    const badCharset = await request(app)
+      .post("/api/auth/login")
+      .set("Content-Type", "application/json; charset=latin1")
+      .send(JSON.stringify({ username: "alice", password: "x" }));
+    expect(badCharset.status).toBe(415);
+    expect(badCharset.body.error.code).toBe("UNSUPPORTED_MEDIA_TYPE");
+  });
 });

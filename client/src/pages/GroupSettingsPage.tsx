@@ -259,7 +259,7 @@ function Members({ group, members }: { group: Group; members: ReturnType<typeof 
 function EditGroupDialog({ group, open, onClose }: { group: Group; open: boolean; onClose: () => void }) {
   const updateGroup = useUpdateGroup(group.id);
   return (
-    <Dialog open={open} onClose={() => (updateGroup.reset(), onClose())} title="Name and emoji">
+    <Dialog open={open} onClose={() => (updateGroup.reset(), onClose())} title="Name and emoji" busy={updateGroup.isPending}>
       <div className="mt-4">
         <GroupForm
           initialValues={{ name: group.name, emoji: group.emoji }}
@@ -345,8 +345,9 @@ export function GroupSettingsPage() {
         onClose={() => setDialog(null)}
         onConfirm={() =>
           leaveGroup.mutate(undefined, {
-            onSuccess: () => {
-              toast(group.memberCount === 1 ? `${group.name} was deleted` : `You left ${group.name}`);
+            // The server says what happened: the member count shown may be out of date.
+            onSuccess: ({ groupDeleted }) => {
+              toast(groupDeleted ? `${group.name} was deleted` : `You left ${group.name}`);
               void navigate("/home", { replace: true });
             },
           })

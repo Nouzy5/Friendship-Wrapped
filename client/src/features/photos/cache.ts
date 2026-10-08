@@ -1,5 +1,8 @@
 import type { InfiniteData, QueryClient } from "@tanstack/react-query";
+import { albumKeys } from "../albums/hooks";
 import { groupKeys } from "../groups/hooks";
+import { onThisDayKeys } from "../memories/hooks";
+import type { OnThisDay } from "../memories/api";
 import type { Group } from "../groups/types";
 import type { Photo, PhotoDetail, PhotoPage } from "./types";
 
@@ -27,6 +30,17 @@ export function updateCachedFeed(
 }
 
 /**
+ * Stops refetches of a photo's viewer and group lists that are under way, before a change
+ * to it is shown: they'd bring back what the server had before the change.
+ */
+export async function cancelPhotoQueries(queryClient: QueryClient, photo: Pick<Photo, "id" | "groupId">) {
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: photoKeys.detail(photo.id) }),
+    queryClient.cancelQueries({ queryKey: photoKeys.group(photo.groupId) }),
+  ]);
+}
+
+/**
  * Applies a change to one photo wherever it's cached (its group feed and its viewer),
  * e.g. a new reaction or comment count, without refetching either.
  */
@@ -41,6 +55,30 @@ export function patchCachedPhoto(
       ...page,
       photos: page.photos.map((cached) => (cached.id === photo.id ? { ...cached, ...patch(cached) } : cached)),
     })),
+  );
+}
+
+/**
+ * Takes a deleted photo out of every cached list it may be in (its group's feed, timeline
+ * and favorites, albums, On This Day), so it's gone before any refetch lands rather than
+ * lingering as a broken thumbnail.
+ */
+export function removeCachedPhoto(queryClient: QueryClient, photo: Pick<Photo, "id" | "groupId">) {
+  const without = (photos: Photo[]) => photos.filter(({ id }) => id !== photo.id);
+  const fromPages = (data: FeedData | undefined) =>
+    data && { ...data, pages: data.pages.map((page) => ({ ...page, photos: without(page.photos) })) };
+
+  queryClient.setQueriesData<FeedData>({ queryKey: photoKeys.group(photo.groupId) }, fromPages);
+  queryClient.setQueriesData<FeedData>({ queryKey: [...albumKeys.all, "photos"] }, fromPages);
+  queryClient.setQueriesData<OnThisDay>(
+    { queryKey: onThisDayKeys.group(photo.groupId) },
+    (data) =>
+      data && {
+        ...data,
+        years: data.years
+          .map((year) => ({ ...year, photos: without(year.photos) }))
+          .filter((year) => year.photos.length > 0),
+      },
   );
 }
 

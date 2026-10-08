@@ -21,8 +21,12 @@ const ringClasses: Record<AvatarSize, string> = {
   xl: "ring-4",
 };
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/** The first user-perceived character, so an emoji like 👩🏽‍🚀 or 🇸🇰 isn't cut in half. */
 function initialOf(name: string): string {
-  return (Array.from(name.trim())[0] ?? "?").toUpperCase();
+  const first = graphemes.segment(name.trim())[Symbol.iterator]().next().value?.segment;
+  return (first ?? "?").toUpperCase();
 }
 
 type AvatarProps = {

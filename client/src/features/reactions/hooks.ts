@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "../auth/hooks";
-import { patchCachedPhoto, photoKeys } from "../photos/cache";
+import { cancelPhotoQueries, patchCachedPhoto, photoKeys } from "../photos/cache";
 import type { Photo } from "../photos/types";
 import { fetchReactions, removeReaction, setReaction } from "./api";
 import { withReaction } from "./reactions";
@@ -35,7 +35,9 @@ export function useReact(photo: Pick<Photo, "id" | "groupId">) {
     scope: { id: `react:${photo.id}` },
     meta: { errorToast: "Couldn't save your reaction." },
     mutationFn: (type: ReactionType | null) => (type ? setReaction(photo.id, type) : removeReaction(photo.id)),
-    onMutate: (type) => {
+    onMutate: async (type) => {
+      // A refetch already on its way read the old reaction: it mustn't land on top of this tap.
+      await cancelPhotoQueries(queryClient, photo);
       patchCachedPhoto(queryClient, photo, (current) => ({ reactions: withReaction(current.reactions, type, me.id) }));
     },
     onSuccess: (summary) => {

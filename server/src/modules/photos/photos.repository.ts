@@ -72,20 +72,16 @@ export function findGroupPhotosByIds(groupId: string, photoIds: string[], viewer
   });
 }
 
-/** A group's photos posted within any of the time ranges, newest first. */
-export function listPhotosInRanges(
+/** A group's photos posted within the time range, newest first. */
+export function listPhotosInRange(
   groupId: string,
   viewerId: string,
-  ranges: { from: Date; to: Date }[],
+  { from, to }: { from: Date; to: Date },
   take: number,
   db: DbClient = prisma,
 ) {
   return db.photo.findMany({
-    where: {
-      groupId,
-      ...unblocked(viewerId),
-      OR: ranges.map(({ from, to }) => ({ createdAt: { gte: from, lt: to } })),
-    },
+    where: { groupId, ...unblocked(viewerId), createdAt: { gte: from, lt: to } },
     orderBy: newestFirst,
     take,
     select: photoSelect(viewerId),

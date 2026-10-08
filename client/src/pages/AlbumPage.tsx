@@ -13,7 +13,7 @@ import { AlbumPhotoPicker } from "../features/albums/components/AlbumPhotoPicker
 import { useAlbum, useAlbumPhotos, useDeleteAlbum, useRenameAlbum } from "../features/albums/hooks";
 import type { Album } from "../features/albums/types";
 import { PhotoGrid } from "../features/photos/components/PhotoGrid";
-import { ApiError } from "../lib/api-client";
+import { isNotFoundError } from "../lib/api-client";
 import { getFormError } from "../lib/form-errors";
 import { usePageTitle } from "../lib/usePageTitle";
 import { PhotoGridSkeleton } from "../components/ui/Skeleton";
@@ -31,9 +31,9 @@ export function AlbumPage() {
       </div>
     );
   }
-  if (album.isLoadingError) {
-    const notFound = album.error instanceof ApiError && [400, 404].includes(album.error.status);
-    return notFound ? (
+  // A refetch that finds it gone (deleted meanwhile) counts too, even with the album cached.
+  if (album.isLoadingError || (album.isRefetchError && isNotFoundError(album.error))) {
+    return isNotFoundError(album.error) ? (
       <StateMessage
         headingLevel="h1"
         emoji="🔍"

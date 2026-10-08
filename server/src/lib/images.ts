@@ -32,7 +32,10 @@ const unsupportedImage = () =>
  * Validates by content, never by file name or the browser-supplied MIME type: sharp
  * sniffs the real format from the bytes.
  */
-async function assertSupportedImage(input: Buffer): Promise<void> {
+type Size = { width: number; height: number };
+
+/** Returns the image's size once upright (its EXIF orientation applied). */
+async function assertSupportedImage(input: Buffer): Promise<Size> {
   let metadata: Metadata;
   try {
     metadata = await sharp(input).metadata();
@@ -53,14 +56,26 @@ async function assertSupportedImage(input: Buffer): Promise<void> {
   if (width * height > MAX_IMAGE_PIXELS) {
     throw new AppError(413, "IMAGE_TOO_LARGE", "That photo's resolution is too high (64 megapixels max).");
   }
+  return metadata.autoOrient;
 }
 
-async function render(input: Buffer, { resize, quality }: VariantSpec): Promise<ProcessedImage> {
+/**
+ * Square ("cover") renditions are never bigger than the image's short side: images are
+ * never enlarged, and on its own that would keep a small image's shape instead of making
+ * it square (a 1000×300 photo would get a 480×300 "square" thumbnail).
+ */
+function resizeFor({ resize }: VariantSpec, upright: Size): ResizeOptions {
+  if (resize.fit !== "cover") return resize;
+  const side = Math.min(resize.width ?? Infinity, upright.width, upright.height);
+  return { ...resize, width: side, height: side };
+}
+
+async function render(input: Buffer, variant: VariantSpec, upright: Size): Promise<ProcessedImage> {
   try {
     const { data, info } = await sharp(input, { limitInputPixels: MAX_IMAGE_PIXELS, failOn: "error" })
       .rotate() // apply the EXIF orientation before the metadata is dropped
-      .resize({ ...resize, withoutEnlargement: true })
-      .webp({ quality })
+      .resize({ ...resizeFor(variant, upright), withoutEnlargement: true })
+      .webp({ quality: variant.quality })
       .toBuffer({ resolveWithObject: true });
     return { data, width: info.width, height: info.height };
   } catch {
@@ -70,16 +85,16 @@ async function render(input: Buffer, { resize, quality }: VariantSpec): Promise<
 }
 
 export async function processPhoto(input: Buffer): Promise<Record<PhotoVariant, ProcessedImage>> {
-  await assertSupportedImage(input);
+  const upright = await assertSupportedImage(input);
   const [full, medium, thumbnail] = await Promise.all([
-    render(input, PHOTO_VARIANTS.full),
-    render(input, PHOTO_VARIANTS.medium),
-    render(input, PHOTO_VARIANTS.thumbnail),
+    render(input, PHOTO_VARIANTS.full, upright),
+    render(input, PHOTO_VARIANTS.medium, upright),
+    render(input, PHOTO_VARIANTS.thumbnail, upright),
   ]);
   return { full, medium, thumbnail };
 }
 
 export async function processAvatar(input: Buffer): Promise<ProcessedImage> {
-  await assertSupportedImage(input);
-  return render(input, AVATAR_VARIANT);
+  const upright = await assertSupportedImage(input);
+  return render(input, AVATAR_VARIANT, upright);
 }

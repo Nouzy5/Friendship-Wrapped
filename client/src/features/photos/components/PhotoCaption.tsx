@@ -17,7 +17,7 @@ export function PhotoCaption({ text }: { text: string }) {
 
   return (
     <div className="relative text-[0.9375rem] leading-snug">
-      <p ref={ref} className={`break-words whitespace-pre-line ${expanded ? "" : "line-clamp-3"}`}>
+      <p ref={ref} dir="auto" className={`break-words whitespace-pre-line ${expanded ? "" : "line-clamp-3"}`}>
         {text}
       </p>
       {overflowing && !expanded && (

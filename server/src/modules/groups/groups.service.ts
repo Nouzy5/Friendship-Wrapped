@@ -154,17 +154,19 @@ export async function listMembers(groupId: string, userId: string): Promise<Grou
   return members.map(toGroupMemberView);
 }
 
-/** Owner-only. Invite links the removed member created stop working too. */
+/**
+ * Owner-only. Every invite link shared so far stops working too (the removed member may
+ * have kept any of them), so they can only come back with a new one.
+ */
 export async function removeMember(groupId: string, ownerId: string, memberId: string): Promise<void> {
-  if (memberId === ownerId) throw badRequest("To leave a group you own, use “Leave group”");
-
   await withTransaction(async (tx) => {
     await requireOwner(groupId, ownerId, tx);
+    if (memberId === ownerId) throw badRequest("To leave a group you own, use “Leave group”");
     const member = await groupsRepository.findMembership(groupId, memberId, tx);
     if (!member) throw notFound("That person isn't in this group");
 
     await groupsRepository.deleteMembership(groupId, memberId, tx);
-    await invitesRepository.deleteInvitesCreatedBy(groupId, memberId, tx);
+    await invitesRepository.deleteInvitesForGroup(groupId, tx);
   });
 }
 

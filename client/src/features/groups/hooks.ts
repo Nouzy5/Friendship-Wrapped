@@ -14,6 +14,9 @@ import {
   uploadGroupAvatar,
   type MembershipInput,
 } from "./api";
+import { albumKeys } from "../albums/hooks";
+import { onThisDayKeys } from "../memories/hooks";
+import { photoKeys } from "../photos/cache";
 import { wrappedKeys } from "../wrapped/hooks";
 import type { Group, GroupInput, GroupMember } from "./types";
 
@@ -69,7 +72,10 @@ export function useUpdateGroup(groupId: string) {
   });
 }
 
-/** Callers navigate away on success; the group's cached detail then expires on its own. */
+/**
+ * Callers navigate away on success. Everything cached from the group goes, or Back would
+ * show its page, photos and albums again as if you were still in it.
+ */
 export function useLeaveGroup(groupId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -78,6 +84,15 @@ export function useLeaveGroup(groupId: string) {
       queryClient.setQueryData(groupKeys.list(), (groups: { id: string }[] | undefined) =>
         groups?.filter((group) => group.id !== groupId),
       );
+      for (const queryKey of [
+        groupKeys.detail(groupId),
+        groupKeys.members(groupId),
+        photoKeys.group(groupId),
+        albumKeys.group(groupId),
+        onThisDayKeys.group(groupId),
+      ]) {
+        queryClient.removeQueries({ queryKey });
+      }
       void queryClient.invalidateQueries({ queryKey: groupKeys.list() });
       void queryClient.invalidateQueries({ queryKey: wrappedKeys.all });
     },

@@ -8,7 +8,8 @@ const loginRateLimit = rateLimit({
   limit: 10,
   key: (req) => {
     const username: unknown = req.body?.username;
-    return `${req.ip}|${typeof username === "string" ? username.trim().toLowerCase() : ""}`;
+    // Read before validation, so capped: a 100 KB "username" mustn't become a 100 KB key.
+    return `${req.ip}|${typeof username === "string" ? username.trim().toLowerCase().slice(0, 64) : ""}`;
   },
   message: "Too many login attempts. Please wait a few minutes and try again.",
 });

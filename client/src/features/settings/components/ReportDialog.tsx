@@ -31,7 +31,7 @@ export function ReportDialog({ open, onClose, photoId, userId, title = "Report a
   }
 
   return (
-    <Dialog open={open} onClose={close} title={title}>
+    <Dialog open={open} onClose={close} title={title} busy={report.isPending}>
       <form
         className="mt-3 flex flex-col gap-4"
         onSubmit={(event) => {

@@ -32,13 +32,15 @@ async function findValidInvite(token: string) {
 
 /** Any member can create a link. Only its hash is stored, so it can't be shown again later. */
 export async function createInvite(groupId: string, userId: string): Promise<CreatedInvite> {
-  await groupsService.requireMembership(groupId, userId);
-
   const token = generateToken(16);
   const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
 
+  // Checked and written together, so someone being removed at this moment can't keep a fresh link.
+  await withTransaction(async (tx) => {
+    await groupsService.requireMembership(groupId, userId, tx);
+    await invitesRepository.createInvite({ id: sha256Hex(token), groupId, createdById: userId, expiresAt }, tx);
+  });
   await invitesRepository.deleteExpiredInvites(groupId, new Date());
-  await invitesRepository.createInvite({ id: sha256Hex(token), groupId, createdById: userId, expiresAt });
 
   return { token, expiresAt };
 }

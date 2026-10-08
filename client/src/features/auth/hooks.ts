@@ -26,7 +26,7 @@ export function useLogin() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: login,
-    onSuccess: (user) => queryClient.setQueryData(sessionQueryKey, user),
+    onSuccess: (user) => rememberSignedInUser(queryClient, user),
   });
 }
 
@@ -34,8 +34,22 @@ export function useRegister() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: register,
-    onSuccess: (user) => queryClient.setQueryData(sessionQueryKey, user),
+    onSuccess: (user) => rememberSignedInUser(queryClient, user),
   });
+}
+
+/** Everything cached for the signed-in account (all but the session itself). */
+function forgetAccountData(queryClient: QueryClient): void {
+  queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== sessionQueryKey[0] });
+}
+
+/**
+ * Signs in locally. A session that expired leaves its account's data cached (only
+ * signing out clears it), so it's dropped here: whoever signs in next never sees it.
+ */
+function rememberSignedInUser(queryClient: QueryClient, user: User): void {
+  forgetAccountData(queryClient);
+  queryClient.setQueryData(sessionQueryKey, user);
 }
 
 /** Signs out locally: no session, and nothing cached from this account for the next one to see. */
@@ -43,7 +57,7 @@ export function forgetSignedInUser(queryClient: QueryClient): void {
   forgetCurrentGroup();
   void clearSavedPhotos();
   queryClient.setQueryData(sessionQueryKey, null);
-  queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== sessionQueryKey[0] });
+  forgetAccountData(queryClient);
 }
 
 /** The auth guard then shows the login page. */
