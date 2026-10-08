@@ -74,6 +74,23 @@ describe("creating groups", () => {
     expect(res.body.error.details[0].path).toBe("name");
   });
 
+  it.each([
+    ["only invisible characters", "\u200B\u3164"],
+    ["a direction override", "Trip\u202Epirt"],
+    ["a line separator", "Trip\u2028two"],
+  ])("rejects a name with %s", async (_, name) => {
+    const { agent } = await signUp(app, "alice");
+    const res = await agent.post("/api/groups").send({ name, emoji: "🍻" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.details[0].path).toBe("name");
+  });
+
+  it.each(["Zoë's crew", "مرحبا", "日本の友達", "😀 squad"])("accepts the name %s", async (name) => {
+    const { agent } = await signUp(app, "alice");
+    expect((await agent.post("/api/groups").send({ name, emoji: "🍻" })).status).toBe(201);
+  });
+
   it("requires sign-in", async () => {
     const res = await request(app).post("/api/groups").send({ name: "Trip", emoji: "🍻" });
     expect(res.status).toBe(401);
@@ -142,11 +159,48 @@ describe("owner permissions", () => {
     expect(after.body.group.memberCount).toBe(1);
   });
 
+  it("kills every invite link when removing someone, so they can only come back with a new one", async () => {
+    const { owner, members, group, token } = await groupWith("alice", "bob");
+    const bob = members[0]!;
+
+    expect((await owner.agent.delete(`/api/groups/${group.id}/members/${bob.user.id}`)).status).toBe(204);
+    expect((await bob.agent.post(`/api/invites/${token}/accept`)).status).toBe(404);
+    expect((await bob.agent.get(`/api/groups/${group.id}`)).status).toBe(404);
+
+    const fresh = await createInvite(owner.agent, group.id);
+    expect((await bob.agent.post(`/api/invites/${fresh}/accept`)).status).toBe(200);
+  });
+
+  it("treats ids in any letter case as the same id", async () => {
+    const { owner, members, group } = await groupWith("alice", "bob");
+    const bob = members[0]!;
+
+    // The owner can't remove themselves by spelling their id in capitals.
+    const self = await owner.agent.delete(`/api/groups/${group.id}/members/${owner.user.id.toUpperCase()}`);
+    expect(self.status).toBe(400);
+
+    const removed = await owner.agent.delete(`/api/groups/${group.id.toUpperCase()}/members/${bob.user.id.toUpperCase()}`);
+    expect(removed.status).toBe(204);
+    const roles = await prisma.groupMember.findMany({ where: { groupId: group.id }, select: { userId: true, role: true } });
+    expect(roles).toEqual([{ userId: owner.user.id, role: "OWNER" }]);
+  });
+
   it("forbids members from removing others", async () => {
     const { owner, members, group } = await groupWith("alice", "bob");
     const res = await members[0]!.agent.delete(`/api/groups/${group.id}/members/${owner.user.id}`);
 
     expect(res.status).toBe(403);
+  });
+
+  it("only removes members, and only for the owner", async () => {
+    const { owner, members, group } = await groupWith("alice", "bob");
+    const bob = members[0]!;
+    const outsider = await signUp(app, "mallory");
+
+    expect((await owner.agent.delete(`/api/groups/${group.id}/members/${outsider.user.id}`)).status).toBe(404);
+    expect((await outsider.agent.delete(`/api/groups/${group.id}/members/${bob.user.id}`)).status).toBe(404);
+    expect((await outsider.agent.delete(`/api/groups/${group.id}/members/${outsider.user.id}`)).status).toBe(404);
+    expect((await bob.agent.delete(`/api/groups/${group.id}/members/${bob.user.id}`)).status).toBe(403);
   });
 
   it("doesn't let the owner remove themselves", async () => {

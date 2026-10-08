@@ -12,13 +12,13 @@ export function CommentItem({ comment, onDelete }: CommentItemProps) {
     <li className="flex gap-3">
       <Avatar name={author.displayName} seed={author.id} src={author.avatarUrl} size="sm" />
       <div className="min-w-0 flex-1">
-        <p className="text-sm">
+        <p className="text-sm wrap-anywhere">
           <span className="font-semibold text-ink-50">{author.displayName}</span>{" "}
           <time dateTime={createdAt} title={formatDateTime(createdAt)} className="text-xs text-ink-400">
             {formatRelativeTime(createdAt)}
           </time>
         </p>
-        <p className="text-sm break-words whitespace-pre-line text-ink-50">{body}</p>
+        <p dir="auto" className="text-sm break-words whitespace-pre-line text-ink-50">{body}</p>
       </div>
       {comment.canDelete && (
         <button

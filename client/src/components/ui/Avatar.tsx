@@ -18,10 +18,17 @@ const gradients = [
   "from-brand-gold to-emerald-400",
 ];
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/** The first user-perceived character, so an emoji like 👩🏽‍🚀 or 🇸🇰 isn't cut in half. */
+function firstCharacter(word: string): string {
+  return graphemes.segment(word)[Symbol.iterator]().next().value?.segment ?? "";
+}
+
 function initialsOf(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
-  const first = Array.from(words[0] ?? "?")[0] ?? "?";
-  const last = words.length > 1 ? (Array.from(words.at(-1) ?? "")[0] ?? "") : "";
+  const first = firstCharacter(words[0] ?? "") || "?";
+  const last = words.length > 1 ? firstCharacter(words.at(-1)!) : "";
   return (first + last).toUpperCase();
 }
 

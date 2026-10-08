@@ -10,13 +10,14 @@ export function findWrapped(key: WrappedKey, db: DbClient = prisma) {
   });
 }
 
-/** Saves a finished year's Wrapped (replacing one saved in an older format). */
-export function saveWrapped(key: WrappedKey, stats: Prisma.InputJsonValue, generatedAt: Date, db: DbClient = prisma) {
-  return db.wrapped.upsert({
-    where: { groupId_year_timeZone: key },
-    create: { ...key, stats, generatedAt },
-    update: { stats, generatedAt },
-  });
+/** Saves a finished year's Wrapped. Fails with a unique-key error if one was saved meanwhile. */
+export function createWrapped(key: WrappedKey, stats: Prisma.InputJsonValue, generatedAt: Date, db: DbClient = prisma) {
+  return db.wrapped.create({ data: { ...key, stats, generatedAt } });
+}
+
+/** Replaces a Wrapped saved in an older format. */
+export function replaceWrapped(key: WrappedKey, stats: Prisma.InputJsonValue, generatedAt: Date, db: DbClient = prisma) {
+  return db.wrapped.updateMany({ where: key, data: { stats, generatedAt } });
 }
 
 /**

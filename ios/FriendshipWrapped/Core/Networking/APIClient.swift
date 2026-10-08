@@ -142,13 +142,17 @@ final class APIClient {
         let (data, response) = result
 
         guard let http = response as? HTTPURLResponse else { throw APIError.network }
-        if let url = request.url {
+        // A slow request sent with an older session (an upload started before signing in again)
+        // mustn't renew, clear or end the current one. Decided before the cookie is handled,
+        // since clearing it would make the current session look different.
+        let sentWithCurrentSession = request.value(forHTTPHeaderField: "Cookie") == tokens.cookieHeader
+        if sentWithCurrentSession, let url = request.url {
             rememberSessionCookie(from: http, url: url)
         }
 
         guard (200..<300).contains(http.statusCode) else {
             let error = makeError(status: http.statusCode, data: data)
-            if error.status == 401 && error.code == "UNAUTHORIZED" {
+            if error.status == 401 && error.code == "UNAUTHORIZED" && sentWithCurrentSession {
                 tokens.clear()
                 NotificationCenter.default.post(name: .sessionDidExpire, object: nil)
             }
@@ -172,8 +176,10 @@ final class APIClient {
         let cookies = HTTPCookie.cookies(withResponseHeaderFields: ["Set-Cookie": header], for: url)
         guard let cookie = cookies.first(where: { SessionTokenStore.cookieNames.contains($0.name) }) else { return }
 
-        let expired = cookie.expiresDate.map { $0 <= Date() } ?? false
-        if cookie.value.isEmpty || expired {
+        // The server clears the cookie by dating it 1 January 1970. Comparing with the phone's
+        // clock instead would throw a fresh session away when that clock is far ahead.
+        let cleared = cookie.expiresDate.map { $0 < Date(timeIntervalSince1970: 86_400) } ?? false
+        if cookie.value.isEmpty || cleared {
             tokens.clear()
         } else {
             tokens.save(name: cookie.name, value: cookie.value)

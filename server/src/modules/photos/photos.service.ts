@@ -135,8 +135,8 @@ export async function listAlbumPhotos(
   return toPageOfViews(rows, limit, viewerId);
 }
 
-/** At most this many photos for On This Day, across all years. */
-const ON_THIS_DAY_LIMIT = 100;
+/** At most this many photos from each earlier year, so one busy year can't crowd out the rest. */
+const ON_THIS_DAY_PER_YEAR = 50;
 
 const isoDate = ({ year, month, day }: CalendarDate) =>
   [String(year).padStart(4, "0"), String(month).padStart(2, "0"), String(day).padStart(2, "0")].join("-");
@@ -153,21 +153,25 @@ export async function listOnThisDay(
   const group = await getGroup(groupId, viewerId);
   const today = date ?? todayIn(tz);
   const firstYear = todayIn(tz, group.createdAt).year;
+  // A far-future `date` mustn't mean thousands of empty years: nothing is posted after this one.
+  const lastYear = Math.min(today.year - 1, todayIn(tz).year);
 
   const ranges = [];
-  for (let year = today.year - 1; year >= firstYear; year--) {
+  for (let year = lastYear; year >= firstYear; year--) {
     const day = { ...today, year };
     // 29 February only comes back in leap years.
     if (isRealDate(day)) ranges.push({ year, ...dayRangeIn(day, tz) });
   }
   if (ranges.length === 0) return { date: isoDate(today), years: [] };
 
-  const rows = await photosRepository.listPhotosInRanges(groupId, viewerId, ranges, ON_THIS_DAY_LIMIT);
-  const photos = await toViews(rows, viewerId);
+  const perYear = await Promise.all(
+    ranges.map((range) => photosRepository.listPhotosInRange(groupId, viewerId, range, ON_THIS_DAY_PER_YEAR)),
+  );
+  const views = await toViews(perYear.flat(), viewerId);
   const years = ranges
     .map(({ year, from, to }) => ({
       year,
-      photos: photos.filter(({ createdAt }) => createdAt >= from && createdAt < to),
+      photos: views.filter(({ createdAt }) => createdAt >= from && createdAt < to),
     }))
     .filter((entry) => entry.photos.length > 0);
   return { date: isoDate(today), years };

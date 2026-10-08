@@ -1,7 +1,8 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { deletePhoto, fetchGroupPhotos, fetchPhoto, uploadPhoto, type GroupPhotosFilter } from "./api";
-import { findCachedPhotoDetail, photoKeys, updateCachedFeed, type FeedData } from "./cache";
+import { findCachedPhotoDetail, photoKeys, removeCachedPhoto, updateCachedFeed, type FeedData } from "./cache";
+import { onThisDayKeys } from "../memories/hooks";
 import { wrappedKeys } from "../wrapped/hooks";
 import type { Photo } from "./types";
 
@@ -81,10 +82,9 @@ export function useDeletePhoto(photo: Pick<Photo, "id" | "groupId">) {
       // Not just this photo: its neighbours link to it, and stale links would be followed
       // (and prefetched) until they refresh. Details are cheap to reload.
       queryClient.removeQueries({ queryKey: photoKeys.details() });
-      updateCachedFeed(queryClient, photo.groupId, (pages) =>
-        pages.map((page) => ({ ...page, photos: page.photos.filter(({ id }) => id !== photo.id) })),
-      );
+      removeCachedPhoto(queryClient, photo);
       void queryClient.invalidateQueries({ queryKey: photoKeys.group(photo.groupId) });
+      void queryClient.invalidateQueries({ queryKey: onThisDayKeys.group(photo.groupId) });
       // Album counts and covers may have included it, and so may Wrapped.
       void queryClient.invalidateQueries({ queryKey: ["albums"] });
       void queryClient.invalidateQueries({ queryKey: wrappedKeys.all });

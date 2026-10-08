@@ -21,6 +21,13 @@ final class PhotosStore {
     private var details: [String: Photo] = [:]
     /// Photos seen in other lists (timeline, favorites, albums, On This Day).
     private var seen: [String: Photo] = [:]
+    /// Photos deleted (or found gone) since lists were loaded, so those lists leave them out.
+    private(set) var deletedPhotoIDs: Set<String> = []
+    /// The last reaction or favorite request per photo ("reaction:<id>", "favorite:<id>"): the
+    /// next one waits for it, so a quick tap and untap reach the server in that order.
+    private var lastRequests: [String: Task<Void, Never>] = [:]
+    /// Taps so far per key, so only the latest tap's answer is shown (like the web app).
+    private var taps: [String: Int] = [:]
 
     private let api: APIClient
 
@@ -53,6 +60,25 @@ final class PhotosStore {
         feeds[groupID] = GroupFeed(photos: page.photos, nextCursor: page.nextCursor)
     }
 
+    /// Coming back to a group: photos posted since go on top and the newest ones' counts are
+    /// updated, but the pages scrolled through stay, and so does your place in them.
+    func refreshNewest(in groupID: String) async throws {
+        guard feeds[groupID] != nil else { return try await refreshFeed(in: groupID) }
+        let page = try await api.fetchGroupPhotos(groupID)
+        guard var feed = feeds[groupID] else { return }
+        let known = Set(feed.photos.map(\.id))
+        // No overlap with what's loaded (lots of new photos, or everything deleted): start over.
+        guard page.photos.contains(where: { known.contains($0.id) }) else {
+            feeds[groupID] = GroupFeed(photos: page.photos, nextCursor: page.nextCursor)
+            return
+        }
+        for photo in page.photos {
+            if let index = feed.photos.firstIndex(where: { $0.id == photo.id }) { feed.photos[index] = photo }
+        }
+        feed.photos.insert(contentsOf: page.photos.filter { !known.contains($0.id) }, at: 0)
+        feeds[groupID] = feed
+    }
+
     /// The next page, when you scroll to the end of the feed.
     func loadMore(in groupID: String) async {
         guard let feed = feeds[groupID], let cursor = feed.nextCursor, !feed.isLoadingMore else { return }
@@ -60,9 +86,12 @@ final class PhotosStore {
         feeds[groupID]?.loadMoreFailed = false
         do {
             let page = try await api.fetchGroupPhotos(groupID, cursor: cursor)
-            let known = Set(feeds[groupID]?.photos.map(\.id) ?? [])
-            feeds[groupID]?.photos.append(contentsOf: page.photos.filter { !known.contains($0.id) })
-            feeds[groupID]?.nextCursor = page.nextCursor
+            // Unless a pull to refresh started the feed again meanwhile: this page doesn't follow on.
+            if feeds[groupID]?.nextCursor == cursor {
+                let known = Set(feeds[groupID]?.photos.map(\.id) ?? [])
+                feeds[groupID]?.photos.append(contentsOf: page.photos.filter { !known.contains($0.id) })
+                feeds[groupID]?.nextCursor = page.nextCursor
+            }
         } catch is CancellationError {
             // Try again next time the end of the feed comes into view.
         } catch {
@@ -95,7 +124,9 @@ final class PhotosStore {
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> Photo {
         let photo = try await api.uploadPhoto(toGroup: groupID, jpeg: jpeg, caption: caption, progress: progress)
-        feeds[groupID]?.photos.insert(photo, at: 0)
+        if feeds[groupID]?.photos.contains(where: { $0.id == photo.id }) == false {
+            feeds[groupID]?.photos.insert(photo, at: 0)
+        }
         return photo
     }
 
@@ -104,36 +135,62 @@ final class PhotosStore {
         try await api.deletePhoto(photo.id)
     }
 
-    /// Reacts (or, with nil, takes your reaction back). Shows instantly and rolls back if it fails.
+    /// Reacts (or, with nil, takes your reaction back). Shows instantly; taps are sent in order
+    /// and only the last one's answer is shown, so quick changes of mind don't flicker.
     func react(to photoID: String, with type: ReactionType?) async throws {
         guard let current = photo(photoID) else { return }
-        let previous = current.reactions
-        update(photoID) { $0.reactions = previous.with(type) }
+        update(photoID) { $0.reactions = current.reactions.with(type) }
+
+        let key = "reaction:\(photoID)"
+        let tap = nextTap(key)
+        let previous = lastRequests[key]
+        let request = Task { [api] () async throws -> ReactionSummary in
+            _ = await previous?.value
+            if let type { return try await api.setReaction(type, onPhoto: photoID) }
+            return try await api.removeReaction(fromPhoto: photoID)
+        }
+        lastRequests[key] = Task { _ = try? await request.value }
         do {
-            let summary: ReactionSummary
-            if let type {
-                summary = try await api.setReaction(type, onPhoto: photoID)
-            } else {
-                summary = try await api.removeReaction(fromPhoto: photoID)
-            }
-            update(photoID) { $0.reactions = summary }
+            let summary = try await request.value
+            if taps[key] == tap { update(photoID) { $0.reactions = summary } }
         } catch {
-            update(photoID) { $0.reactions = previous }
+            // Show what the server has, unless a later tap is still on its way. Offline that
+            // fails too, so put back what was there before the tap.
+            if taps[key] == tap, (try? await loadPhoto(photoID)) == nil, taps[key] == tap {
+                update(photoID) { $0.reactions = current.reactions }
+            }
             throw error
         }
     }
 
-    /// Shows instantly and rolls back if it fails.
+    /// Shows instantly; like reactions, taps are sent in order and the last one wins.
     func setFavorite(_ favorite: Bool, photoID: String) async throws {
-        let previous = photo(photoID)?.isFavorite ?? !favorite
+        let before = photo(photoID)?.isFavorite
         update(photoID) { $0.isFavorite = favorite }
+
+        let key = "favorite:\(photoID)"
+        let tap = nextTap(key)
+        let previous = lastRequests[key]
+        let request = Task { [api] () async throws -> Bool in
+            _ = await previous?.value
+            return try await api.setFavorite(favorite, photoID: photoID)
+        }
+        lastRequests[key] = Task { _ = try? await request.value }
         do {
-            let saved = try await api.setFavorite(favorite, photoID: photoID)
-            update(photoID) { $0.isFavorite = saved }
+            let saved = try await request.value
+            if taps[key] == tap { update(photoID) { $0.isFavorite = saved } }
         } catch {
-            update(photoID) { $0.isFavorite = previous }
+            if taps[key] == tap, (try? await loadPhoto(photoID)) == nil, taps[key] == tap, let before {
+                update(photoID) { $0.isFavorite = before }
+            }
             throw error
         }
+    }
+
+    private func nextTap(_ key: String) -> Int {
+        let tap = (taps[key] ?? 0) + 1
+        taps[key] = tap
+        return tap
     }
 
     /// After adding (+1) or deleting (-1) a comment, so feed cards show the new count.
@@ -142,6 +199,7 @@ final class PhotosStore {
     }
 
     func forget(_ photoID: String) {
+        deletedPhotoIDs.insert(photoID)
         details[photoID] = nil
         seen[photoID] = nil
         for groupID in Array(feeds.keys) {
@@ -153,6 +211,10 @@ final class PhotosStore {
         feeds = [:]
         details = [:]
         seen = [:]
+        lastRequests = [:]
+        // `taps` keeps counting: an answer still on its way for the previous account mustn't
+        // match a tap made after signing in again.
+        deletedPhotoIDs = []
     }
 
     // MARK: - Helpers

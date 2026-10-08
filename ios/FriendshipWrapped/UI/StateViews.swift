@@ -120,12 +120,21 @@ extension View {
             .listRowSeparator(.hidden)
     }
 
-    /// Keeps a text field to `limit` characters (the web form's `maxLength`).
+    /// Keeps a text field to `limit` code points, the limit the server checks.
     func characterLimit(_ limit: Int, text: Binding<String>) -> some View {
         onChange(of: text.wrappedValue) { _, newValue in
-            if newValue.count > limit {
-                text.wrappedValue = String(newValue.prefix(limit))
+            // The server (and its database) count Unicode code points, not characters as seen:
+            // 👨‍👩‍👧‍👦 is one character but seven code points. Whole characters come off the end.
+            guard newValue.unicodeScalars.count > limit else { return }
+            // One pass, so a huge paste doesn't freeze the field.
+            var used = 0
+            var end = newValue.startIndex
+            for character in newValue {
+                used += character.unicodeScalars.count
+                if used > limit { break }
+                end = newValue.index(after: end)
             }
+            text.wrappedValue = String(newValue[..<end])
         }
     }
 }

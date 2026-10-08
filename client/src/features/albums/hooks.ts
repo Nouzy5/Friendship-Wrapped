@@ -121,7 +121,12 @@ export function useAddToAlbum(albumId: string) {
 /** Puts one photo in an album or takes it out, from the photo viewer. The tick shows straight away. */
 export function usePhotoAlbumToggle(photoId: string) {
   const queryClient = useQueryClient();
+  const mutationKey = ["album-toggle", photoId];
+  const isLatest = () => queryClient.isMutating({ mutationKey }) === 1;
   return useMutation({
+    mutationKey,
+    // Ticks and unticks are sent in order (like reactions), so the last one wins.
+    scope: { id: `album-toggle:${photoId}` },
     mutationFn: ({ albumId, add }: { albumId: string; add: boolean }) =>
       add ? addAlbumPhotos(albumId, [photoId]) : removeAlbumPhoto(albumId, photoId),
     onMutate: ({ albumId, add }) => {
@@ -130,7 +135,14 @@ export function usePhotoAlbumToggle(photoId: string) {
         (ids) => ids && (add ? [...ids, albumId] : ids.filter((id) => id !== albumId)),
       );
     },
-    onSuccess: (album) => albumPhotosChanged(queryClient, album),
-    onError: () => void queryClient.invalidateQueries({ queryKey: albumKeys.ofPhoto(photoId) }),
+    onSuccess: (album) => {
+      albumChanged(queryClient, album);
+      void queryClient.invalidateQueries({ queryKey: albumKeys.photos(album.id) });
+      // Only after the last tap: an earlier answer would undo the ticks after it.
+      if (isLatest()) void queryClient.invalidateQueries({ queryKey: albumKeys.photoAlbumIds() });
+    },
+    onError: () => {
+      if (isLatest()) void queryClient.invalidateQueries({ queryKey: albumKeys.ofPhoto(photoId) });
+    },
   });
 }

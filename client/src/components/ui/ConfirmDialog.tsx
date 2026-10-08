@@ -30,8 +30,8 @@ export function ConfirmDialog({
   onClose,
 }: ConfirmDialogProps) {
   return (
-    <Dialog open={open} onClose={onClose} title={title}>
-      <div className="mt-2 text-sm text-ink-200">{description}</div>
+    <Dialog open={open} onClose={onClose} title={title} busy={isPending}>
+      <div className="mt-2 text-sm wrap-anywhere text-ink-200">{description}</div>
 
       {error && (
         <div className="mt-4">

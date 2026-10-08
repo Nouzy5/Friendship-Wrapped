@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { idSchema } from "../../lib/ids.js";
 import { canonicalTimeZone, isValidTimeZone } from "../../lib/time-zone.js";
 
 export const yearStatsParamsSchema = z.object({
-  groupId: z.uuid(),
+  groupId: idSchema,
   year: z.coerce.number().int().min(2000, "Invalid year").max(2100, "Invalid year"),
 });
 

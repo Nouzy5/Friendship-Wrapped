@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { idSchema } from "../../lib/ids.js";
+import { hasVisibleCharacter, SINGLE_LINE_NAME_PATTERN } from "../../lib/user-text.js";
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-const EMOJI_PATTERN = /\p{Extended_Pictographic}|\p{Regional_Indicator}|⃣/u;
+const EMOJI_PATTERN = /\p{Extended_Pictographic}|\p{Regional_Indicator}{2}|^[0-9#*]\uFE0F?\u20E3$/u;
 
 /** Exactly one user-perceived character that is an emoji (flags and ZWJ sequences included). */
 function isSingleEmoji(value: string): boolean {
@@ -17,7 +19,8 @@ export const groupNameSchema = z
   .trim()
   .min(1, "Give your group a name")
   .max(50, "Group name must be at most 50 characters")
-  .regex(/^[^\p{Cc}]+$/u, "Group name contains invalid characters");
+  .regex(SINGLE_LINE_NAME_PATTERN, "Group name contains invalid characters")
+  .refine(hasVisibleCharacter, "Give your group a name");
 
 export const groupEmojiSchema = z.string().trim().refine(isSingleEmoji, { message: "Pick a single emoji" });
 
@@ -35,8 +38,8 @@ export const updateGroupSchema = z
     message: "Nothing to update",
   });
 
-export const groupParamsSchema = z.object({ groupId: z.uuid() });
-export const memberParamsSchema = z.object({ groupId: z.uuid(), userId: z.uuid() });
+export const groupParamsSchema = z.object({ groupId: idSchema });
+export const memberParamsSchema = z.object({ groupId: idSchema, userId: idSchema });
 
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;

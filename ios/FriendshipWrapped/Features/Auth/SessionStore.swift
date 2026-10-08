@@ -96,17 +96,23 @@ final class SessionStore {
 
     func updateProfile(displayName: String) async throws -> User {
         let user = try await api.updateProfile(UpdateProfileInput(displayName: displayName))
-        phase = .signedIn(user)
+        profileChanged(user)
         return user
     }
 
     func setAvatar(jpeg: Data) async throws {
         let user = try await api.uploadAvatar(jpeg: jpeg)
-        phase = .signedIn(user)
+        profileChanged(user)
     }
 
     func removeAvatar() async throws {
         let user = try await api.removeAvatar()
+        profileChanged(user)
+    }
+
+    /// A change answered after signing out (an upload still finishing) mustn't sign back in.
+    private func profileChanged(_ user: User) {
+        guard case .signedIn(let current) = phase, current.id == user.id else { return }
         phase = .signedIn(user)
     }
 }

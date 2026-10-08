@@ -18,6 +18,9 @@ final class GroupsStore {
     private(set) var listState: ListState = .idle
     private var groupsByID: [String: FriendGroup] = [:]
     private var membersByGroupID: [String: [GroupMember]] = [:]
+    /// Counts groups created, joined or left here: a list that was already on its way from
+    /// before such a change would bring a left group back (or drop a new one), so it's fetched again.
+    private var membershipChanges = 0
 
     private let api: APIClient
 
@@ -41,8 +44,14 @@ final class GroupsStore {
 
     func loadGroups() async {
         if groups.isEmpty { listState = .loading }
+        let changesBefore = membershipChanges
         do {
             let fresh = try await api.fetchMyGroups()
+            guard membershipChanges == changesBefore else {
+                // After signing out (reset) there's nothing to load; otherwise fetch the list again.
+                if listState != .idle { await loadGroups() }
+                return
+            }
             groups = fresh
             for group in fresh { groupsByID[group.id] = group }
             listState = .loaded
@@ -74,6 +83,7 @@ final class GroupsStore {
 
     func createGroup(name: String, emoji: String) async throws -> FriendGroup {
         let group = try await api.createGroup(GroupInput(name: name, emoji: emoji))
+        membershipChanges += 1
         remember(group)
         return group
     }
@@ -97,11 +107,13 @@ final class GroupsStore {
     }
 
     func didJoin(_ group: FriendGroup) {
+        membershipChanges += 1
         remember(group)
         membersByGroupID[group.id] = nil
     }
 
     func forget(_ groupID: String) {
+        membershipChanges += 1
         groupsByID[groupID] = nil
         membersByGroupID[groupID] = nil
         groups.removeAll { $0.id == groupID }
@@ -109,6 +121,7 @@ final class GroupsStore {
 
     /// Drops everything, e.g. when someone signs out, so the next account sees nothing of this one's data.
     func reset() {
+        membershipChanges += 1
         groups = []
         listState = .idle
         groupsByID = [:]

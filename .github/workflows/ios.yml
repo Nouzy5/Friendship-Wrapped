@@ -28,9 +28,11 @@ on:
         type: boolean
         default: false
 
+# A newer push replaces an older push's compile check, but never cancels a manual run
+# (test builds or a TestFlight upload) part-way through.
 concurrency:
-  group: ios-${{ github.ref }}
-  cancel-in-progress: true
+  group: ios-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   build:

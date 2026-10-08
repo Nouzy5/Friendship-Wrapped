@@ -41,7 +41,8 @@ export function EmojiPicker({ value, onChange, error }: EmojiPickerProps) {
         label="Or type any emoji"
         value={isCustom ? value : ""}
         onChange={(e) => onChange(e.target.value)}
-        maxLength={16}
+        // The server allows 16 code points; maxLength counts UTF-16 units, two per emoji part.
+        maxLength={32}
         placeholder="🙂"
         autoComplete="off"
         error={error}

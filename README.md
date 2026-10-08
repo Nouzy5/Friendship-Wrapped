@@ -146,7 +146,10 @@ ios/                  Native SwiftUI app (XcodeGen project.yml); see ios/README.
   { "error": { "code": "NOT_FOUND", "message": "…", "details": "optional" } }
   ```
   Unexpected errors become a generic 500 and are logged server-side. The client's `apiRequest` turns these into a typed `ApiError`.
+  - **Not 500s:** requests Express or its body parser can't read (a URL that isn't valid percent-encoding, an unsupported charset or `Content-Encoding`) get a 400 or 415. Something deleted between a request's check and its write (reacting to a photo as it's deleted) gets a 404.
 - **Validation.** All input is validated server-side with Zod. A thrown `ZodError` becomes a 400 `VALIDATION_ERROR`.
+  - **Ids** in URLs and bodies are lowercased first: MySQL compares them without regard to case, so `ABC…` and `abc…` must never count as two different ids.
+  - **Names** (display, group and album names) need at least one visible character, so a name of only spaces, zero-width or filler characters is refused. Direction overrides (U+202A–U+202E, U+2066–U+2069), which can make a name display backwards, are refused too.
 - **Images.** Image binaries never go in MySQL. The database stores object-storage keys only, and those keys never leave the server. See [Photos](#photos).
 
 ## Authentication
@@ -155,6 +158,9 @@ ios/                  Native SwiftUI app (XcodeGen project.yml); see ios/README.
 - **Sessions.** Server-side rows in `sessions`. The browser gets a random 256-bit token in an `HttpOnly`, `SameSite=Lax` cookie (`__Host-` prefixed and `Secure` in production). Only the token's SHA-256 is stored, so a database leak can't be replayed. Sessions last 30 days and slide forward while in use. Logout deletes the row.
 - **Protecting an endpoint.** Add `requireAuth` to the route and read the user with `currentUser(req)` in the controller. Never take a user id from the request body.
 - **Hardening.** Login is rate-limited (10 attempts / 15 min per IP + username). Unknown usernames take the same time and get the same response as wrong passwords. State-changing requests from another origin are rejected (CSRF defence in depth). All API responses are `Cache-Control: no-store`.
+  - **Spelling variants:** login only looks up names that could have been registered. MySQL's collation ignores accents, so without this `álice` would find `alice` and get its own 10 attempts.
+  - **Memory:** the limiter's counters are capped, and its key uses at most 64 characters of the username, however long the one sent.
+  - **Logs:** invite tokens in URLs are logged as `…`, since an invite link is a credential.
 - **Client.** `useSession()` holds the signed-in user (or `null`). `<RequireAuth>` and `<RedirectIfAuthenticated>` guard routes, and send people back to the page they wanted after login. Any `401 UNAUTHORIZED` response signs the client out.
 
 | Method | Endpoint | Auth | Purpose |
@@ -191,7 +197,8 @@ Users come back with an `avatarUrl` (or `null`). The URL changes whenever the pi
 - **Invite links.** `/invite/<token>`: 128 random bits, valid for 7 days, and only the token's SHA-256 is stored, so a link can't be shown again later. Members just create a new one. The link is the credential:
   - Anyone holding it can see a preview (name, emoji, member count) without an account, then sign up or log in and come back to join.
   - Accepting twice is harmless.
-  - Links stop working if the owner resets them, or if the person who created them leaves or is removed.
+  - Links stop working if the owner resets them, or if the person who created them leaves.
+  - Removing someone resets every link of the group (they may have kept any of them), so they can only come back with a new one.
 - **Leaving** runs in a serializable transaction (`withTransaction`) so the one-owner rule always holds:
   - If the owner leaves, ownership passes to the longest-standing member.
   - If the last member leaves, the group is deleted.
@@ -228,7 +235,7 @@ Users come back with an `avatarUrl` (or `null`). The URL changes whenever the pi
   | `medium` | ≤ 1280 px | `medium_key` | Photo viewer and feed |
   | `thumbnail` | 480×480, centre-cropped | `thumbnail_key` | Grids |
 
-  Small photos are never enlarged.
+  Small photos are never enlarged. Thumbnails and profile pictures are still square: a photo narrower than 480 px gets a thumbnail the size of its short side.
 - **Storage keys.** Everything is under `groups/<groupId>/photos/<random>/…` and `users/<userId>/avatars/<random>.webp`.
   - The random part makes keys unguessable.
   - The group prefix lets a deleted group's files be removed in one sweep.
@@ -316,8 +323,9 @@ Every photo comes back with `reactions: { counts, total, mine }`, `commentCount`
 `/memories` (in the bottom navigation) is a group's archive. With more than one group, chips at the top switch between them. The group, tab and month are kept in the URL (`?group=…&tab=…&month=YYYY-MM`), so coming back from a photo lands in the same place.
 
 - **On This Day.** Photos from today's date in earlier years, newest year first, with "1 year ago" headings. When there are none yet, an empty state says so.
-  - **Your own calendar:** days are counted in the viewer's time zone. The browser sends its IANA zone (`tz=Europe/Bratislava`), and the server works out each year's local midnight-to-midnight range (`lib/time-zone.ts`). A photo taken at 00:30 local time counts for that day, even though in UTC it's the previous one.
-  - **Range:** only years since the group was created are searched, and 29 February only comes back in leap years.
+  - **Your own calendar:** days are counted in the viewer's time zone. The browser sends its IANA zone (`tz=Europe/Bratislava`) and its own date (`date=`, so the photos match the heading), and the server works out each year's local midnight-to-midnight range (`lib/time-zone.ts`). A photo taken at 00:30 local time counts for that day, even though in UTC it's the previous one.
+  - **Where clocks skip midnight:** when daylight saving starts at midnight (Chile, Cuba, the Azores), clocks go from 23:59:59 to 01:00, and the day starts at that jump. A day a zone skipped altogether (Samoa's 30 December 2011) is empty.
+  - **Range:** only years since the group was created, up to this one, are searched, and 29 February only comes back in leap years. Each year shows up to 50 photos, so one busy year can't crowd out the others.
 - **Timeline.** Every photo in the group, newest first, under sticky month headings, loading more as you scroll.
   - **Jump to a month:** pick a month and year (from when the group began until now). The list then starts at the end of that month in your time zone (`?before=`) and continues back in time. **Back to the latest** returns to the top.
   - **Shared cache:** from the latest photos, the timeline shares the group feed's cache.
@@ -395,10 +403,10 @@ A group's year, played as a full-screen story of slides. There's a Wrapped for e
 
   A slide with nothing to show is left out (no reactions means no slides 5 and 6; the collage needs at least 2 photos).
 - **Saved once the year is over.** While a year is in progress (`final: false`), its Wrapped is counted live on every opening.
-  - **When it's saved:** once the year has ended in that time zone, the first opening saves the numbers in the `wrapped` table, keyed by group, year and canonical zone name.
+  - **When it's saved:** once the year has ended in that time zone (and 10 more minutes have passed, so photos still uploading at midnight count), the first opening saves the numbers in the `wrapped` table, keyed by group, year and canonical zone name. If two friends open it at the same moment, the first save stands.
   - **After that:** every later opening shows the same story.
   - **What's stored:** the analytics numbers, with people and photos as ids. Names, avatars and photos are looked up when it's shown, so a photo deleted since simply drops out.
-  - **Format changes:** a format version in the stored JSON means a change to the numbers recounts older saves.
+  - **Format changes:** a format version in the stored JSON means a change to the numbers recounts older saves (version 2 recounted days in zones where clocks skip midnight). A save in a newer format than the server knows is left alone.
   - **Speed:** at the spec's full scale, a saved Wrapped loads in about 6 ms, against about 270 ms to count it.
 - **The story (web).** `/wrapped` lists them by year; `/wrapped/:year?group=…` plays one full screen, outside the app shell.
   - **Playback:** each slide plays for 4.5 to 8 seconds behind a progress bar. Slides enter with a transition, numbers count up, and charts and photos animate in.

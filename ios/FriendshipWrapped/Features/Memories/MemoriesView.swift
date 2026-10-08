@@ -146,13 +146,15 @@ private struct OnThisDayCard: View {
                         .foregroundStyle(.secondary)
                 } else {
                     let thisYear = Int(result.date.prefix(4)) ?? Calendar.current.component(.year, from: Date())
-                    ForEach(result.years) { entry in
+                    // Without any deleted since it loaded (it reloads on coming back), and without
+                    // years left with nothing in them.
+                    ForEach(result.years.filter { year in year.photos.contains { !photos.deletedPhotoIDs.contains($0.id) } }) { entry in
                         VStack(alignment: .leading, spacing: 8) {
                             Text("\(Self.yearsAgo(thisYear - entry.year)) · \(String(entry.year))")
                                 .font(.subheadline.weight(.semibold))
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 8) {
-                                    ForEach(entry.photos) { photo in
+                                    ForEach(entry.photos.filter { !photos.deletedPhotoIDs.contains($0.id) }) { photo in
                                         NavigationLink(value: AppRoute.photo(photo.id)) {
                                             PhotoThumbnail(photo: photo)
                                                 .frame(width: 112, height: 112)

@@ -8,27 +8,31 @@ type RateLimitOptions = {
   message: string;
 };
 
-const MAX_TRACKED_KEYS = 10_000;
+/** Memory stays bounded however many different keys arrive (keys are at most ~100 characters). */
+const MAX_TRACKED_KEYS = 100_000;
 
 /**
  * Fixed-window, in-memory rate limiter. Fine for a single API process; move the
  * counters to a shared store (e.g. Redis) if the API ever runs on multiple instances.
  */
 export function rateLimit({ windowMs, limit, key, message }: RateLimitOptions): RequestHandler {
+  // Every window is equally long, so insertion order is expiry order: the oldest come first.
   const hits = new Map<string, { count: number; resetAt: number }>();
 
   return (req, res, next) => {
     const now = Date.now();
 
-    if (hits.size > MAX_TRACKED_KEYS) {
-      for (const [k, entry] of hits) if (entry.resetAt <= now) hits.delete(k);
-    }
-
     const k = key(req);
     let entry = hits.get(k);
     if (!entry || entry.resetAt <= now) {
+      hits.delete(k); // re-inserted at the end, keeping the order
       entry = { count: 0, resetAt: now + windowMs };
       hits.set(k, entry);
+      // Drop expired windows, and the oldest live ones if there are too many.
+      for (const [oldKey, old] of hits) {
+        if (old.resetAt > now && hits.size <= MAX_TRACKED_KEYS) break;
+        hits.delete(oldKey);
+      }
     }
 
     entry.count += 1;
