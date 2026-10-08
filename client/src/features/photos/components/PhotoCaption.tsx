@@ -16,7 +16,7 @@ export function PhotoCaption({ text }: { text: string }) {
   }, [text, expanded]);
 
   return (
-    <div className="relative text-sm text-ink-50">
+    <div className="relative text-[0.9375rem] leading-snug">
       <p ref={ref} className={`break-words whitespace-pre-line ${expanded ? "" : "line-clamp-3"}`}>
         {text}
       </p>
@@ -24,7 +24,7 @@ export function PhotoCaption({ text }: { text: string }) {
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="absolute right-0 bottom-0 bg-linear-to-r from-transparent to-ink-950 to-40% pl-10 font-medium text-ink-400 hover:text-ink-200"
+          className="absolute right-0 bottom-0 bg-linear-to-r from-transparent to-bg to-40% pl-10 font-medium text-sub hover:text-fg"
         >
           more
         </button>

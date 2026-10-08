@@ -18,9 +18,15 @@ export const displayNameSchema = z
   .max(40, "Display name must be at most 40 characters")
   .regex(/^[^\p{Cc}]+$/u, "Display name contains invalid characters");
 
-export const updateProfileSchema = z.object({
-  displayName: displayNameSchema,
-});
+/** Either or both. Usernames follow the registration rules. */
+export const updateProfileSchema = z
+  .object({
+    displayName: displayNameSchema.optional(),
+    username: usernameSchema.optional(),
+  })
+  .refine((input) => input.displayName !== undefined || input.username !== undefined, {
+    message: "Nothing to update",
+  });
 
 export const userParamsSchema = z.object({ userId: z.uuid() });
 

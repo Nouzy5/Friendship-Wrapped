@@ -15,7 +15,7 @@ export function RouteErrorPage() {
     : "Something went wrong while loading this page.";
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-ink-950">
+    <div className="flex min-h-dvh items-center justify-center bg-bg">
       <StateMessage
         headingLevel="h1"
         emoji="😵"

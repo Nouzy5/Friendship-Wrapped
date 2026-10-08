@@ -51,7 +51,7 @@ export function WrappedListPage() {
           title="No Wrapped yet"
           description="Your group's Wrapped starts with its first photo. Every photo, reaction and comment ends up in it."
           action={
-            <Link to="/camera" className={buttonClasses()}>
+            <Link to="/camera" className={buttonClasses("accent")}>
               Take a photo
             </Link>
           }
@@ -61,19 +61,21 @@ export function WrappedListPage() {
   } else {
     content = byYear(list.data).map(({ year, final, items }) => (
       <section key={year} aria-labelledby={`wrapped-${year}`} className="flex flex-col gap-3">
-        <h2 id={`wrapped-${year}`} className="flex items-center gap-2 text-lg font-bold">
+        <h2 id={`wrapped-${year}`} className="flex items-center gap-2 text-[1.875rem] leading-none font-semibold font-stretch-112%">
           {year}
           {!final && <Badge>In progress</Badge>}
         </h2>
-        {items.map((item) => (
-          <WrappedCard key={item.group.id} wrapped={item} />
+        {items.map((item, index) => (
+          <div key={item.group.id} className="animate-list-in" style={{ animationDelay: `${index * 70}ms` }}>
+            <WrappedCard wrapped={item} />
+          </div>
         ))}
       </section>
     ));
   }
 
   return (
-    <div className="flex flex-col gap-5 py-2">
+    <div className="flex flex-col gap-6 px-4 pt-3">
       <PageHeader title="Wrapped" />
       {content}
     </div>

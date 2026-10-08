@@ -1,11 +1,15 @@
 import type { Prisma } from "../../generated/prisma/client.js";
 import { after, before, type Cursor } from "../../lib/pagination.js";
 import { prisma, type DbClient } from "../../lib/prisma.js";
+import { notBlockedWith } from "../blocks/blocks.repository.js";
 import { photoDetailSelect, photoSelect } from "./photo.dto.js";
 
 // Feed order is newest first, ties broken by id, using the (group_id, created_at, id) index.
 const newestFirst = [{ createdAt: "desc" }, { id: "desc" }] satisfies Prisma.PhotoOrderByWithRelationInput[];
 const oldestFirst = [{ createdAt: "asc" }, { id: "asc" }] satisfies Prisma.PhotoOrderByWithRelationInput[];
+
+/** Photos by people with a block between them and the viewer are left out of every list. */
+const unblocked = (viewerId: string) => ({ uploader: notBlockedWith(viewerId) }) satisfies Prisma.PhotoWhereInput;
 
 /** `viewerId` is the uploader, who is the only one looking at the result. */
 export function createPhoto(data: Prisma.PhotoUncheckedCreateInput, db: DbClient = prisma) {
@@ -18,6 +22,8 @@ type GroupPhotosPage = {
   startBefore?: Date;
   /** Only photos the viewer has favorited. */
   onlyFavorites?: boolean;
+  /** Only photos this person posted. */
+  uploaderId?: string;
   /** The page size; callers ask for one extra to detect a next page. */
   take: number;
 };
@@ -26,12 +32,14 @@ type GroupPhotosPage = {
 export function listGroupPhotos(
   groupId: string,
   viewerId: string,
-  { cursor, startBefore, onlyFavorites, take }: GroupPhotosPage,
+  { cursor, startBefore, onlyFavorites, uploaderId, take }: GroupPhotosPage,
   db: DbClient = prisma,
 ) {
   return db.photo.findMany({
     where: {
       groupId,
+      ...unblocked(viewerId),
+      ...(uploaderId && { uploaderId }),
       ...(cursor ? before(cursor) : startBefore && { createdAt: { lt: startBefore } }),
       ...(onlyFavorites && { favorites: { some: { userId: viewerId } } }),
     },
@@ -49,7 +57,7 @@ export function listAlbumPhotos(
   db: DbClient = prisma,
 ) {
   return db.photo.findMany({
-    where: { albums: { some: { albumId } }, ...(cursor && after(cursor)) },
+    where: { albums: { some: { albumId } }, ...unblocked(viewerId), ...(cursor && after(cursor)) },
     orderBy: oldestFirst,
     take,
     select: photoSelect(viewerId),
@@ -58,7 +66,10 @@ export function listAlbumPhotos(
 
 /** Specific photos of a group, in no particular order. */
 export function findGroupPhotosByIds(groupId: string, photoIds: string[], viewerId: string, db: DbClient = prisma) {
-  return db.photo.findMany({ where: { groupId, id: { in: photoIds } }, select: photoSelect(viewerId) });
+  return db.photo.findMany({
+    where: { groupId, id: { in: photoIds }, ...unblocked(viewerId) },
+    select: photoSelect(viewerId),
+  });
 }
 
 /** A group's photos posted within any of the time ranges, newest first. */
@@ -70,26 +81,48 @@ export function listPhotosInRanges(
   db: DbClient = prisma,
 ) {
   return db.photo.findMany({
-    where: { groupId, OR: ranges.map(({ from, to }) => ({ createdAt: { gte: from, lt: to } })) },
+    where: {
+      groupId,
+      ...unblocked(viewerId),
+      OR: ranges.map(({ from, to }) => ({ createdAt: { gte: from, lt: to } })),
+    },
     orderBy: newestFirst,
     take,
     select: photoSelect(viewerId),
   });
 }
 
+/** When photos in these groups were posted within any of the ranges, as the viewer may see them. */
+export function listPhotoTimesInRanges(
+  groupIds: string[],
+  viewerId: string,
+  ranges: { from: Date; to: Date }[],
+  db: DbClient = prisma,
+) {
+  return db.photo.findMany({
+    where: {
+      groupId: { in: groupIds },
+      ...unblocked(viewerId),
+      OR: ranges.map(({ from, to }) => ({ createdAt: { gte: from, lt: to } })),
+    },
+    select: { createdAt: true },
+  });
+}
+
 /** The ids of the photos just before and after this one in its group's feed (null at either end). */
 export async function findFeedNeighbors(
   photo: Cursor & { groupId: string },
+  viewerId: string,
   db: DbClient = prisma,
 ): Promise<{ newerId: string | null; olderId: string | null }> {
   const [newer, older] = await Promise.all([
     db.photo.findFirst({
-      where: { groupId: photo.groupId, ...after(photo) },
+      where: { groupId: photo.groupId, ...unblocked(viewerId), ...after(photo) },
       orderBy: oldestFirst,
       select: { id: true },
     }),
     db.photo.findFirst({
-      where: { groupId: photo.groupId, ...before(photo) },
+      where: { groupId: photo.groupId, ...unblocked(viewerId), ...before(photo) },
       orderBy: newestFirst,
       select: { id: true },
     }),
@@ -97,11 +130,14 @@ export async function findFeedNeighbors(
   return { newerId: newer?.id ?? null, olderId: older?.id ?? null };
 }
 
-/** The privacy rule in one place: a photo is visible to its uploader and to members of its group. */
+/**
+ * The privacy rule in one place: a photo is visible to its uploader, and to members of its
+ * group unless there's a block between them and the uploader.
+ */
 function visibleTo(photoId: string, viewerId: string): Prisma.PhotoWhereInput {
   return {
     id: photoId,
-    OR: [{ uploaderId: viewerId }, { group: { members: { some: { userId: viewerId } } } }],
+    OR: [{ uploaderId: viewerId }, { group: { members: { some: { userId: viewerId } } }, ...unblocked(viewerId) }],
   };
 }
 
@@ -120,7 +156,14 @@ export function findVisiblePhotoRef(photoId: string, viewerId: string, db: DbCli
 export function findVisiblePhotoKeys(photoId: string, viewerId: string, db: DbClient = prisma) {
   return db.photo.findFirst({
     where: visibleTo(photoId, viewerId),
-    select: { uploaderId: true, storageKey: true, mediumKey: true, thumbnailKey: true },
+    select: {
+      uploaderId: true,
+      storageKey: true,
+      mediumKey: true,
+      thumbnailKey: true,
+      createdAt: true,
+      uploader: { select: { id: true, settings: { select: { allowPhotoSaving: true } } } },
+    },
   });
 }
 
@@ -134,6 +177,15 @@ export function listPhotoKeysByUploader(uploaderId: string, db: DbClient = prism
   return db.photo.findMany({
     where: { uploaderId },
     select: { storageKey: true, mediumKey: true, thumbnailKey: true },
+  });
+}
+
+/** Every photo someone posted, with its group's name, for their photo archive. Oldest first per group. */
+export function listArchivePhotos(uploaderId: string, db: DbClient = prisma) {
+  return db.photo.findMany({
+    where: { uploaderId },
+    orderBy: [{ groupId: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    select: { storageKey: true, createdAt: true, groupId: true, group: { select: { name: true } } },
   });
 }
 

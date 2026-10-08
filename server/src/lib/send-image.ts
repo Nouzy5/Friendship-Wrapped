@@ -7,11 +7,19 @@ import type { StoredObject } from "./storage.js";
  * renditions are immutable, avatar URLs are versioned), so browsers may cache them —
  * but only privately, never in shared proxies.
  */
-export async function sendImage(res: Response, image: StoredObject): Promise<void> {
+export async function sendImage(
+  res: Response,
+  image: StoredObject,
+  { downloadName }: { downloadName?: string } = {},
+): Promise<void> {
   res.set({
     "Content-Type": image.contentType ?? "application/octet-stream",
     "Cache-Control": "private, max-age=31536000, immutable",
   });
+  if (downloadName) {
+    // Saving is a permission that can be withdrawn, so a download is never cached.
+    res.set({ "Content-Disposition": `attachment; filename="${downloadName}"`, "Cache-Control": "no-store" });
+  }
   if (image.contentLength !== undefined) res.set("Content-Length", String(image.contentLength));
 
   try {

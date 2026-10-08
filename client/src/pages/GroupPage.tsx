@@ -1,59 +1,85 @@
-import { Link } from "react-router";
-import { buttonClasses } from "../components/ui/Button";
-import { PlusIcon, SettingsIcon } from "../components/ui/icons";
-import { headerIconLinkClasses, PageHeader } from "../components/ui/PageHeader";
-import { GroupEmoji } from "../features/groups/components/GroupEmoji";
+import { useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router";
+import { Avatar } from "../components/ui/Avatar";
+import { FeedIcon, GridIcon, SettingsIcon } from "../components/ui/icons";
+import { headerIconClasses } from "../components/ui/PageHeader";
+import { useCurrentUser } from "../features/auth/hooks";
+import { setCurrentGroupId } from "../features/groups/current-group";
+import { GroupAvatar } from "../features/groups/components/GroupAvatar";
+import { GroupPicker } from "../features/groups/components/GroupPicker";
 import { useGroupContext } from "../features/groups/components/GroupRoute";
-import { MemberAvatars } from "../features/groups/components/MemberAvatars";
-import { useGroupMembers } from "../features/groups/hooks";
 import { InviteFriendsCard } from "../features/invites/components/InviteFriendsCard";
-import { GroupFeed } from "../features/photos/components/GroupFeed";
+import { GroupFeed, type FeedLayout } from "../features/photos/components/GroupFeed";
 import { formatMemberCount } from "../lib/format";
 import { usePageTitle } from "../lib/usePageTitle";
 
+/** The layout lives in the URL (?view=grid), so it survives opening a photo and coming back. */
+function useLayout(): [FeedLayout, (layout: FeedLayout) => void] {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const layout: FeedLayout = searchParams.get("view") === "grid" ? "grid" : "feed";
+
+  function setLayout(next: FeedLayout) {
+    setSearchParams(
+      (params) => {
+        if (next === "grid") params.set("view", "grid");
+        else params.delete("view");
+        return params;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }
+
+  return [layout, setLayout];
+}
+
+/** Home: one group's photos, with a switcher to the others. */
 export function GroupPage() {
   const group = useGroupContext();
   usePageTitle(group.name);
-  const members = useGroupMembers(group.id);
-  const membersPath = `/groups/${group.id}/members`;
+  const me = useCurrentUser();
+  const navigate = useNavigate();
+  const [layout, setLayout] = useLayout();
   const alone = group.memberCount === 1;
 
-  return (
-    <div className="flex flex-col gap-6 py-2">
-      <PageHeader
-        backTo="/home"
-        backLabel="Back to home"
-        action={
-          <Link to={`/groups/${group.id}/settings`} aria-label="Group settings" className={headerIconLinkClasses}>
-            <SettingsIcon className="size-5" />
-          </Link>
-        }
-      />
+  // This is now the group Home opens, the camera posts to, and whose colour is your accent.
+  useEffect(() => setCurrentGroupId(group.id), [group.id]);
 
-      <section className="flex flex-col items-center text-center">
-        <GroupEmoji emoji={group.emoji} size="xl" />
-        <h1 className="mt-4 text-3xl font-black tracking-tight wrap-anywhere">{group.name}</h1>
-        <div className="mt-3 flex flex-wrap items-center justify-center gap-1">
-          <Link
-            to={membersPath}
-            className="inline-flex items-center gap-3 rounded-full py-1 pr-3 pl-1 text-sm text-ink-200 transition hover:bg-ink-800"
-          >
-            {members.data && <MemberAvatars members={members.data} />}
-            {formatMemberCount(group.memberCount)}
-          </Link>
-          {/* The feed scrolls on and on, so invites live on the members page rather than below it. */}
-          {!alone && (
-            <Link to={membersPath} className={buttonClasses("ghost", "min-h-10 px-3 text-xs")}>
-              <PlusIcon className="size-4" />
-              Invite
+  return (
+    <div className="flex flex-col">
+      <header className="flex flex-col gap-0.5 pt-3 pr-2 pb-2 pl-4">
+        <div className="flex items-center gap-2.5">
+          <GroupAvatar group={group} size={36} />
+          <GroupPicker current={group} onSelect={(next) => void navigate(`/groups/${next.id}`)} showNewGroup />
+          <div className="ml-auto flex shrink-0 items-center">
+            <button
+              type="button"
+              aria-label="Show as grid"
+              aria-pressed={layout === "grid"}
+              onClick={() => setLayout(layout === "grid" ? "feed" : "grid")}
+              className={headerIconClasses}
+            >
+              {layout === "grid" ? <FeedIcon className="size-[1.375rem]" /> : <GridIcon className="size-[1.375rem]" />}
+            </button>
+            <Link to={`/groups/${group.id}/settings`} aria-label="Group settings" className={headerIconClasses}>
+              <SettingsIcon className="size-[1.375rem]" />
             </Link>
-          )}
+            <Link to="/settings" aria-label="Your profile and settings" className="grid size-11 place-items-center rounded-full">
+              <Avatar name={me.displayName} src={me.avatarUrl} color={group.myColor} size="sm" />
+            </Link>
+          </div>
         </div>
-      </section>
+        <Link to={`/groups/${group.id}/settings`} className="self-start pl-[2.875rem] text-[0.8125rem] text-sub hover:text-fg">
+          {formatMemberCount(group.memberCount)}
+        </Link>
+      </header>
 
       {/* Until there's someone to share photos with, inviting comes first. */}
-      {alone && <InviteFriendsCard group={group} highlight />}
-      <GroupFeed groupId={group.id} />
+      {alone && (
+        <div className="px-4 pt-2 pb-4">
+          <InviteFriendsCard group={group} highlight />
+        </div>
+      )}
+      <GroupFeed group={group} layout={layout} />
     </div>
   );
 }

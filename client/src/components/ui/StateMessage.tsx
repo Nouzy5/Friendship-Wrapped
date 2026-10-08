@@ -14,12 +14,12 @@ export function StateMessage({ emoji, title, description, action, headingLevel =
   const Heading = headingLevel;
 
   return (
-    <div className="flex flex-col items-center px-6 py-12 text-center">
-      <span aria-hidden className="text-5xl">
+    <div className="flex animate-page-fade flex-col items-center px-6 py-12 text-center">
+      <span aria-hidden className="animate-pop-in text-5xl [animation-delay:120ms]">
         {emoji}
       </span>
-      <Heading className="mt-4 text-xl font-bold text-ink-50">{title}</Heading>
-      {description && <p className="mt-2 max-w-sm text-sm text-ink-400">{description}</p>}
+      <Heading className="mt-4 text-xl font-semibold font-stretch-112%">{title}</Heading>
+      {description && <p className="mt-2 max-w-sm text-[0.9375rem] text-sub">{description}</p>}
       {action && <div className="mt-6">{action}</div>}
     </div>
   );

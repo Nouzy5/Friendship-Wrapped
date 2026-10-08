@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCurrentUser } from "../auth/hooks";
 import { patchCachedPhoto, photoKeys } from "../photos/cache";
 import type { Photo } from "../photos/types";
 import { fetchReactions, removeReaction, setReaction } from "./api";
@@ -25,6 +26,7 @@ export function useReactionList(photoId: string, enabled: boolean) {
  */
 export function useReact(photo: Pick<Photo, "id" | "groupId">) {
   const queryClient = useQueryClient();
+  const me = useCurrentUser();
   const mutationKey = ["react", photo.id];
   const isLatest = () => queryClient.isMutating({ mutationKey }) === 1;
 
@@ -34,7 +36,7 @@ export function useReact(photo: Pick<Photo, "id" | "groupId">) {
     meta: { errorToast: "Couldn't save your reaction." },
     mutationFn: (type: ReactionType | null) => (type ? setReaction(photo.id, type) : removeReaction(photo.id)),
     onMutate: (type) => {
-      patchCachedPhoto(queryClient, photo, (current) => ({ reactions: withReaction(current.reactions, type) }));
+      patchCachedPhoto(queryClient, photo, (current) => ({ reactions: withReaction(current.reactions, type, me.id) }));
     },
     onSuccess: (summary) => {
       if (isLatest()) patchCachedPhoto(queryClient, photo, () => ({ reactions: summary }));

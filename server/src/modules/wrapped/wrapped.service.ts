@@ -8,8 +8,11 @@ import { getGroup } from "../groups/groups.service.js";
 import { toSlides, type WrappedSummary, type WrappedView } from "./wrapped.dto.js";
 import * as wrappedRepository from "./wrapped.repository.js";
 
-/** Bumped when YearNumbers changes shape: saved Wrappeds in an older format are counted again. */
-const FORMAT_VERSION = 1;
+/**
+ * Bumped when YearNumbers changes shape: saved Wrappeds in an older format are counted again
+ * (and saved again). 2 added the busiest month's people and each photographer's best photo.
+ */
+const FORMAT_VERSION = 2;
 
 type SavedNumbers = YearNumbers & { version: number };
 

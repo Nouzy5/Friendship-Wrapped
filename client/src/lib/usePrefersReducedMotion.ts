@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { useDeviceSettings } from "./device-settings";
 
 const query = "(prefers-reduced-motion: reduce)";
 
@@ -8,7 +9,13 @@ function subscribe(onChange: () => void) {
   return () => media.removeEventListener("change", onChange);
 }
 
-/** For motion driven from script; CSS animations use the motion-reduce: variant instead. */
+/**
+ * For motion driven from script; CSS animations use the motion-reduce: variant instead.
+ * Settings → Appearance → Reduce motion can override the device either way.
+ */
 export function usePrefersReducedMotion(): boolean {
-  return useSyncExternalStore(subscribe, () => window.matchMedia(query).matches);
+  const { reduceMotion } = useDeviceSettings();
+  const deviceReduces = useSyncExternalStore(subscribe, () => window.matchMedia(query).matches);
+  if (reduceMotion === "system") return deviceReduces;
+  return reduceMotion === "on";
 }

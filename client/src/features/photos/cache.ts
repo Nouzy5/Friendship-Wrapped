@@ -9,6 +9,8 @@ export const photoKeys = {
   group: (groupId: string) => [...photoKeys.all, "group", groupId] as const,
   groupFrom: (groupId: string, before: string) => [...photoKeys.group(groupId), "before", before] as const,
   favorites: (groupId: string) => [...photoKeys.group(groupId), "favorites"] as const,
+  /** Memories → "Taken by" one person. */
+  byUploader: (groupId: string, uploaderId: string) => [...photoKeys.group(groupId), "by", uploaderId] as const,
   details: () => [...photoKeys.all, "detail"] as const,
   detail: (photoId: string) => [...photoKeys.details(), photoId] as const,
 };

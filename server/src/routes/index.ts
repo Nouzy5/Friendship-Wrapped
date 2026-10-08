@@ -6,7 +6,9 @@ import { commentsRouter } from "../modules/comments/comments.routes.js";
 import { groupsRouter } from "../modules/groups/groups.routes.js";
 import { healthRouter } from "../modules/health/health.routes.js";
 import { invitesRouter } from "../modules/invites/invites.routes.js";
+import { notificationsRouter } from "../modules/notifications/notifications.routes.js";
 import { photosRouter } from "../modules/photos/photos.routes.js";
+import { reportsRouter } from "../modules/reports/reports.routes.js";
 import { usersRouter } from "../modules/users/users.routes.js";
 import { wrappedRouter } from "../modules/wrapped/wrapped.routes.js";
 
@@ -29,3 +31,5 @@ apiRouter.use("/photos", photosRouter);
 apiRouter.use("/comments", commentsRouter);
 apiRouter.use("/albums", albumsRouter);
 apiRouter.use("/wrapped", wrappedRouter);
+apiRouter.use("/reports", reportsRouter);
+apiRouter.use("/notifications", notificationsRouter);

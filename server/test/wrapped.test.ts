@@ -88,7 +88,12 @@ describe("a group's Wrapped", () => {
       "collage",
       "outro",
     ]);
-    expect(slide(wrapped, "photos")).toEqual({ type: "photos", total: 4, photographerCount: 3 });
+    expect(slide(wrapped, "photos")).toMatchObject({ type: "photos", total: 4, photographerCount: 3 });
+    expect(slide(wrapped, "photos").byUser).toEqual([
+      { user: expect.objectContaining({ username: "bob" }), color: "COBALT", count: 2 },
+      { user: expect.objectContaining({ username: "alice" }), color: "LIME", count: 1 },
+      { user: expect.objectContaining({ username: "carol" }), color: "TOMATO", count: 1 },
+    ]);
     expect(slide(wrapped, "topPhotographer")).toMatchObject({
       top: { user: { username: "bob", displayName: "Bob" }, count: 2 },
       // Tied on one photo each: whoever posted first that year comes first.
@@ -103,6 +108,10 @@ describe("a group's Wrapped", () => {
       count: 3,
       byMonth: [1, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0],
       busiestDay: { date: "2025-08-01", count: 2 },
+      byUser: [
+        { user: expect.objectContaining({ username: "bob" }), color: "COBALT", count: 2 },
+        { user: expect.objectContaining({ username: "carol" }), color: "TOMATO", count: 1 },
+      ],
     });
     expect(slide(wrapped, "mostReactedPhoto")).toMatchObject({
       photo: { id: popular.id, imageUrls: { medium: expect.any(String) } },
@@ -120,6 +129,57 @@ describe("a group's Wrapped", () => {
       quiet.id,
     ]);
     expect(slide(wrapped, "outro")).toEqual({ type: "outro", photos: 4, reactions: 3, comments: 1, people: 4 });
+  });
+
+  it("leaves out people who opted out, even from a saved year, but still counts them", async () => {
+    const { owner: alice, members, group } = await groupWith(app, "alice", "bob", "carol");
+    const [bob, carol] = members as [(typeof members)[0], (typeof members)[0]];
+
+    const bobsBest = await photoAt(bob.agent, group.id, "2025-05-01T10:00:00Z");
+    await photoAt(bob.agent, group.id, "2025-05-02T10:00:00Z");
+    const carols = await photoAt(carol.agent, group.id, "2025-05-03T10:00:00Z");
+    await photoAt(alice.agent, group.id, "2025-06-03T10:00:00Z");
+    await reactAt(alice.agent, alice.user.id, bobsBest.id, "HEART", "2025-05-04T10:00:00Z");
+    await reactAt(carol.agent, carol.user.id, bobsBest.id, "HEART", "2025-05-04T11:00:00Z");
+    await reactAt(bob.agent, bob.user.id, carols.id, "FIRE", "2025-05-04T12:00:00Z");
+    await reactAt(bob.agent, bob.user.id, bobsBest.id, "FIRE", "2025-05-04T13:00:00Z");
+
+    const before = (await wrappedOf(alice.agent, group.id, 2025)).body.wrapped as Wrapped;
+    expect(slide(before, "topPhotographer").top.user.username).toBe("bob");
+    expect(slide(before, "mostReactedPhoto").photo.id).toBe(bobsBest.id);
+    expect(await prisma.wrapped.count()).toBe(1);
+
+    expect((await bob.agent.patch("/api/users/me/settings").send({ showInWrapped: false })).status).toBe(200);
+    const after = (await wrappedOf(alice.agent, group.id, 2025)).body.wrapped as Wrapped;
+    expect(after.generatedAt).toBe(before.generatedAt); // the saved year, shown under today's setting
+
+    const names = (people: { user: { username: string } }[]) => people.map((p) => p.user.username);
+    expect(slide(after, "photos")).toMatchObject({ total: 4, photographerCount: 3 });
+    expect(names(slide(after, "photos").byUser)).toEqual(["carol", "alice"]);
+    expect(slide(after, "topPhotographer")).toMatchObject({
+      top: { user: { username: "carol" }, color: "TOMATO", count: 1 },
+      runnersUp: [{ user: { username: "alice" }, color: "LIME" }],
+    });
+    expect(slide(after, "busiestMonth")).toMatchObject({ month: 5, count: 3 });
+    expect(names(slide(after, "busiestMonth").byUser)).toEqual(["carol"]);
+    // Bob's photo was the most reacted to; the next person's best takes the slide.
+    expect(slide(after, "mostReactedPhoto")).toMatchObject({ photo: { id: carols.id }, count: 1 });
+    // Bob was the top reactor (2); his reactions still count in the total.
+    expect(slide(after, "reactions")).toMatchObject({ total: 4, topReactor: { user: { username: "alice" } } });
+    expect(slide(after, "outro")).toMatchObject({ photos: 4, reactions: 4, people: 3 });
+  });
+
+  it("shows colours only for current members", async () => {
+    const { owner: alice, members, group } = await groupWith(app, "alice", "bob");
+    await photoAt(members[0]!.agent, group.id, "2025-05-01T10:00:00Z");
+    await photoAt(alice.agent, group.id, "2025-05-02T10:00:00Z");
+    expect((await members[0]!.agent.post(`/api/groups/${group.id}/leave`)).status).toBe(200);
+
+    const { wrapped } = (await wrappedOf(alice.agent, group.id, 2025)).body;
+    expect(slide(wrapped, "photos").byUser).toEqual([
+      { user: expect.objectContaining({ username: "bob" }), color: null, count: 1 },
+      { user: expect.objectContaining({ username: "alice" }), color: "LIME", count: 1 },
+    ]);
   });
 
   it("leaves out the slides there's nothing to show on", async () => {
@@ -169,7 +229,7 @@ describe("a group's Wrapped", () => {
     await prisma.wrapped.updateMany({ data: { stats: { version: 0 } } });
     const { wrapped } = (await wrappedOf(owner.agent, group.id, 2025)).body;
     expect(slide(wrapped, "photos").total).toBe(1);
-    expect((await prisma.wrapped.findFirstOrThrow()).stats).toMatchObject({ version: 1, photos: { total: 1 } });
+    expect((await prisma.wrapped.findFirstOrThrow()).stats).toMatchObject({ version: 2, photos: { total: 1 } });
   });
 
   it("counts the year in progress live, without saving it", async () => {

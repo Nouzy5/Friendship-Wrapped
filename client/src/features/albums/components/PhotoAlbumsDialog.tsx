@@ -35,34 +35,34 @@ function AlbumChecklist({ photo }: { photo: Pick<Photo, "id" | "groupId"> }) {
     );
   }
   if (albums.isLoadingError || albumIds.isLoadingError) {
-    return <p className="py-4 text-sm text-ink-400">Couldn't load albums. Check your connection.</p>;
+    return <p className="py-4 text-sm text-sub">Couldn't load albums. Check your connection.</p>;
   }
 
   return (
     <div className="mt-3 flex min-h-0 flex-col gap-4">
       {albums.data.length === 0 ? (
-        <p className="text-sm text-ink-400">No albums in this group yet. Start one with this photo:</p>
+        <p className="text-sm text-sub">No albums in this group yet. Start one with this photo:</p>
       ) : (
         <ul className="-mx-2 flex min-h-0 flex-col overflow-y-auto">
           {albums.data.map((album) => (
             <li key={album.id}>
-              <label className="flex cursor-pointer items-center gap-3 rounded-2xl px-2 py-2 transition hover:bg-ink-800">
+              <label className="flex cursor-pointer items-center gap-3 rounded-2xl px-2 py-2 transition hover:bg-surface">
                 <input
                   type="checkbox"
                   checked={albumIds.data.includes(album.id)}
                   onChange={(event) => toggle.mutate({ albumId: album.id, add: event.target.checked })}
-                  className="size-5 shrink-0 accent-brand-orange"
+                  className="size-5 shrink-0 accent-(--accent)"
                 />
-                <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-ink-800">
+                <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-surface">
                   {album.cover ? (
                     <img src={album.cover.thumbnailUrl} alt="" className="size-full object-cover" />
                   ) : (
-                    <AlbumIcon className="size-5 text-ink-400" />
+                    <AlbumIcon className="size-5 text-sub" />
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{album.name}</span>
-                  <span className="block text-xs text-ink-400">
+                  <span className="block text-xs text-sub">
                     {album.photoCount === 1 ? "1 photo" : `${album.photoCount} photos`}
                   </span>
                 </span>
@@ -109,14 +109,14 @@ function NewAlbumWithPhoto({ groupId, onCreated }: { groupId: string; onCreated:
           maxLength={60}
           placeholder="New album…"
           onChange={(event) => setName(event.target.value)}
-          className="h-11 min-w-0 flex-1 rounded-full border border-ink-700 bg-ink-800/80 px-4 text-base text-ink-50 outline-none placeholder:text-ink-400 focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/30"
+          className="h-11 min-w-0 flex-1 rounded-full border border-line bg-surface px-4 text-base text-fg outline-none placeholder:text-sub focus:border-fg"
         />
         <Button type="submit" variant="secondary" disabled={!name.trim() || create.isPending} aria-label="Create album">
           <PlusIcon className="size-4" />
           Create
         </Button>
       </div>
-      {error && <p className="px-4 text-xs text-danger">{error}</p>}
+      {error && <p className="px-4 text-xs text-fg">{error}</p>}
     </form>
   );
 }

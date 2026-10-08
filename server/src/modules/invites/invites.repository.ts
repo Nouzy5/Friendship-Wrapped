@@ -23,6 +23,25 @@ export function deleteInvitesCreatedBy(groupId: string, createdById: string, db:
   return db.inviteToken.deleteMany({ where: { groupId, createdById } });
 }
 
+/** Unexpired invites the user created, newest first. */
+export function listInvitesCreatedBy(createdById: string, now: Date, db: DbClient = prisma) {
+  return db.inviteToken.findMany({
+    where: { createdById, expiresAt: { gt: now } },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      createdAt: true,
+      expiresAt: true,
+      group: { select: { id: true, name: true, emoji: true, avatarKey: true } },
+    },
+  });
+}
+
+/** By the public id (a prefix of the hash), and only the creator's own. */
+export function deleteInviteCreatedBy(createdById: string, publicId: string, db: DbClient = prisma) {
+  return db.inviteToken.deleteMany({ where: { createdById, id: { startsWith: publicId } } });
+}
+
 export function deleteExpiredInvites(groupId: string, now: Date, db: DbClient = prisma) {
   return db.inviteToken.deleteMany({ where: { groupId, expiresAt: { lte: now } } });
 }

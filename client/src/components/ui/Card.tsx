@@ -2,11 +2,7 @@ import type { ComponentPropsWithoutRef } from "react";
 
 type CardProps = ComponentPropsWithoutRef<"section">;
 
+/** A soft grey panel. No border or shadow: in this design, structure comes from space and tone. */
 export function Card({ className = "", ...props }: CardProps) {
-  return (
-    <section
-      className={`rounded-3xl border border-ink-700/70 bg-ink-900/80 p-5 shadow-xl shadow-black/30 backdrop-blur ${className}`}
-      {...props}
-    />
-  );
+  return <section className={`rounded-3xl bg-surface p-5 [--field-bg:var(--bg)] ${className}`} {...props} />;
 }

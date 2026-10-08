@@ -10,7 +10,7 @@ import { ApiError } from "../lib/api-client";
 import { usePageTitle } from "../lib/usePageTitle";
 
 function FullScreen({ children }: { children: ReactNode }) {
-  return <main className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-ink-950 p-4">{children}</main>;
+  return <main className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-bg p-4">{children}</main>;
 }
 
 const backToList = (

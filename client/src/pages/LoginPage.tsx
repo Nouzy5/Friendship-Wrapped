@@ -19,10 +19,10 @@ export function LoginPage() {
         <Alert tone="success">Your account and everything you posted have been deleted.</Alert>
       )}
       <LoginForm />
-      <p className="text-center text-sm text-ink-400">
+      <p className="text-center text-sm text-sub">
         New here?{" "}
         {/* Carry the "return to" page across to registration. */}
-        <Link to="/auth/register" state={location.state} className="font-semibold text-brand-orange hover:underline">
+        <Link to="/auth/register" state={location.state} className="font-semibold text-fg underline underline-offset-2 hover:underline">
           Create an account
         </Link>
       </p>

@@ -108,7 +108,7 @@ function AlbumDetails({ album }: { album: Album }) {
   }
 
   return (
-    <div className="flex flex-col gap-5 py-2">
+    <div className="flex flex-col gap-5 px-4 pt-3">
       <PageHeader
         backTo={backTo}
         backLabel="Back to albums"
@@ -127,8 +127,8 @@ function AlbumDetails({ album }: { album: Album }) {
       />
 
       <section className="flex flex-col gap-3">
-        <h1 className="text-3xl font-black tracking-tight break-words">{album.name}</h1>
-        <p className="text-sm text-ink-400">
+        <h1 className="text-3xl font-semibold font-stretch-112% tracking-tight break-words">{album.name}</h1>
+        <p className="text-sm text-sub">
           {album.photoCount === 1 ? "1 photo" : `${album.photoCount} photos`}
           {album.createdBy && ` · started by ${album.createdBy.displayName}`}
         </p>

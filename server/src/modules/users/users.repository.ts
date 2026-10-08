@@ -28,8 +28,12 @@ export function deleteUser(id: string, db: DbClient = prisma) {
   return db.user.delete({ where: { id }, select: { avatarKey: true } });
 }
 
-export function updateUserProfile(id: string, data: { displayName: string }) {
+export function updateUserProfile(id: string, data: { displayName?: string; username?: string }) {
   return prisma.user.update({ where: { id }, data, select: publicUserSelect });
+}
+
+export function setPasswordHash(id: string, passwordHash: string) {
+  return prisma.user.update({ where: { id }, data: { passwordHash }, select: { id: true } });
 }
 
 export function findAvatarKey(id: string, db: DbClient = prisma) {

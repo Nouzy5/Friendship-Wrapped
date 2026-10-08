@@ -18,13 +18,15 @@ type TimelineProps = {
   group: Group;
   /** Start from this month (and go back in time), or null for the latest photos. */
   from: Month | null;
+  /** Only this member's photos ("Taken by"), or null for everyone's. */
+  uploaderId?: string | null;
   onJump: (month: Month | null) => void;
 };
 
 /** The group's photos month by month, newest first, with a way to jump back to any month. */
-export function Timeline({ group, from, onJump }: TimelineProps) {
-  // From the latest photos, this shares the group feed's cache.
-  const photos = useGroupFeed(group.id, from ? { before: endOfMonth(from) } : {});
+export function Timeline({ group, from, uploaderId = null, onJump }: TimelineProps) {
+  // From the latest photos, for everyone, this shares the group feed's cache.
+  const photos = useGroupFeed(group.id, { ...(from ? { before: endOfMonth(from) } : {}), ...(uploaderId ? { uploaderId } : {}) });
 
   let content;
   if (photos.isPending) {
@@ -41,16 +43,17 @@ export function Timeline({ group, from, onJump }: TimelineProps) {
     content = from ? (
       <StateMessage emoji="🕰️" title="Nothing that far back" description="This group had no photos yet by then." />
     ) : (
-      <StateMessage emoji="📸" title="No photos yet" description="Photos shared in the group show up here by month." />
+      <StateMessage emoji="📸" title="No photos yet" description={uploaderId ? "Nothing from them yet." : "Photos shared in the group show up here by month."} />
     );
   } else {
     content = (
       <>
         {groupByMonth(photos.data, (photo) => photo.createdAt).map(({ month, items }) => (
           <section key={`${month.year}-${month.month}`} aria-label={formatMonthYear(monthStart(month))}>
-            {/* Sticks under the app header while its month scrolls past. */}
-            <h3 className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-[5] -mx-4 bg-ink-950/90 px-4 py-2 font-semibold backdrop-blur">
-              {formatMonthYear(monthStart(month))}
+            {/* Sticks to the top while its month scrolls past. */}
+            <h3 className="sticky top-[env(safe-area-inset-top)] z-[5] -mx-4 flex items-baseline gap-2 bg-bg px-4 pt-3 pb-2.5">
+              <span className="text-[1.875rem] leading-none font-semibold font-stretch-112%">{monthNames[month.month - 1]}</span>
+              <span className="text-[0.9375rem] text-sub">{month.year}</span>
             </h3>
             <PhotoGrid photos={items} />
           </section>
@@ -61,7 +64,7 @@ export function Timeline({ group, from, onJump }: TimelineProps) {
           isError={photos.isFetchNextPageError}
           onLoadMore={() => void photos.fetchNextPage()}
           label="Load earlier photos"
-          endMessage="That's the very beginning ✨"
+          endMessage="That's the very beginning."
         />
       </>
     );
@@ -72,9 +75,9 @@ export function Timeline({ group, from, onJump }: TimelineProps) {
       {/* Keyed so the pickers follow when the month changes from outside (e.g. "Back to the latest"). */}
       <MonthJump key={from ? formatMonthParam(from) : "latest"} group={group} from={from} onJump={onJump} />
       {from && (
-        <p className="flex flex-wrap items-center gap-x-2 text-sm text-ink-400">
+        <p className="flex flex-wrap items-center gap-x-2 text-sm text-sub">
           Showing {formatMonthYear(monthStart(from))} and earlier
-          <button type="button" onClick={() => onJump(null)} className="font-medium text-brand-orange hover:underline">
+          <button type="button" onClick={() => onJump(null)} className="min-h-9 font-semibold text-fg underline underline-offset-2">
             Back to the latest
           </button>
         </p>
@@ -98,11 +101,10 @@ function MonthJump({ group, from, onJump }: TimelineProps) {
     onJump(isCurrentOrLater ? null : month);
   }
 
-  const selectClasses =
-    "h-10 rounded-full border border-ink-700 bg-ink-800/80 px-3 text-sm text-ink-50 outline-none focus:border-brand-orange";
+  const selectClasses = "h-11 rounded-full border-2 border-transparent bg-surface px-3 text-[0.9375rem] text-fg outline-none focus:border-fg";
   return (
     <form onSubmit={handleSubmit} className="flex flex-wrap items-center gap-2" aria-label="Jump to a month">
-      <label htmlFor={`${id}-month`} className="text-sm text-ink-400">
+      <label htmlFor={`${id}-month`} className="text-[0.9375rem] text-sub">
         Jump to
       </label>
       <select
@@ -132,7 +134,7 @@ function MonthJump({ group, from, onJump }: TimelineProps) {
           </option>
         ))}
       </select>
-      <Button type="submit" variant="secondary" className="min-h-10 px-4">
+      <Button type="submit" variant="secondary" className="min-h-11 px-4">
         Go
       </Button>
     </form>

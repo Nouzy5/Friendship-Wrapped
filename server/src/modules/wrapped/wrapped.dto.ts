@@ -12,7 +12,13 @@ const RUNNERS_UP = 2;
  */
 export type WrappedSlide =
   | { type: "intro" }
-  | { type: "photos"; total: number; photographerCount: number }
+  | {
+      type: "photos";
+      total: number;
+      photographerCount: number;
+      /** Everyone who posted, most first (people who opted out of Wrapped are left out of every person list). */
+      byUser: PersonCount[];
+    }
   | { type: "topPhotographer"; top: PersonCount; runnersUp: PersonCount[] }
   | {
       type: "busiestMonth";
@@ -22,6 +28,8 @@ export type WrappedSlide =
       /** 12 counts, January first. */
       byMonth: number[];
       busiestDay: { date: string; count: number } | null;
+      /** Who posted in that month, most first. */
+      byUser: PersonCount[];
     }
   | { type: "mostReactedPhoto"; photo: PhotoView; count: number }
   | { type: "reactions"; total: number; comments: number; topReactor: PersonCount | null }
@@ -50,7 +58,7 @@ export type WrappedView = WrappedSummary & {
 export function toSlides({ photos, reactions, comments, highlights, activeUserCount }: YearStats): WrappedSlide[] {
   const slides: WrappedSlide[] = [
     { type: "intro" },
-    { type: "photos", total: photos.total, photographerCount: photos.byUser.length },
+    { type: "photos", total: photos.total, photographerCount: photos.photographerCount, byUser: photos.byUser },
   ];
   if (photos.topPhotographer) {
     slides.push({
@@ -65,6 +73,7 @@ export function toSlides({ photos, reactions, comments, highlights, activeUserCo
       ...photos.mostActiveMonth,
       byMonth: photos.byMonth,
       busiestDay: photos.mostActiveDay,
+      byUser: photos.mostActiveMonthByUser,
     });
   }
   if (reactions.mostReactedPhoto) slides.push({ type: "mostReactedPhoto", ...reactions.mostReactedPhoto });

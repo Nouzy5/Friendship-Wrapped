@@ -1,12 +1,21 @@
 import type { Prisma } from "../../generated/prisma/client.js";
-import { badRequest, forbidden, notFound } from "../../lib/errors.js";
-import { prisma, withTransaction, type DbClient } from "../../lib/prisma.js";
+import { AppError, badRequest, forbidden, notFound } from "../../lib/errors.js";
+import { IMAGE_CONTENT_TYPE, processAvatar } from "../../lib/images.js";
+import { isUniqueConstraintError, prisma, withTransaction, type DbClient } from "../../lib/prisma.js";
 import * as storage from "../../lib/storage.js";
+import { generateToken } from "../../lib/tokens.js";
 import * as invitesRepository from "../invites/invites.repository.js";
 import { groupStoragePrefix } from "../photos/photo-keys.js";
-import { toGroupMemberView, toGroupView, type GroupMemberView, type GroupView } from "./group.dto.js";
+import {
+  MEMBER_COLORS,
+  firstFreeColor,
+  toGroupMemberView,
+  toGroupView,
+  type GroupMemberView,
+  type GroupView,
+} from "./group.dto.js";
 import * as groupsRepository from "./groups.repository.js";
-import type { CreateGroupInput, UpdateGroupInput } from "./groups.schemas.js";
+import type { CreateGroupInput, UpdateGroupInput, UpdateMyMembershipInput } from "./groups.schemas.js";
 
 /**
  * The authorization gate for everything inside a group. Non-members get a 404, not a
@@ -31,24 +40,112 @@ export async function requireOwner(groupId: string, userId: string, db: DbClient
 
 export async function createGroup(userId: string, input: CreateGroupInput): Promise<GroupView> {
   const group = await groupsRepository.createGroupWithOwner(input, userId);
-  return toGroupView(group, "OWNER");
+  return toGroupView(group, { role: "OWNER", color: MEMBER_COLORS[0]!, muted: false });
+}
+
+/**
+ * Adds someone to the group with the first colour free in palette order (none once all
+ * twelve are taken). Run it in a serializable transaction, so two people joining at once
+ * can't pick the same colour.
+ */
+export async function addMember(groupId: string, userId: string, tx: Prisma.TransactionClient): Promise<void> {
+  const colors = await groupsRepository.listMemberColors(groupId, tx);
+  await groupsRepository.addMember(groupId, userId, firstFreeColor(colors.values()), tx);
+}
+
+const colorTaken = () =>
+  new AppError(409, "COLOR_TAKEN", "Someone in this group already has that colour", [
+    { path: "color", message: "Someone in this group already has that colour" },
+  ]);
+
+/** Your own colour (any one nobody else in the group has) and whether the group is muted. */
+export async function updateMyMembership(
+  groupId: string,
+  userId: string,
+  input: UpdateMyMembershipInput,
+): Promise<GroupView> {
+  try {
+    await withTransaction(async (tx) => {
+      await requireMembership(groupId, userId, tx);
+      if (input.color) {
+        const holder = await groupsRepository.findMemberWithColor(groupId, input.color, tx);
+        if (holder && holder.userId !== userId) throw colorTaken();
+      }
+      await groupsRepository.updateMyMembership(groupId, userId, input, tx);
+    });
+  } catch (error) {
+    if (isUniqueConstraintError(error)) throw colorTaken();
+    throw error;
+  }
+  return getGroup(groupId, userId);
 }
 
 export async function listMyGroups(userId: string): Promise<GroupView[]> {
   const memberships = await groupsRepository.listGroupsForUser(userId);
-  return memberships.map(({ group, role }) => toGroupView(group, role));
+  return memberships.map(({ group, ...membership }) => toGroupView(group, membership));
 }
 
 export async function getGroup(groupId: string, userId: string): Promise<GroupView> {
   const membership = await groupsRepository.findMembershipWithGroup(groupId, userId);
   if (!membership) throw notFound("Group not found");
-  return toGroupView(membership.group, membership.role);
+  const { group, ...mine } = membership;
+  return toGroupView(group, mine);
 }
 
 export async function updateGroup(groupId: string, userId: string, input: UpdateGroupInput): Promise<GroupView> {
-  await requireOwner(groupId, userId);
+  const membership = await requireOwner(groupId, userId);
   const group = await groupsRepository.updateGroup(groupId, input);
-  return toGroupView(group, "OWNER");
+  return toGroupView(group, membership);
+}
+
+/** Only the owner changes the group photo, like its name and emoji. Checked before the upload is read. */
+export async function assertCanEditGroup(groupId: string, userId: string): Promise<void> {
+  await requireOwner(groupId, userId);
+}
+
+/** Swaps the stored group photo key and returns the key it replaced. */
+function replaceGroupAvatarKey(groupId: string, userId: string, avatarKey: string | null) {
+  return withTransaction(async (tx) => {
+    await requireOwner(groupId, userId, tx);
+    const previous = await groupsRepository.findGroupAvatarKey(groupId, tx);
+    await groupsRepository.setGroupAvatarKey(groupId, avatarKey, tx);
+    return previous?.avatarKey ?? null;
+  });
+}
+
+/** Processed like a profile picture, and stored under the group's prefix so deleting the group clears it. */
+export async function setGroupAvatar(groupId: string, userId: string, image: Buffer | undefined): Promise<GroupView> {
+  if (!image) throw badRequest("Choose a picture to upload");
+
+  const avatar = await processAvatar(image);
+  const key = `${groupStoragePrefix(groupId)}avatars/${generateToken(16)}.webp`;
+  await storage.putObject(key, avatar.data, IMAGE_CONTENT_TYPE);
+
+  let previousKey: string | null;
+  try {
+    previousKey = await replaceGroupAvatarKey(groupId, userId, key);
+  } catch (error) {
+    await storage.discardObjects([key]);
+    throw error;
+  }
+
+  if (previousKey) await storage.discardObjects([previousKey]);
+  return getGroup(groupId, userId);
+}
+
+export async function removeGroupAvatar(groupId: string, userId: string): Promise<GroupView> {
+  const previousKey = await replaceGroupAvatarKey(groupId, userId, null);
+  if (previousKey) await storage.discardObjects([previousKey]);
+  return getGroup(groupId, userId);
+}
+
+/** Members only, like everything else in the group. */
+export async function getGroupAvatarImage(groupId: string, userId: string): Promise<storage.StoredObject> {
+  await requireMembership(groupId, userId);
+  const avatarKey = (await groupsRepository.findGroupAvatarKey(groupId))?.avatarKey;
+  const image = avatarKey ? await storage.getObject(avatarKey) : null;
+  if (!image) throw notFound("No group photo");
+  return image;
 }
 
 export async function listMembers(groupId: string, userId: string): Promise<GroupMemberView[]> {

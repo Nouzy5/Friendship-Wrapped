@@ -1,7 +1,7 @@
 import type { Prisma } from "../../generated/prisma/client.js";
 import { apiPath } from "../../lib/api-path.js";
 import type { PhotoVariant } from "../../lib/images.js";
-import { toReactionSummary, type ReactionCounts, type ReactionSummary } from "../reactions/reaction.dto.js";
+import { toReactionSummary, type ReactionSummary, type Reactor } from "../reactions/reaction.dto.js";
 import { toUserSummary, userSummarySelect, type UserSummary } from "../users/user.dto.js";
 
 /** What a photo looks like to one viewer: their own reaction and favorite ride along (at most one row each). */
@@ -13,7 +13,8 @@ export function photoSelect(viewerId: string) {
     width: true,
     height: true,
     createdAt: true,
-    uploader: { select: userSummarySelect },
+    // The uploader's saving setting rides along for `canSave`; it never reaches the client as such.
+    uploader: { select: { ...userSummarySelect, settings: { select: { allowPhotoSaving: true } } } },
     reactions: { where: { userId: viewerId }, select: { type: true } },
     favorites: { where: { userId: viewerId }, select: { userId: true } },
   } satisfies Prisma.PhotoSelect;
@@ -43,6 +44,8 @@ export type PhotoView = {
   imageUrls: Record<PhotoVariant, string>;
   /** Only the uploader may delete a photo. */
   canDelete: boolean;
+  /** Whether the viewer may download it: always their own, otherwise as the uploader allows. */
+  canSave: boolean;
   /** Reacting and commenting are for current members of the photo's group. */
   canInteract: boolean;
   reactions: ReactionSummary;
@@ -69,19 +72,25 @@ function imageUrls(photoId: string): Record<PhotoVariant, string> {
   return { full: url("full"), medium: url("medium"), thumbnail: url("thumbnail") };
 }
 
-/** Who's looking, and the counts loaded alongside the rows (see `photos.service`). */
+/** Saving is on unless the uploader turned it off; their own photos they can always save. */
+export function canSavePhoto(uploader: { id: string; settings: { allowPhotoSaving: boolean } | null }, viewerId: string) {
+  return uploader.id === viewerId || (uploader.settings?.allowPhotoSaving ?? true);
+}
+
+/** Who's looking, and the reactions and counts loaded alongside the rows (see `photos.service`). */
 export type ViewContext = {
   viewerId: string;
   canInteract: boolean;
   /** Undefined when nobody has reacted. */
-  reactionCounts: ReactionCounts | undefined;
+  reactors: Reactor[] | undefined;
   commentCount: number;
 };
 
 export function toPhotoView(
   photo: PhotoRow,
-  { viewerId, canInteract, reactionCounts, commentCount }: ViewContext,
+  { viewerId, canInteract, reactors, commentCount }: ViewContext,
 ): PhotoView {
+  const { settings: _settings, ...uploader } = photo.uploader;
   return {
     id: photo.id,
     groupId: photo.groupId,
@@ -89,11 +98,12 @@ export function toPhotoView(
     width: photo.width,
     height: photo.height,
     createdAt: photo.createdAt,
-    uploader: toUserSummary(photo.uploader),
+    uploader: toUserSummary(uploader),
     imageUrls: imageUrls(photo.id),
     canDelete: photo.uploader.id === viewerId,
+    canSave: canSavePhoto(photo.uploader, viewerId),
     canInteract,
-    reactions: toReactionSummary(reactionCounts, photo.reactions[0]?.type ?? null),
+    reactions: toReactionSummary(reactors, photo.reactions[0]?.type ?? null),
     commentCount,
     isFavorite: photo.favorites.length > 0,
   };

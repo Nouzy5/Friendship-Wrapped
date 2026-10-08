@@ -45,9 +45,9 @@ function Picker({ album, onClose }: { album: Album; onClose: () => void }) {
       </div>
     );
   } else if (photos.isLoadingError) {
-    content = <p className="py-6 text-sm text-ink-400">Couldn't load the group's photos.</p>;
+    content = <p className="py-6 text-sm text-sub">Couldn't load the group's photos.</p>;
   } else if (photos.data.length === 0) {
-    content = <p className="py-6 text-sm text-ink-400">This group has no photos yet.</p>;
+    content = <p className="py-6 text-sm text-sub">This group has no photos yet.</p>;
   } else {
     content = (
       <>
@@ -72,7 +72,7 @@ function Picker({ album, onClose }: { album: Album; onClose: () => void }) {
   const count = selected.size;
   return (
     <>
-      <p className="mt-1 text-sm text-ink-400">Photos already in the album are skipped.</p>
+      <p className="mt-1 text-sm text-sub">Photos already in the album are skipped.</p>
       <div className="-mx-2 mt-4 min-h-0 flex-1 overflow-y-auto px-2">{content}</div>
       {add.isError && (
         <div className="mt-3">
@@ -105,11 +105,11 @@ function SelectablePhoto({ photo, selected, onToggle }: { photo: Photo; selected
       className="relative block w-full"
     >
       <PhotoImage photo={photo} variant="thumbnail" className="aspect-square" />
-      {selected && <span aria-hidden className="absolute inset-0 bg-brand-orange/25 ring-4 ring-brand-orange ring-inset" />}
+      {selected && <span aria-hidden className="absolute inset-0 bg-accent/25 ring-4 ring-accent ring-inset" />}
       <span
         aria-hidden
         className={`absolute top-1.5 right-1.5 grid size-6 place-items-center rounded-full border-2 ${
-          selected ? "border-brand-orange bg-brand-orange text-ink-950" : "border-white/80 bg-black/30"
+          selected ? "border-accent bg-accent text-on-accent" : "border-white/80 bg-black/30"
         }`}
       >
         {selected && <CheckIcon className="size-4" />}

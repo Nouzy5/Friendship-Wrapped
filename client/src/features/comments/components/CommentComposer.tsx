@@ -40,21 +40,21 @@ export function CommentComposer({ photo }: { photo: Pick<Photo, "id" | "groupId"
             setBody(event.target.value);
             if (add.isError) add.reset();
           }}
-          className={`h-11 min-w-0 flex-1 rounded-full border bg-ink-800/80 px-4 text-base text-ink-50 transition outline-none placeholder:text-ink-400 focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/30 ${
-            error ? "border-danger" : "border-ink-700"
+          className={`h-12 min-w-0 flex-1 rounded-full border-2 bg-surface px-4 text-base text-fg transition outline-none placeholder:text-sub focus:border-fg ${
+            error ? "border-fg" : "border-transparent"
           }`}
         />
         <button
           type="submit"
           aria-label="Post comment"
           disabled={!body.trim() || add.isPending}
-          className="grid size-11 shrink-0 place-items-center rounded-full bg-linear-to-br from-brand-rose via-brand-orange to-brand-gold text-ink-950 transition active:scale-95 disabled:opacity-40"
+          className="grid size-12 shrink-0 place-items-center rounded-full bg-inverse text-on-inverse transition active:scale-95 disabled:opacity-30"
         >
           <SendIcon className="size-5" />
         </button>
       </div>
       {error && (
-        <p id={errorId} role="alert" className="px-4 text-xs text-danger">
+        <p id={errorId} role="alert" className="px-4 text-[0.8125rem] font-medium">
           {error}
         </p>
       )}

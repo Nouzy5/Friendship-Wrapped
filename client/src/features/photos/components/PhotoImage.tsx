@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from "react";
+import { useDeviceSettings } from "../../../lib/device-settings";
 import type { Photo, PhotoVariant } from "../types";
 
 export function photoAlt(photo: Pick<Photo, "caption" | "uploader">): string {
@@ -22,17 +23,20 @@ type PhotoImageProps = {
  */
 export function PhotoImage({ photo, variant, fit = "cover", priority = false, className = "", style }: PhotoImageProps) {
   const [status, setStatus] = useState<"loading" | "loaded" | "failed">("loading");
+  // Settings → Photos & data → Data saver: never the full-size rendition, the medium one is plenty on a phone.
+  const { dataSaver } = useDeviceSettings();
+  const shown = dataSaver && variant === "full" ? "medium" : variant;
 
   return (
     <div className={`relative overflow-hidden ${className}`} style={style}>
-      {status === "loading" && <div aria-hidden className="absolute inset-0 animate-pulse bg-ink-800" />}
+      {status === "loading" && <div aria-hidden className="absolute inset-0 animate-pulse bg-surface motion-reduce:animate-none" />}
       {status === "failed" ? (
-        <div className="absolute inset-0 grid place-items-center bg-ink-800 p-4 text-center text-xs text-ink-400">
+        <div className="absolute inset-0 grid place-items-center bg-surface p-4 text-center text-xs text-sub">
           Couldn't load this photo
         </div>
       ) : (
         <img
-          src={photo.imageUrls[variant]}
+          src={photo.imageUrls[shown]}
           alt={photoAlt(photo)}
           loading={priority ? "eager" : "lazy"}
           fetchPriority={priority ? "high" : "auto"}
@@ -40,7 +44,7 @@ export function PhotoImage({ photo, variant, fit = "cover", priority = false, cl
           draggable={false}
           onLoad={() => setStatus("loaded")}
           onError={() => setStatus("failed")}
-          className={`relative size-full ${fit === "cover" ? "object-cover" : "object-contain"}`}
+          className={`relative size-full transition-opacity duration-500 ease-out ${status === "loaded" ? "opacity-100" : "opacity-0"} ${fit === "cover" ? "object-cover" : "object-contain"}`}
         />
       )}
     </div>

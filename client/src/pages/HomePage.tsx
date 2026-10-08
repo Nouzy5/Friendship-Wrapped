@@ -1,84 +1,53 @@
-import { Link } from "react-router";
+import { Link, Navigate } from "react-router";
+import { AppMark } from "../components/AppMark";
 import { Button, buttonClasses } from "../components/ui/Button";
-import { Card } from "../components/ui/Card";
-import { PlusIcon } from "../components/ui/icons";
+import { FeedSkeleton } from "../components/ui/Skeleton";
 import { StateMessage } from "../components/ui/StateMessage";
 import { useCurrentUser } from "../features/auth/hooks";
-import { GroupCard } from "../features/groups/components/GroupCard";
+import { useCurrentGroup } from "../features/groups/current-group";
 import { useMyGroups } from "../features/groups/hooks";
 import { usePageTitle } from "../lib/usePageTitle";
-import { ListSkeleton } from "../components/ui/Skeleton";
 
-function GroupList() {
-  const groups = useMyGroups();
-
-  if (groups.isPending) return <ListSkeleton rows={2} card />;
-
-  if (groups.isLoadingError) {
-    return (
-      <Card>
-        <StateMessage
-          emoji="📡"
-          title="Couldn't load your groups"
-          description="Check your connection and try again."
-          action={<Button onClick={() => void groups.refetch()}>Try again</Button>}
-        />
-      </Card>
-    );
-  }
-
-  if (groups.data.length === 0) {
-    return (
-      <Card>
-        <StateMessage
-          emoji="🫶"
-          title="No groups yet"
-          description="Create a group for your friends, then send them an invite link. Got a link from a friend? Just open it."
-          action={
-            <Link to="/groups/new" className={buttonClasses()}>
-              Create a group
-            </Link>
-          }
-        />
-      </Card>
-    );
-  }
-
-  return (
-    <ul className="flex flex-col gap-3">
-      {groups.data.map((group) => (
-        <li key={group.id}>
-          <GroupCard group={group} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
+/** Home opens the group you were last looking at. Without any groups yet, it explains how to start one. */
 export function HomePage() {
   usePageTitle("Home");
   const user = useCurrentUser();
+  const groups = useMyGroups();
+  const current = useCurrentGroup();
   const firstName = user.displayName.split(/\s+/)[0];
 
-  return (
-    <div className="flex flex-col gap-6 py-2">
-      <div>
-        <h1 className="text-3xl font-black tracking-tight wrap-break-word">Hey {firstName} 👋</h1>
-        <p className="mt-1 text-ink-200">Good to have you here.</p>
-      </div>
+  if (current) return <Navigate to={`/groups/${current.id}`} replace />;
 
-      <section aria-labelledby="groups-heading" className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h2 id="groups-heading" className="text-sm font-semibold tracking-wide text-ink-200 uppercase">
-            Your groups
-          </h2>
-          <Link to="/groups/new" className={buttonClasses("ghost", "min-h-10 px-3 text-xs")}>
-            <PlusIcon className="size-4" />
-            New group
-          </Link>
-        </div>
-        <GroupList />
-      </section>
+  if (groups.isLoadingError) {
+    return (
+      <StateMessage
+        headingLevel="h1"
+        emoji="📡"
+        title="Couldn't load your groups"
+        description="Check your connection and try again."
+        action={<Button onClick={() => void groups.refetch()}>Try again</Button>}
+      />
+    );
+  }
+
+  if (current === undefined) {
+    return (
+      <div className="px-2 pt-16">
+        <FeedSkeleton count={1} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center px-6 pt-16 text-center">
+      <AppMark size={72} />
+      <h1 className="mt-6 text-[2rem] leading-tight font-semibold font-stretch-112%">Hey {firstName}</h1>
+      <p className="mt-2 max-w-xs text-[0.9375rem] text-sub">
+        Make a group for your friends, then send them an invite link. Got a link from a friend? Just open it.
+      </p>
+      <Link to="/groups/new" className={buttonClasses("primary", "mt-8")}>
+        Create a group
+      </Link>
     </div>
   );
 }

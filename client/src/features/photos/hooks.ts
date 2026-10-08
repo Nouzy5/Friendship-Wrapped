@@ -10,8 +10,9 @@ const FEED_PAGE_SIZE = 24;
 
 const allPhotos = (feed: FeedData): Photo[] => feed.pages.flatMap((page) => page.photos);
 
-function groupPhotosKey(groupId: string, { before, favorites }: GroupPhotosFilter) {
+function groupPhotosKey(groupId: string, { before, favorites, uploaderId }: GroupPhotosFilter) {
   if (favorites) return photoKeys.favorites(groupId);
+  if (uploaderId) return before ? [...photoKeys.byUploader(groupId, uploaderId), "before", before] : photoKeys.byUploader(groupId, uploaderId);
   if (before) return photoKeys.groupFrom(groupId, before);
   return photoKeys.group(groupId);
 }

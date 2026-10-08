@@ -19,5 +19,14 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Enter your password").max(128),
 });
 
+/** PUT /users/me/password. The new password follows the registration rules. */
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Enter your current password").max(128),
+  newPassword: passwordSchema,
+});
+
+export const sessionParamsSchema = z.object({ sessionId: z.string().regex(/^[0-9a-f]{16}$/, "Invalid session id") });
+
 export type RegisterInput = z.infer<typeof registerSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

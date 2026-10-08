@@ -13,34 +13,45 @@ datasource db {
 
 model User {
   /// UUIDv7: time-ordered (InnoDB-friendly) and not guessable/enumerable in URLs.
-  id           String    @id @default(uuid(7)) @db.Char(36)
+  id                  String               @id @default(uuid(7)) @db.Char(36)
   /// Always stored lowercase; uniqueness is enforced by the database.
-  username     String    @unique @db.VarChar(20)
-  displayName  String    @map("display_name") @db.VarChar(40)
-  passwordHash String    @map("password_hash") @db.VarChar(255)
+  username            String               @unique @db.VarChar(20)
+  displayName         String               @map("display_name") @db.VarChar(40)
+  passwordHash        String               @map("password_hash") @db.VarChar(255)
   /// Object-storage key of the profile picture; null shows initials instead.
-  avatarKey    String?   @map("avatar_key") @db.VarChar(255)
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  sessions     Session[]
-  memberships  GroupMember[]
-  invites      InviteToken[]
-  photos       Photo[]
-  reactions    Reaction[]
-  comments     Comment[]
-  favorites    Favorite[]
-  albums       Album[]
+  avatarKey           String?              @map("avatar_key") @db.VarChar(255)
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  sessions            Session[]
+  memberships         GroupMember[]
+  invites             InviteToken[]
+  photos              Photo[]
+  reactions           Reaction[]
+  comments            Comment[]
+  favorites           Favorite[]
+  albums              Album[]
+  settings            UserSettings?
+  blocksMade          Block[]              @relation("BlocksMade")
+  blocksReceived      Block[]              @relation("BlocksReceived")
+  reportsMade         Report[]             @relation("ReportsMade")
+  reportsReceived     Report[]             @relation("ReportsReceived")
+  pushSubscriptions   PushSubscription[]
+  queuedNotifications QueuedNotification[]
 
   @@map("users")
 }
 
 model Session {
   /// SHA-256 (hex) of the session token. The raw token only ever lives in the user's cookie.
-  id        String   @id @db.Char(64)
-  userId    String   @map("user_id") @db.Char(36)
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @db.Char(64)
+  userId       String   @map("user_id") @db.Char(36)
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  /// The browser or app that signed in (truncated), for the list of signed-in devices.
+  userAgent    String?  @map("user_agent") @db.VarChar(255)
+  /// Refreshed at most every few minutes while the session is in use.
+  lastActiveAt DateTime @default(now()) @map("last_active_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
@@ -58,6 +69,8 @@ model Group {
   name      String        @db.VarChar(50)
   /// A single emoji grapheme (may be several code points, e.g. flags or ZWJ sequences).
   emoji     String        @db.VarChar(16)
+  /// Object-storage key of the group photo (under the group's storage prefix); null shows the emoji.
+  avatarKey String?       @map("avatar_key") @db.VarChar(255)
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")
   members   GroupMember[]
@@ -69,16 +82,38 @@ model Group {
   @@map("groups")
 }
 
+/// The member colours, in palette order: newcomers get the first one free in their group.
+enum MemberColor {
+  LIME
+  COBALT
+  TOMATO
+  SUN
+  BUBBLEGUM
+  MINT
+  LILAC
+  PLUM
+  SKY
+  FOREST
+  TANGERINE
+  CHERRY
+}
+
 /// Membership is the single source of truth for roles: each group has exactly one OWNER.
 model GroupMember {
-  groupId  String    @map("group_id") @db.Char(36)
-  userId   String    @map("user_id") @db.Char(36)
-  role     GroupRole @default(MEMBER)
-  joinedAt DateTime  @default(now()) @map("joined_at")
-  group    Group     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupId  String       @map("group_id") @db.Char(36)
+  userId   String       @map("user_id") @db.Char(36)
+  role     GroupRole    @default(MEMBER)
+  /// Unique within the group. Null once all twelve are taken (clients show grey).
+  color    MemberColor?
+  /// A muted group sends this member no push notifications.
+  muted    Boolean      @default(false)
+  joinedAt DateTime     @default(now()) @map("joined_at")
+  group    Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([groupId, userId])
+  /// MySQL allows any number of NULLs in a unique index, so colourless members don't collide.
+  @@unique([groupId, color])
   @@index([userId])
   @@map("group_members")
 }
@@ -100,28 +135,29 @@ model InviteToken {
 
 /// A photo shared with one group. The image bytes live in object storage; only their keys are stored here.
 model Photo {
-  id           String   @id @default(uuid(7)) @db.Char(36)
-  groupId      String   @map("group_id") @db.Char(36)
-  uploaderId   String   @map("uploader_id") @db.Char(36)
-  caption      String?  @db.VarChar(500)
+  id           String       @id @default(uuid(7)) @db.Char(36)
+  groupId      String       @map("group_id") @db.Char(36)
+  uploaderId   String       @map("uploader_id") @db.Char(36)
+  caption      String?      @db.VarChar(500)
   /// Full-size rendition (the original upload is not kept).
-  storageKey   String   @map("storage_key") @db.VarChar(255)
-  mediumKey    String   @map("medium_key") @db.VarChar(255)
-  thumbnailKey String   @map("thumbnail_key") @db.VarChar(255)
+  storageKey   String       @map("storage_key") @db.VarChar(255)
+  mediumKey    String       @map("medium_key") @db.VarChar(255)
+  thumbnailKey String       @map("thumbnail_key") @db.VarChar(255)
   /// Pixel size of the full-size rendition.
   width        Int
   height       Int
   /// Byte size of the full-size rendition.
-  sizeBytes    Int      @map("size_bytes")
+  sizeBytes    Int          @map("size_bytes")
   /// Upload time.
-  createdAt    DateTime @default(now()) @map("created_at")
-  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt    DateTime     @default(now()) @map("created_at")
+  group        Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
   /// Restrict: deleting an account deletes the person's photos first (users.service deleteAccount), so none is left orphaned.
-  uploader     User     @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
+  uploader     User         @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
   reactions    Reaction[]
   comments     Comment[]
   favorites    Favorite[]
   albums       PhotoAlbum[]
+  reports      Report[]
 
   /// Newest-first group listing with a (createdAt, id) keyset cursor.
   @@index([groupId, createdAt, id])
@@ -231,4 +267,101 @@ model Wrapped {
 
   @@id([groupId, year, timeZone])
   @@map("wrapped")
+}
+
+/// Server-side preferences, one row per person, created on their first change: a missing
+/// row means every default (see settings.dto). Appearance and camera settings stay on the device.
+model UserSettings {
+  userId               String   @id @map("user_id") @db.Char(36)
+  /// Whether other members may download this person's photos.
+  allowPhotoSaving     Boolean  @default(true) @map("allow_photo_saving")
+  showInWrapped        Boolean  @default(true) @map("show_in_wrapped")
+  /// The person's IANA zone (canonical name), sent by the client. Quiet hours and scheduled notifications need it.
+  timeZone             String?  @map("time_zone") @db.VarChar(64)
+  notificationsEnabled Boolean  @default(true) @map("notifications_enabled")
+  notifyPhotos         Boolean  @default(true) @map("notify_photos")
+  notifyReactions      Boolean  @default(true) @map("notify_reactions")
+  notifyComments       Boolean  @default(true) @map("notify_comments")
+  notifyMembers        Boolean  @default(false) @map("notify_members")
+  notifyOnThisDay      Boolean  @default(true) @map("notify_on_this_day")
+  notifyWrapped        Boolean  @default(true) @map("notify_wrapped")
+  quietHoursEnabled    Boolean  @default(true) @map("quiet_hours_enabled")
+  /// "HH:MM" (24-hour) in timeZone. A window may run past midnight.
+  quietHoursStart      String   @default("23:00") @map("quiet_hours_start") @db.Char(5)
+  quietHoursEnd        String   @default("08:00") @map("quiet_hours_end") @db.Char(5)
+  /// Scheduler bookkeeping: the local day ("YYYY-MM-DD") On This Day last ran for.
+  onThisDayCheckedOn   String?  @map("on_this_day_checked_on") @db.Char(10)
+  /// Scheduler bookkeeping: the last year whose Wrapped was announced.
+  wrappedAnnouncedYear Int?     @map("wrapped_announced_year") @db.SmallInt
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+/// One person blocking another. It works both ways for content: neither sees the other's
+/// photos, comments or reactions, and no notifications pass between them.
+model Block {
+  blockerId String   @map("blocker_id") @db.Char(36)
+  blockedId String   @map("blocked_id") @db.Char(36)
+  createdAt DateTime @default(now()) @map("created_at")
+  blocker   User     @relation("BlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("blocks")
+}
+
+/// A report about a photo or a person. Only stored, for whoever runs the server to review.
+model Report {
+  id             String   @id @default(uuid(7)) @db.Char(36)
+  reporterId     String   @map("reporter_id") @db.Char(36)
+  /// Null when the report wasn't about a photo, or the photo has been deleted since.
+  photoId        String?  @map("photo_id") @db.Char(36)
+  /// Null when the report wasn't about a person, or their account has been deleted since.
+  reportedUserId String?  @map("reported_user_id") @db.Char(36)
+  message        String   @db.VarChar(1000)
+  createdAt      DateTime @default(now()) @map("created_at")
+  reporter       User     @relation("ReportsMade", fields: [reporterId], references: [id], onDelete: Cascade)
+  photo          Photo?   @relation(fields: [photoId], references: [id], onDelete: SetNull)
+  reportedUser   User?    @relation("ReportsReceived", fields: [reportedUserId], references: [id], onDelete: SetNull)
+
+  @@index([reporterId])
+  @@index([photoId])
+  @@index([reportedUserId])
+  @@map("reports")
+}
+
+/// One browser's Web Push subscription. Subscribing again with the same endpoint updates it.
+model PushSubscription {
+  id        String   @id @default(uuid(7)) @db.Char(36)
+  userId    String   @map("user_id") @db.Char(36)
+  /// The push service URL. 700 characters keeps the unique index within InnoDB's key size.
+  endpoint  String   @unique @db.VarChar(700)
+  p256dh    String   @db.VarChar(255)
+  auth      String   @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+/// A push notification held back by the recipient's quiet hours, sent by the scheduler once
+/// they end. A newer one with the same tag replaces it, as it would on the device.
+model QueuedNotification {
+  id        String   @id @default(uuid(7)) @db.Char(36)
+  userId    String   @map("user_id") @db.Char(36)
+  tag       String   @db.VarChar(100)
+  title     String   @db.VarChar(120)
+  body      String   @db.VarChar(300)
+  url       String   @db.VarChar(255)
+  deliverAt DateTime @map("deliver_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tag])
+  @@index([deliverAt])
+  @@map("notification_queue")
 }

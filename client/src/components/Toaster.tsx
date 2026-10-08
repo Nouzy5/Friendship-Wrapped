@@ -1,5 +1,5 @@
 import { dismissToast, useToasts } from "../lib/toast";
-import { CloseIcon } from "./ui/icons";
+import { AlertIcon, CloseIcon } from "./ui/icons";
 
 /**
  * Where toasts appear: above the navigation bar, over everything. The live region is
@@ -17,16 +17,15 @@ export function Toaster() {
       {toasts.map((item) => (
         <div
           key={item.id}
-          className={`pointer-events-auto flex w-full max-w-sm animate-rise items-center gap-2 rounded-2xl border py-2 pr-2 pl-4 text-sm font-medium shadow-xl shadow-black/40 backdrop-blur motion-reduce:animate-none ${
-            item.tone === "error" ? "border-danger/40 bg-ink-900/95 text-danger" : "border-ink-700 bg-ink-800/95 text-ink-50"
-          }`}
+          className="pointer-events-auto flex w-full max-w-sm animate-rise items-center gap-2.5 rounded-full bg-inverse py-1.5 pr-1.5 pl-5 text-[0.9375rem] font-medium text-on-inverse shadow-lg shadow-black/20 motion-reduce:animate-none"
         >
+          {item.tone === "error" && <AlertIcon className="size-5 shrink-0" />}
           <span className="min-w-0 flex-1">{item.message}</span>
           <button
             type="button"
             onClick={() => dismissToast(item.id)}
             aria-label="Dismiss"
-            className="grid size-10 shrink-0 place-items-center rounded-full text-ink-400 transition hover:bg-ink-700 hover:text-ink-50"
+            className="grid size-10 shrink-0 place-items-center rounded-full opacity-70 transition hover:opacity-100"
           >
             <CloseIcon className="size-4" />
           </button>

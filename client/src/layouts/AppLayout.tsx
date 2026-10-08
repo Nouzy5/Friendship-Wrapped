@@ -1,24 +1,37 @@
-import { Link, NavLink, Outlet } from "react-router";
-import { Wordmark } from "../components/Wordmark";
-import { Avatar } from "../components/ui/Avatar";
 import type { ComponentType, SVGProps } from "react";
-import { CameraIcon, HomeIcon, MemoriesIcon, WrappedIcon } from "../components/ui/icons";
-import { useCurrentUser } from "../features/auth/hooks";
+import { Link, NavLink, Outlet, useMatch } from "react-router";
+import { PageTransition } from "../components/PageTransition";
+import { HomeIcon, MemoriesIcon, WrappedIcon } from "../components/ui/icons";
 import { useWrappedList } from "../features/wrapped/hooks";
+
+const itemClasses = (active: boolean) =>
+  `flex flex-col items-center gap-0.5 rounded-xl px-1 py-1 text-xs transition ${active ? "font-semibold text-fg" : "font-medium text-sub hover:text-fg"}`;
 
 function NavItem({ to, label, icon: Icon }: { to: string; label: string; icon: ComponentType<SVGProps<SVGSVGElement>> }) {
   return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        `flex flex-col items-center gap-0.5 rounded-xl px-1 py-1 text-xs font-medium transition ${
-          isActive ? "text-ink-50" : "text-ink-400 hover:text-ink-200"
-        }`
-      }
-    >
-      <Icon className="size-6" />
-      {label}
+    <NavLink to={to} className={({ isActive }) => itemClasses(isActive)}>
+      {({ isActive }) => (
+        <>
+          {/* The icon springs when its tab becomes the current one. */}
+          <Icon className={`size-6 ${isActive ? "animate-bounce-once" : ""}`} />
+          {label}
+        </>
+      )}
     </NavLink>
+  );
+}
+
+/** Home is a group's feed, so it's the current tab on any group page too. */
+function HomeItem() {
+  const onHome = useMatch("/home");
+  const onFeed = useMatch("/groups/:groupId");
+  const active = Boolean(onHome || (onFeed && onFeed.params.groupId !== "new"));
+
+  return (
+    <Link to="/home" aria-current={active ? "page" : undefined} className={itemClasses(active)}>
+      <HomeIcon className={`size-6 ${active ? "animate-bounce-once" : ""}`} />
+      Home
+    </Link>
   );
 }
 
@@ -27,27 +40,20 @@ function BottomNav() {
   const wrapped = useWrappedList();
 
   return (
-    <nav
-      aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-10 border-t border-ink-800/80 bg-ink-950/90 pb-[env(safe-area-inset-bottom)] backdrop-blur"
-    >
+    <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-bg pb-[env(safe-area-inset-bottom)]">
       <ul className="mx-auto grid h-16 w-full max-w-md auto-cols-fr grid-flow-col items-center px-2">
         <li>
-          <NavItem to="/home" label="Home" icon={HomeIcon} />
+          <HomeItem />
         </li>
-        <li>
-          {/* The camera is the app's main action, so it gets the big gradient button. */}
-          <NavLink
+        <li className="flex justify-center">
+          {/* The camera is the app's main action: a shutter in your colour. */}
+          <Link
             to="/camera"
             aria-label="Camera"
-            className={({ isActive }) =>
-              `mx-auto -mt-6 grid size-16 place-items-center rounded-full bg-linear-to-br from-brand-rose via-brand-orange to-brand-gold text-ink-950 shadow-lg shadow-brand-rose/30 ring-4 ring-ink-950 transition active:scale-95 ${
-                isActive ? "brightness-110" : "hover:brightness-110"
-              }`
-            }
+            className="flex size-[3.375rem] rounded-full border-4 border-accent p-1 transition-transform duration-200 hover:scale-105 active:scale-90"
           >
-            <CameraIcon className="size-7" />
-          </NavLink>
+            <span className="flex-1 rounded-full bg-accent transition-colors duration-300" />
+          </Link>
         </li>
         <li>
           <NavItem to="/memories" label="Memories" icon={MemoriesIcon} />
@@ -62,30 +68,29 @@ function BottomNav() {
   );
 }
 
-/** Shell for signed-in pages: header, page content, bottom navigation. */
+/** Shell for the main tabs: each page brings its own header; the navigation stays at the bottom. */
 export function AppLayout() {
-  const user = useCurrentUser();
-
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-10 border-b border-ink-800/80 bg-ink-950/80 pt-[env(safe-area-inset-top)] backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-md items-center justify-between px-4">
-          <Link to="/home" className="flex items-center gap-2 rounded-lg">
-            <img src="/favicon.svg" alt="" className="size-7 rounded-lg" />
-            <Wordmark className="text-lg" />
-          </Link>
-          <Link to="/profile" aria-label="Your profile" className="-m-1.5 rounded-full p-1.5">
-            <Avatar name={user.displayName} seed={user.id} src={user.avatarUrl} size="sm" />
-          </Link>
-        </div>
-      </header>
-
       {/* Bottom padding keeps content clear of the fixed navigation bar. */}
-      <main className="mx-auto w-full max-w-md flex-1 px-4 pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))]">
-        <Outlet />
+      <main className="mx-auto w-full max-w-md flex-1 pt-[env(safe-area-inset-top)] pb-[calc(6rem+env(safe-area-inset-bottom))]">
+        <PageTransition variant="fade">
+          <Outlet />
+        </PageTransition>
       </main>
 
       <BottomNav />
     </div>
+  );
+}
+
+/** Settings and other screens you go into and come back from: no tab bar, just a back button. */
+export function DetailLayout() {
+  return (
+    <main className="mx-auto w-full max-w-md px-4 pt-[calc(0.5rem+env(safe-area-inset-top))] pb-[calc(3rem+env(safe-area-inset-bottom))]">
+      <PageTransition variant="slide">
+        <Outlet />
+      </PageTransition>
+    </main>
   );
 }

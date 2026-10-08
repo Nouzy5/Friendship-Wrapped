@@ -31,7 +31,12 @@ export const listPhotosQuerySchema = pageQuerySchema(24).extend({
     .optional(),
   /** Only the photos you've favorited. */
   favorites: z.stringbool().optional(),
+  /** Only the photos this person posted ("Taken by"). */
+  uploaderId: z.uuid().optional(),
 });
+
+/** `?download=1` serves the image as a file to save, for those allowed to. */
+export const photoImageQuerySchema = z.object({ download: z.stringbool().optional() });
 
 const calendarDateSchema = z.iso
   .date()

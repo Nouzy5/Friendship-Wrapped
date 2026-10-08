@@ -97,11 +97,35 @@ export function dayStartsOfYear(year: number, timeZone: string): Date[] {
 
 /** The instant a calendar day begins in the zone (its local midnight), and the next day's. */
 export function dayRangeIn({ year, month, day }: CalendarDate, timeZone: string): { from: Date; to: Date } {
-  const startOf = (dayOfMonth: number) => {
-    const wallMidnight = Date.UTC(year, month - 1, dayOfMonth);
-    // The offset can change across a DST switch, so check it again at the corrected instant.
-    const first = wallMidnight - offsetMs(new Date(wallMidnight), timeZone);
-    return new Date(wallMidnight - offsetMs(new Date(first), timeZone));
+  return {
+    from: instantIn({ year, month, day }, 0, timeZone),
+    to: instantIn({ year, month, day: day + 1 }, 0, timeZone),
   };
-  return { from: startOf(day), to: startOf(day + 1) };
 }
+
+/**
+ * The instant the zone's clocks show `minutes` past midnight on a calendar day (days past
+ * the end of the month roll over into the next).
+ */
+export function instantIn({ year, month, day }: CalendarDate, minutes: number, timeZone: string): Date {
+  const wall = Date.UTC(year, month - 1, day, 0, minutes);
+  // The offset can change across a DST switch, so check it again at the corrected instant.
+  const first = wall - offsetMs(new Date(wall), timeZone);
+  return new Date(wall - offsetMs(new Date(first), timeZone));
+}
+
+/** The calendar date and the minute of the day (0–1439) the zone's clocks show at `instant`. */
+export function localTimeIn(instant: Date, timeZone: string): { date: CalendarDate; minutes: number } {
+  const { year, month, day, hour, minute } = wallClock(instant, timeZone);
+  return { date: { year, month, day }, minutes: hour * 60 + minute };
+}
+
+/** The calendar date `days` after this one. */
+export function addDays({ year, month, day }: CalendarDate, days: number): CalendarDate {
+  const date = new Date(Date.UTC(year, month - 1, day + days));
+  return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
+}
+
+/** "YYYY-MM-DD" */
+export const isoDate = ({ year, month, day }: CalendarDate) =>
+  [String(year).padStart(4, "0"), String(month).padStart(2, "0"), String(day).padStart(2, "0")].join("-");

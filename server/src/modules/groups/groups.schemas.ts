@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MemberColor } from "../../generated/prisma/client.js";
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const EMOJI_PATTERN = /\p{Extended_Pictographic}|\p{Regional_Indicator}|⃣/u;
@@ -35,8 +36,19 @@ export const updateGroupSchema = z
     message: "Nothing to update",
   });
 
+/** PATCH /groups/:groupId/members/me — your own colour and whether the group is muted. */
+export const updateMyMembershipSchema = z
+  .object({
+    color: z.enum(MemberColor, { error: "Choose one of the colours" }).optional(),
+    muted: z.boolean().optional(),
+  })
+  .refine((input) => input.color !== undefined || input.muted !== undefined, {
+    message: "Nothing to update",
+  });
+
 export const groupParamsSchema = z.object({ groupId: z.uuid() });
 export const memberParamsSchema = z.object({ groupId: z.uuid(), userId: z.uuid() });
 
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;
+export type UpdateMyMembershipInput = z.infer<typeof updateMyMembershipSchema>;

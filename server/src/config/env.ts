@@ -7,6 +7,10 @@ const envFileName = process.env.NODE_ENV === "test" ? ".env.test" : ".env";
 const envFilePath = fileURLToPath(new URL(`../../${envFileName}`, import.meta.url));
 if (existsSync(envFilePath)) process.loadEnvFile(envFilePath);
 
+/** An optional setting, where an empty value (`KEY=`) counts as unset. */
+const optional = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((value) => (value === "" ? undefined : value), schema.optional());
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   // Namespaced so a generic PORT/HOST exported by other tooling (e.g. a dev
@@ -26,6 +30,12 @@ const envSchema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().min(1),
   /** MinIO needs path-style URLs (http://host/bucket/key); most hosted services don't. */
   S3_FORCE_PATH_STYLE: z.stringbool().default(false),
+
+  // Web Push (VAPID). Optional: without all three, push notifications are simply off.
+  VAPID_PUBLIC_KEY: optional(z.string().regex(/^[A-Za-z0-9_-]+$/, "VAPID_PUBLIC_KEY must be base64url")),
+  VAPID_PRIVATE_KEY: optional(z.string().regex(/^[A-Za-z0-9_-]+$/, "VAPID_PRIVATE_KEY must be base64url")),
+  /** A contact for push services: a mailto: or https: URL. */
+  VAPID_SUBJECT: optional(z.string().regex(/^(mailto:|https:\/\/)\S+$/, "VAPID_SUBJECT must be a mailto: or https: URL")),
 });
 
 const parsed = envSchema.safeParse(process.env);

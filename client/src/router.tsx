@@ -1,26 +1,32 @@
 import { createBrowserRouter, Navigate } from "react-router";
 import { RedirectIfAuthenticated, RequireAuth } from "./features/auth/components/AuthGuards";
 import { GroupRoute } from "./features/groups/components/GroupRoute";
-import { AppLayout } from "./layouts/AppLayout";
+import { AppLayout, DetailLayout } from "./layouts/AppLayout";
 import { CardLayout } from "./layouts/CardLayout";
 import { RootLayout } from "./layouts/RootLayout";
+import { AlbumPage } from "./pages/AlbumPage";
 import { CameraPage } from "./pages/CameraPage";
-import { GroupMembersPage } from "./pages/GroupMembersPage";
 import { GroupPage } from "./pages/GroupPage";
 import { GroupSettingsPage } from "./pages/GroupSettingsPage";
 import { HomePage } from "./pages/HomePage";
 import { InvitePage } from "./pages/InvitePage";
-import { AlbumPage } from "./pages/AlbumPage";
 import { LoginPage } from "./pages/LoginPage";
 import { MemoriesPage } from "./pages/MemoriesPage";
 import { NewGroupPage } from "./pages/NewGroupPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PhotoPage } from "./pages/PhotoPage";
-import { ProfilePage } from "./pages/ProfilePage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { RouteErrorPage } from "./pages/RouteErrorPage";
-import { SettingsPage } from "./pages/SettingsPage";
+import { AccountSettingsPage } from "./pages/settings/AccountSettingsPage";
+import { AppearanceSettingsPage } from "./pages/settings/AppearanceSettingsPage";
+import { BlockedPage } from "./pages/settings/BlockedPage";
+import { MyInvitesPage } from "./pages/settings/MyInvitesPage";
+import { NotificationSettingsPage } from "./pages/settings/NotificationSettingsPage";
+import { PhotoSettingsPage } from "./pages/settings/PhotoSettingsPage";
+import { PrivacySettingsPage } from "./pages/settings/PrivacySettingsPage";
+import { SettingsHomePage } from "./pages/settings/SettingsHomePage";
+import { TermsPage } from "./pages/settings/TermsPage";
 import { WrappedListPage } from "./pages/WrappedListPage";
 import { WrappedPage } from "./pages/WrappedPage";
 
@@ -54,30 +60,46 @@ export const router = createBrowserRouter([
         element: <RequireAuth />,
         children: [
           {
+            // The main tabs, with the navigation bar.
             element: <AppLayout />,
             children: [
               { path: "home", element: <HomePage /> },
-              { path: "onboarding", element: <OnboardingPage /> },
-              { path: "profile", element: <ProfilePage /> },
-              { path: "settings", element: <SettingsPage /> },
-              { path: "camera", element: <CameraPage /> },
               { path: "photos/:photoId", element: <PhotoPage /> },
               { path: "memories", element: <MemoriesPage /> },
               { path: "memories/albums/:albumId", element: <AlbumPage /> },
               { path: "wrapped", element: <WrappedListPage /> },
+              { path: "groups/:groupId", element: <GroupRoute />, children: [{ index: true, element: <GroupPage /> }] },
+            ],
+          },
+          {
+            // Screens you step into and back out of: no navigation bar.
+            element: <DetailLayout />,
+            children: [
+              { path: "onboarding", element: <OnboardingPage /> },
               { path: "groups/new", element: <NewGroupPage /> },
               {
                 path: "groups/:groupId",
                 element: <GroupRoute />,
                 children: [
-                  { index: true, element: <GroupPage /> },
-                  { path: "members", element: <GroupMembersPage /> },
                   { path: "settings", element: <GroupSettingsPage /> },
+                  // Members used to have their own page; they're part of the group's settings now.
+                  { path: "members", element: <Navigate to="../settings" replace /> },
                 ],
               },
+              { path: "settings", element: <SettingsHomePage /> },
+              { path: "settings/account", element: <AccountSettingsPage /> },
+              { path: "settings/notifications", element: <NotificationSettingsPage /> },
+              { path: "settings/appearance", element: <AppearanceSettingsPage /> },
+              { path: "settings/privacy", element: <PrivacySettingsPage /> },
+              { path: "settings/blocked", element: <BlockedPage /> },
+              { path: "settings/invites", element: <MyInvitesPage /> },
+              { path: "settings/photos", element: <PhotoSettingsPage /> },
+              { path: "settings/terms", element: <TermsPage /> },
+              { path: "profile", element: <Navigate to="/settings/account" replace /> },
             ],
           },
-          // Full screen, without the app header and navigation.
+          // Full screen, without any chrome.
+          { path: "camera", element: <CameraPage /> },
           { path: "wrapped/:year", element: <WrappedPage /> },
         ],
       },

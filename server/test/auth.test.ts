@@ -238,10 +238,13 @@ describe("PATCH /api/users/me (protected)", () => {
 
   it("ignores fields that aren't editable", async () => {
     const { agent } = await signedInAgent();
-    const res = await agent.patch("/api/users/me").send({ displayName: "Alice", username: "admin" });
+    const res = await agent
+      .patch("/api/users/me")
+      .send({ displayName: "Alice", id: "00000000-0000-7000-8000-000000000000", createdAt: "2000-01-01T00:00:00Z" });
 
     expect(res.status).toBe(200);
-    expect(res.body.user.username).toBe("alice");
+    expect(res.body.user.id).not.toBe("00000000-0000-7000-8000-000000000000");
+    expect(res.body.user.createdAt).not.toBe("2000-01-01T00:00:00.000Z");
   });
 });
 
