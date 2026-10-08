@@ -1,22 +1,24 @@
 import SwiftUI
 import UIKit
 
-/// Loads a group's Wrapped for a year and plays it full screen.
+/// Loads a group's Wrapped for a year and plays it full screen (the web app's WrappedPage).
 struct WrappedStoryView: View {
     let groupID: String
     let year: Int
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(GroupsStore.self) private var groups
 
     @State private var wrapped: Wrapped?
     @State private var failure: APIError?
 
     var body: some View {
         ZStack {
-            Color.ink950.ignoresSafeArea()
+            Color.bg.ignoresSafeArea()
 
             if let wrapped {
                 StoryPlayer(wrapped: wrapped) { dismiss() }
+                    .transition(.opacity)
             } else {
                 Group {
                     if let failure {
@@ -24,25 +26,29 @@ struct WrappedStoryView: View {
                     } else {
                         ProgressView()
                             .controlSize(.large)
-                            .tint(.white)
+                            .tint(Theme.fg)
+                            .accessibilityLabel("Loading")
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .topTrailing) {
                     Button { dismiss() } label: {
                         Image(systemName: "xmark")
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(.fg)
                             .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(PressScaleButtonStyle())
                     .accessibilityLabel("Close")
                     .padding(.horizontal, 8)
                 }
             }
         }
-        .environment(\.colorScheme, .dark)
         .statusBarHidden()
         .task { await load() }
+        // People's colours and names (the reactors on the most reacted-to photo).
+        .task { await groups.loadMembersIfNeeded(of: groupID) }
     }
 
     @ViewBuilder
@@ -51,17 +57,16 @@ struct WrappedStoryView: View {
         if failure.status == 404 || failure.status == 400 {
             EmptyStateView(
                 emoji: "🎁",
-                title: "No Wrapped for \(year)",
+                title: "No Wrapped for \(String(year))",
                 message: "A group's Wrapped for a year starts with its first photo that year. You'll only see your own groups'."
             ) {
                 Button("See all Wrapped") { dismiss() }
-                    .buttonStyle(.brand)
-                    .frame(maxWidth: 240)
+                    .buttonStyle(.fwCompact(.primary))
             }
         } else {
             EmptyStateView(emoji: "📡", title: "Couldn't load this Wrapped", message: "Check your connection and try again.") {
                 Button("Try again") { Task { await load() } }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.fwCompact(.primary))
             }
         }
     }
@@ -73,7 +78,7 @@ struct WrappedStoryView: View {
             if loaded.slides.isEmpty {
                 failure = APIError(status: 404, code: "NOT_FOUND", message: "There's no Wrapped for \(year)")
             } else {
-                wrapped = loaded
+                withMotion(.fwQuick) { wrapped = loaded }
             }
         } catch is CancellationError {
             return
@@ -171,9 +176,10 @@ private struct Press {
     var holdTimer: Task<Void, Never>?
 }
 
-/// The Wrapped as a full-screen story. Slides play on their own; tap the right of the screen
-/// (or swipe left) for the next, the left third (or swipe right) for the previous. Press and
-/// hold to pause; swipe down to close.
+/// The Wrapped as a full-screen story (the web app's WrappedStory). Slides play on their own; tap
+/// the right of the screen (or swipe left) for the next, the left third (or swipe right) for the
+/// previous. Press and hold to pause; swipe down to close. The progress bar and the buttons over
+/// the slides take the slide's ink: paper, night, or the colour of the person it's about.
 private struct StoryPlayer: View {
     let wrapped: Wrapped
     let onClose: () -> Void
@@ -185,9 +191,12 @@ private struct StoryPlayer: View {
     /// How far a swipe must travel, and how much more along its direction than across.
     private static let swipeDistance: CGFloat = 50
     private static let swipeRatio: CGFloat = 1.5
+    /// Moving between slides (the web story's enter-forward / enter-back).
+    private static let slideAnimation = Animation.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.45)
 
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.fwReduceMotion) private var reduceMotion
+    @Environment(GroupsStore.self) private var groups
 
     @State private var position = StoryPosition()
     @State private var clock = StoryClock()
@@ -203,23 +212,32 @@ private struct StoryPlayer: View {
     private var paused: Bool { userPaused || holding || scenePhase != .active }
     private var pauseLabel: String { userPaused ? "Play" : "Pause" }
 
+    private var tone: StoryTone {
+        StoryTone.of(slide) { userID in groups.colorOf(userID, in: wrapped.group.id) }
+    }
+
     var body: some View {
+        let currentTone = tone
+
         GeometryReader { geometry in
             ZStack {
-                StorySlideView(slide: slide, wrapped: wrapped)
-                    .environment(\.storyClock, clock)
-                    .id(position.visit)
-                    // The incoming slide on top, the outgoing one fading out underneath.
-                    .zIndex(Double(position.visit))
-                    .transition(slideTransition)
-                    .allowsHitTesting(false)
+                // The slides in a stack of their own, so the incoming one can sit above the
+                // outgoing one (fading out underneath) without covering the controls.
+                ZStack {
+                    StorySlideView(slide: slide, wrapped: wrapped, size: geometry.size)
+                        .environment(\.storyClock, clock)
+                        .id(position.visit)
+                        .zIndex(Double(position.visit))
+                        .transition(slideTransition)
+                }
+                .allowsHitTesting(false)
 
                 Color.clear
                     .contentShape(Rectangle())
                     .ignoresSafeArea()
                     .gesture(storyGesture(width: geometry.size.width))
                     .accessibilityElement()
-                    .accessibilityLabel(Text(verbatim: "\(wrapped.group.name), \(wrapped.year) Wrapped"))
+                    .accessibilityLabel(Text(verbatim: "\(wrapped.group.name), \(String(wrapped.year)) Wrapped"))
                     .accessibilityValue("Slide \(index + 1) of \(slides.count)")
                     .accessibilityAdjustableAction { direction in
                         switch direction {
@@ -230,7 +248,7 @@ private struct StoryPlayer: View {
                     }
 
                 VStack(spacing: 0) {
-                    topBar
+                    topBar(tone: currentTone)
                     Spacer(minLength: 0)
                     if case .outro = slide {
                         OutroActions(onRestart: restart, onClose: onClose)
@@ -239,7 +257,7 @@ private struct StoryPlayer: View {
                 }
             }
         }
-        .background(Color.black)
+        .background(Color.bg.ignoresSafeArea())
         .onAppear {
             // VoiceOver users start paused, so the story doesn't move on while it's being read.
             if UIAccessibility.isVoiceOverRunning { userPaused = true }
@@ -261,58 +279,78 @@ private struct StoryPlayer: View {
         .accessibilityAction(.escape) { onClose() }
     }
 
-    private var topBar: some View {
+    /// The progress bars, then the group, pause and close, in the slide's ink.
+    private func topBar(tone: StoryTone) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            StoryProgress(count: slides.count, index: index, clock: clock, duration: slide.duration, paused: paused)
-                .allowsHitTesting(false)
+            StoryProgress(
+                count: slides.count,
+                index: index,
+                clock: clock,
+                duration: slide.duration,
+                paused: paused,
+                color: tone.ink
+            )
+            .allowsHitTesting(false)
+
             HStack(spacing: 8) {
                 HStack(spacing: 8) {
-                    Text(wrapped.group.emoji)
-                        .font(.title3)
-                        .accessibilityHidden(true)
-                    Text(verbatim: "\(wrapped.group.name) · \(wrapped.year)")
-                        .font(.subheadline.weight(.semibold))
+                    GroupBadge(
+                        groupID: wrapped.group.id,
+                        emoji: wrapped.group.emoji,
+                        avatarURL: groups.group(wrapped.group.id)?.avatarUrl,
+                        size: 28
+                    )
+                    Text(wrapped.group.name)
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .lineLimit(1)
-                        .accessibilityAddTraits(.isHeader)
+                    Text(verbatim: String(wrapped.year))
+                        .font(.system(size: 15, design: .rounded))
+                        .foregroundStyle(tone.secondary)
+                        .layoutPriority(1)
                 }
+                .padding(.leading, 4)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .allowsHitTesting(false)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isHeader)
 
                 Button { userPaused.toggle() } label: {
                     Image(systemName: userPaused ? "play.fill" : "pause.fill")
-                        .font(.body.weight(.semibold))
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(tone.ink)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
+                .buttonStyle(PressScaleButtonStyle())
                 .accessibilityLabel(pauseLabel)
 
                 Button(action: onClose) {
                     Image(systemName: "xmark")
-                        .font(.title3.weight(.semibold))
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(tone.ink)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
+                .buttonStyle(PressScaleButtonStyle())
                 .accessibilityLabel("Close")
             }
-            .foregroundStyle(.white)
-            .shadow(color: .black.opacity(0.4), radius: 4, y: 1)
         }
+        .foregroundStyle(tone.ink)
         .padding(.horizontal, 12)
         .padding(.top, 8)
-        .padding(.bottom, 32)
-        .background {
-            LinearGradient(colors: [.black.opacity(0.4), .clear], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea(edges: .top)
-                .allowsHitTesting(false)
-        }
     }
 
-    /// Slides in from the side it's coming from, crossfading with the outgoing slide.
+    /// Slides in from the side it's coming from while the outgoing slide fades out underneath
+    /// (the web story's enter-forward, enter-back and exit). Reduced motion: it just changes.
     private var slideTransition: AnyTransition {
+        guard !reduceMotion else { return .identity }
         let insertion = AnyTransition.opacity
             .combined(with: .offset(x: position.forward ? 40 : -40))
             .combined(with: .scale(scale: 0.98))
-        return .asymmetric(insertion: insertion, removal: .opacity)
+        let removal = AnyTransition.opacity
+            .combined(with: .scale(scale: 0.96))
+            .animation(.easeIn(duration: 0.45))
+        return .asymmetric(insertion: insertion, removal: removal)
     }
 
     // MARK: - Playback
@@ -331,12 +369,8 @@ private struct StoryPlayer: View {
     private func goTo(_ target: Int) {
         guard slides.indices.contains(target) else { return }
         let destination = StoryPosition(index: target, forward: target >= index, visit: position.visit + 1)
-        if reduceMotion {
+        withMotion(Self.slideAnimation) {
             position = destination
-        } else {
-            withAnimation(.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.45)) {
-                position = destination
-            }
         }
         clock = StoryClock(resumedAt: paused ? nil : .now)
     }
@@ -416,13 +450,15 @@ private struct StoryPlayer: View {
     }
 }
 
-/// One bar per slide: the ones seen are full, the current one fills while it plays.
+/// One bar per slide, in the slide's ink: the ones seen are full, the current one fills while it
+/// plays. It keeps moving with reduced motion: it says how long the slide has left.
 private struct StoryProgress: View {
     let count: Int
     let index: Int
     let clock: StoryClock
     let duration: TimeInterval
     let paused: Bool
+    let color: Color
 
     var body: some View {
         TimelineView(.animation(paused: paused)) { context in
@@ -430,16 +466,16 @@ private struct StoryProgress: View {
             HStack(spacing: 4) {
                 ForEach(0..<count, id: \.self) { bar in
                     Capsule()
-                        .fill(.white.opacity(0.35))
+                        .fill(color.opacity(0.25))
                         .overlay(alignment: .leading) {
                             GeometryReader { geometry in
                                 Capsule()
-                                    .fill(.white)
+                                    .fill(color)
                                     .frame(width: geometry.size.width * fill(of: bar, progress: progress))
                             }
                         }
                         .clipShape(Capsule())
-                        .frame(height: 3)
+                        .frame(height: 4)
                 }
             }
         }
@@ -453,7 +489,8 @@ private struct StoryProgress: View {
     }
 }
 
-/// The last slide's buttons. They sit above the story's tap area, so they get their taps.
+/// The last slide's buttons. They sit above the story's tap area, so they get their taps. The
+/// last slide is on paper, so they're the app's own grey and black pills.
 private struct OutroActions: View {
     let onRestart: () -> Void
     let onClose: () -> Void
@@ -461,25 +498,11 @@ private struct OutroActions: View {
     var body: some View {
         HStack(spacing: 12) {
             Button("Watch again", action: onRestart)
-                .buttonStyle(StoryPillStyle(prominent: false))
+                .buttonStyle(.fwCompact(.secondary))
             Button("Done", action: onClose)
-                .buttonStyle(StoryPillStyle(prominent: true))
+                .buttonStyle(.fwCompact(.primary))
         }
         .padding(.bottom, 40)
-        .rise(after: 1.1)
-    }
-}
-
-private struct StoryPillStyle: ButtonStyle {
-    let prominent: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(prominent ? Color.ink50 : Color.ink950)
-            .padding(.horizontal, 24)
-            .frame(minHeight: 44)
-            .background(prominent ? Color.ink950 : Color.white.opacity(0.3), in: Capsule())
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+        .storyRise(after: 1.1)
     }
 }

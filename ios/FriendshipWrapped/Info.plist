@@ -46,6 +46,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Take photos to share with your friend groups.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save photos your friends let you keep, and a copy of what you post if you turn that on.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Connects to a Friendship Wrapped development server on your network.</string>
 	<key>UIApplicationSceneManifest</key>

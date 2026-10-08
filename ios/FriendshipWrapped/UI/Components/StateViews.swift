@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Centered message for empty, error and not-found states (the web app's StateMessage).
+/// Centered message for empty, error and not-found states (the web app's StateMessage): the
+/// emoji pops in, the words rise after it.
 struct EmptyStateView<Actions: View>: View {
     let emoji: String
     let title: String
@@ -8,54 +9,37 @@ struct EmptyStateView<Actions: View>: View {
     @ViewBuilder var actions: () -> Actions
 
     var body: some View {
-        ContentUnavailableView {
-            VStack(spacing: 12) {
-                Text(emoji)
-                    .font(.system(size: 52))
-                    .accessibilityHidden(true)
-                Text(title)
-                    .font(.title3.bold())
-            }
-        } description: {
+        VStack(spacing: 0) {
+            Text(emoji)
+                .font(.system(size: 52))
+                .popIn(delay: 0.12)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(Theme.title(.title2))
+                .multilineTextAlignment(.center)
+                .padding(.top, 16)
+                .accessibilityAddTraits(.isHeader)
             if let message {
                 Text(message)
+                    .font(.callout)
+                    .foregroundStyle(.sub)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 320)
+                    .padding(.top, 8)
             }
-        } actions: {
             actions()
+                .padding(.top, 24)
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 48)
+        .frame(maxWidth: .infinity)
+        .fadeIn()
     }
 }
 
 extension EmptyStateView where Actions == EmptyView {
     init(emoji: String, title: String, message: String? = nil) {
         self.init(emoji: emoji, title: title, message: message, actions: { EmptyView() })
-    }
-}
-
-/// A form-level error shown at the top of a form.
-struct FormErrorSection: View {
-    let message: String
-
-    var body: some View {
-        Section {
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .font(.subheadline)
-                .foregroundStyle(.red)
-        }
-    }
-}
-
-/// A form section footer: the server's validation message if there is one, otherwise a hint.
-struct FieldFooter: View {
-    let error: String?
-    var hint: String?
-
-    var body: some View {
-        if let error {
-            Text(error).foregroundStyle(.red)
-        } else if let hint {
-            Text(hint)
-        }
     }
 }
 
@@ -71,11 +55,13 @@ struct StatusIndicator: View {
             if status == .checking {
                 ProgressView().controlSize(.mini)
             } else {
-                Circle().fill(color).frame(width: 9, height: 9)
+                Image(systemName: symbol)
+                    .font(.footnote.weight(.semibold))
             }
-            Text(label).foregroundStyle(.secondary)
+            Text(label)
         }
         .font(.subheadline)
+        .foregroundStyle(.sub)
     }
 
     private var label: String {
@@ -87,12 +73,13 @@ struct StatusIndicator: View {
         }
     }
 
-    private var color: Color {
+    // Shapes rather than traffic-light colours: colour only ever means a person.
+    private var symbol: String {
         switch status {
-        case .checking: return .yellow
-        case .ok: return .green
-        case .down: return .red
-        case .unknown: return .gray
+        case .checking: return "circle.dotted"
+        case .ok: return "checkmark.circle.fill"
+        case .down: return "xmark.circle.fill"
+        case .unknown: return "questionmark.circle"
         }
     }
 }
@@ -111,13 +98,6 @@ extension View {
         } message: {
             Text(message.wrappedValue ?? "")
         }
-    }
-
-    /// Full-width content (a button, a photo) on its own in a form, without the row background.
-    func buttonRow() -> some View {
-        listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
     }
 
     /// Keeps a text field to `limit` code points, the limit the server checks.

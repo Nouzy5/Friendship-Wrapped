@@ -110,6 +110,24 @@ final class SessionStore {
         profileChanged(user)
     }
 
+    /// `409 USERNAME_TAKEN` when someone has it already.
+    func updateUsername(_ username: String) async throws {
+        let user = try await api.updateUsername(username)
+        profileChanged(user)
+    }
+
+    /// Signs out your other devices; this one stays signed in.
+    func changePassword(current: String, new: String) async throws {
+        try await api.changePassword(current: current, new: new)
+    }
+
+    /// Signing out this phone from the devices list: the session is gone on the server already.
+    func didSignOutThisDevice() {
+        api.clearSession()
+        justRegistered = false
+        phase = .signedOut
+    }
+
     /// A change answered after signing out (an upload still finishing) mustn't sign back in.
     private func profileChanged(_ user: User) {
         guard case .signedIn(let current) = phase, current.id == user.id else { return }

@@ -1,36 +1,27 @@
 # Friendship Wrapped for iOS
 
-A native SwiftUI app that does everything the web client does so far: phases 1–10. It talks to the **same Express API** as the web client. The server needed no changes.
+A native SwiftUI app that does everything the web client does: phases 1–10 and the **Colour-coded redesign**. It talks to the **same Express API** as the web client.
+
+## Colour-coded
+
+The same design as the web app (README → "Redesign: Colour-coded"): black and white paper and ink, and one colour per friend. Colour only ever means a person; your own colour in the group you're looking at is your accent (the shutter, switches, your reaction). Type is Apple's rounded system font, which the web design names as Fredoka's fallback (Fredoka itself only ships here as web fonts).
 
 | Web | iOS |
 | --- | --- |
-| `/auth/login`, `/auth/register` | Welcome screen → Log in / Create account |
-| `/onboarding` | Full-screen "Welcome!" sheet after sign-up |
-| `/home` | **Home** tab: your groups, `+` → New group / Join with invite link |
-| Bottom-nav camera button, `/camera` | **Camera** tab: take a photo (system camera) or choose one from the library → caption → choose group → Post, with a progress bar. Offline, posting says "Waiting for connection…" and carries on when you're back |
-| `/groups/:id` | Group screen: emoji, members, then the photo feed. Switch between posts and a grid; more photos load as you scroll |
-| Feed post | Who posted it and when, the photo, the five reactions, comment count, caption ("more" for long ones) |
-| `/photos/:id` | Photo viewer: swipe or use the arrows to step through the feed, tap for full size (pinch or double-tap to zoom), ☆ favourite (private), reactions with "see who", comments (oldest first, delete your own) with the composer pinned to the bottom; the uploader can delete the photo |
-| `/groups/:id/members` | Members (owner swipes left to remove) |
-| `/groups/:id/settings` | Group settings: edit, reset invite links, leave |
-| `/invite/:token` | Invite sheet: preview → join, or sign up and come back |
-| `/profile`, `/settings` | **Profile** tab: profile picture (add/change/remove), display name; ⚙︎ → Settings: log out, **Delete account…** (spells out what goes, confirmed with your password; the welcome screen then says it's done), App status (folded away unless something's wrong) |
-| `/memories` | **Memories** tab: group switcher, On This Day (same date in earlier years, in your time zone), then Timeline (by month, pinned month headers, "Jump to" a month), Albums and Favorites (only you see them) |
-| `/memories/albums/:id` | Album: photos oldest first, Add photos (multi-select picker), rename/delete for its creator or the group owner. In the photo viewer, the album button adds the photo to albums or starts a new one |
-| `/wrapped` | **Wrapped** tab, shown once you have one: a card per group and year, newest year first ("In progress" for this year) |
-| `/wrapped/:year?group=` | The story, full screen: the same eight slides as the web, with the same timings, count-ups and animations. Tap the right side (or swipe left) for the next slide and the left third (or swipe right) for the previous; press and hold to pause; swipe down to close. It pauses while the app is in the background. With Reduce Motion, slides appear without animating, and VoiceOver users start paused |
+| `/auth/login`, `/auth/register` | Welcome screen (the colour-stripe mark) → Log in / Create account |
+| `/onboarding` | "Welcome!" screen after sign-up: create your first group or join with a link |
+| `/home`, `/groups/:id` | **Home** tab is the current group's feed. The group's name opens a list of your groups (+ New group); the header also has the grid/feed switch, group settings and your avatar (→ Settings). Alone in a group, the invite card comes first |
+| Feed post | The photo with a name tag in the poster's colour, a "…" menu (add to an album, save photo when allowed, report, block, delete your own), reactions as pills with the people who reacted as dots in their colours (yours outlined in your colour), comments, favourite star, caption |
+| `/photos/:id` | Photo viewer: swipe through the feed, pinch or double-tap to zoom, reactions, comments in each person's colour, the same menu |
+| Shutter, `/camera` | Full-screen camera: square viewfinder, flash, switch camera, grid lines, the group you're posting to and who'll see it; then a caption and "Post to …" with progress. Library photos work too |
+| `/memories` | **Memories** tab: On this day, then Timeline (months, jump to a month, "Taken by" one person), Albums and Favorites |
+| `/groups/:id/settings` | Group settings: your colour (12; taken ones show who has them), group photo, members (report, block, remove), name and emoji, mute, invite links, leave |
+| `/settings/*` | Settings: Account (photo, name, username, password, signed-in devices, download your photos as a zip, delete account), Notifications (saved with your account; the iPhone app itself can't receive push yet), Appearance (Match device / Light / Dark, app icon, reduce motion, haptics), Privacy & safety (photo saving, your name in Wrapped, blocked people, your invite links), Photos & data (camera, quality, mobile data, data saver), Terms |
+| `/wrapped`, `/wrapped/:year` | **Wrapped** tab and the full-screen story, with everyone's share of the year in their colours |
 
-The server decides which slides there are and the app writes the words around the numbers, as the web client does. Slide types the app doesn't know yet (from a newer server) are skipped, so an older TestFlight build keeps working. Phase 8's year stats (`GET /groups/:id/stats/:year`) load through `APIClient.fetchYearStats`, and the slides reuse its `YearStats.PersonCount`.
-
-Phase 10's polish, as it applies to a native app:
-- **Offline.** A banner shows along the top while the device is offline (`NetworkMonitor`, from `NWPathMonitor`). Coming back online reloads your groups and Wrapped.
-- **Loading.** Home and the group feed show skeletons, not spinners. Content already on screen stays when a refresh fails.
-- **Wrapped.** Slides crossfade. The floating reactions and the drifting sunset freeze while the story is paused. Taps work right to the edges of the screen, and the buttons are 44 pt.
-- **Long group names** wrap.
-- **Not needed here:**
-  - The system camera already has flash and flip.
-  - Failed reactions and favorites already show an alert, and destructive actions already ask first.
-  - iOS screens have titles anyway, and the app installs from TestFlight.
+- **App icon.** Settings → Appearance → App icon switches the Home Screen icon between Classic, Night and "Your colour" (one alternate icon per member colour; `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES` in `project.yml`). iOS confirms each change with an alert of its own, so the icon only changes when you choose it.
+- **Motion.** Screens push and pop natively, tabs rise into place, menus and sheets grow from where they open, reactions pop and bounce, lists ease in, switches spring and the theme crossfades. Settings → Appearance → Reduce motion (or the iPhone's own setting) turns all of it off.
+- **Haptics.** A light tap when you react, flip a switch or take a photo (Settings → Appearance → Haptics).
 
 ## Requirements
 
@@ -102,7 +93,8 @@ FriendshipWrapped/
     Networking/   APIClient (URLSession + error envelope), APIError, SessionTokenStore (Keychain)
   Models/         Codable mirrors of the API's DTOs (User, FriendGroup, GroupMember, invites, health)
   Features/<name> <Name>API.swift (endpoints), stores, and screens for auth, groups, invites, profile, settings
-  UI/             Shared views: brand colours, logo, avatar, buttons, empty states
+  UI/Design/      Theme (colour tokens, member colours, type), Motion (animations that honour reduce motion)
+  UI/Components/  Shared views: avatars, group badge, name tags, buttons, settings rows, fields, toasts, group picker
 ```
 
 - **Same layering idea as the web client.** Endpoint calls live in `Features/*/…API.swift` (like `features/*/api.ts`). Shared cached state lives in `SessionStore` and `GroupsStore` (like the TanStack Query cache). Screens stay thin.
@@ -111,8 +103,8 @@ FriendshipWrapped/
 - **Validation** stays on the server. Field messages from `details` are shown under each field.
 - **Photos.** The server rejects HEIC, the iPhone camera's default format. So the app re-encodes every photo as a JPEG before uploading, scaled to at most 2560 px (the server's largest rendition) or 1024 px for profile pictures. The server then re-encodes to WebP and strips metadata such as GPS location, as it does for the web.
 - **Images load through `APIClient`**, not `AsyncImage`, because photo and avatar URLs are access-checked and need the session cookie. Decoded images are kept in memory (`ImageCache`) and dropped on sign-out. The app only sends the cookie to paths on the API's own host.
-- **Camera.** Uses the system camera (`UIImagePickerController`), so it only works on a real device. The Simulator offers the photo library only. The library uses `PhotosPicker`, which needs no photo-library permission.
-- **Invite links** are still the web URLs (`https://<web>/invite/<token>`), so they work for everyone. The app also opens `friendshipwrapped://invite/<token>`, and **Home → + → Join with invite link** accepts a pasted link.
+- **Camera.** A full-screen AVFoundation camera (`Features/Photos/Camera/`), square like the web one. The Simulator has no camera, so it offers the photo library only. The library uses `PhotosPicker`, which needs no photo-library permission; saving photos asks for add-only access.
+- **Invite links** are still the web URLs (`https://<web>/invite/<token>`), so they work for everyone. The app also opens `friendshipwrapped://invite/<token>`, and **Join with an invite link** (Home without groups, or onboarding) accepts a pasted link.
 - **Universal links** (web invite links opening the app directly) need an `apple-app-site-association` file on the deployed web domain plus the Associated Domains capability. That's for once the web client is deployed.
 
 ## Keeping it in step with the web app

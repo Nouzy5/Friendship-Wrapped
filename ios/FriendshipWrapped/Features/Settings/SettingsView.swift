@@ -1,72 +1,196 @@
 import SwiftUI
 
+/// Settings (the web app's SettingsHomePage): you, the settings screens, your groups, help and
+/// the app's status, and signing out. Opened from your avatar at the top of Home.
 struct SettingsView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(GroupsStore.self) private var groups
+    @Environment(AccountStore.self) private var account
+    @Environment(DeviceSettings.self) private var settings
+    @Environment(AppRouter.self) private var router
+    @Environment(\.accentMemberColor) private var myColor
 
-    @State private var confirmingLogout = false
-    @State private var isLoggingOut = false
-    @State private var deletingAccount = false
-    @State private var alertMessage: String?
+    @State private var reporting = false
+    @State private var isSigningOut = false
+    @State private var signOutError: String?
 
     var body: some View {
-        Form {
-            Section("Account") {
-                LabeledContent("Signed in as", value: "@\(session.user?.username ?? "")")
-
-                Button(role: .destructive) {
-                    confirmingLogout = true
-                } label: {
-                    HStack {
-                        Text(isLoggingOut ? "Logging out…" : "Log out")
-                        if isLoggingOut {
-                            Spacer()
-                            ProgressView()
-                        }
-                    }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                if let user = session.user {
+                    profileCard(user)
+                        .riseIn()
                 }
-                .disabled(isLoggingOut)
+                mainRows
+                    .riseIn(delay: 0.04)
+                groupsSection
+                    .riseIn(delay: 0.08)
+                helpSection
+                    .riseIn(delay: 0.12)
+                SystemStatusSection()
+                    .riseIn(delay: 0.16)
+                signOutSection
+                    .riseIn(delay: 0.2)
             }
-
-            Section {
-                Button("Delete account…", role: .destructive) {
-                    deletingAccount = true
-                }
-            } footer: {
-                Text("Permanently deletes your account, your photos and everything else you've posted.")
-            }
-
-            SystemStatusSection()
-
-            Section("About") {
-                LabeledContent("Version", value: AppConfig.version)
-                LabeledContent("Server", value: AppConfig.apiBaseURL?.host() ?? "Not configured")
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 40)
         }
+        .screenBackground()
         .navigationTitle("Settings")
-        .confirmationDialog("Log out of Friendship Wrapped?", isPresented: $confirmingLogout, titleVisibility: .visible) {
-            Button("Log out", role: .destructive) {
-                Task { await logout() }
-            }
-        }
-        .errorAlert("Couldn't log out", message: $alertMessage)
-        .sheet(isPresented: $deletingAccount) {
-            DeleteAccountView()
+        .navigationBarTitleDisplayMode(.large)
+        .task { await account.loadSettingsIfNeeded() }
+        .task { await groups.loadGroupsIfNeeded() }
+        .sheet(isPresented: $reporting) {
+            ReportSheet()
         }
     }
 
-    private func logout() async {
-        isLoggingOut = true
+    // MARK: - You
+
+    private func profileCard(_ user: User) -> some View {
+        HStack(spacing: 14) {
+            PersonAvatar(name: user.displayName, imagePath: user.avatarUrl, color: myColor, size: .lg)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(user.displayName)
+                    .font(Theme.title(.title3))
+                    .foregroundStyle(.fg)
+                    .lineLimit(1)
+                Text("@\(user.username)")
+                    .font(.subheadline)
+                    .foregroundStyle(.sub)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+
+            NavigationLink(value: AppRoute.settings(.account)) {
+                Text("Edit profile")
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                    .foregroundStyle(.fg)
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 44)
+                    .background(.bg, in: Capsule())
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(PressScaleButtonStyle(scale: 0.95))
+        }
+        .padding(16)
+        .background(.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    // MARK: - Settings screens
+
+    private var notificationsValue: String? {
+        account.settings.map { $0.notifications.enabled ? "On" : "Off" }
+    }
+
+    private var mainRows: some View {
+        SettingsGroup {
+            screenLink(.account, "Account", systemImage: "person")
+            screenLink(.notifications, "Notifications", systemImage: "bell", value: notificationsValue)
+            screenLink(.appearance, "Appearance", systemImage: "circle.lefthalf.filled", value: settings.values.theme.label)
+            screenLink(.privacy, "Privacy & safety", systemImage: "hand.raised")
+            screenLink(.photosAndData, "Photos & data", systemImage: "camera")
+        }
+    }
+
+    private func screenLink(_ route: SettingsRoute, _ label: String, systemImage: String, value: String? = nil) -> some View {
+        NavigationLink(value: AppRoute.settings(route)) {
+            SettingsRowLabel(label, systemImage: systemImage, value: value)
+        }
+        .buttonStyle(.settingsRow)
+    }
+
+    // MARK: - Your groups
+
+    private var groupsSection: some View {
+        SettingsSection("Your groups") {
+            SettingsGroup {
+                ForEach(groups.groups) { group in
+                    NavigationLink(value: AppRoute.groupSettings(group.id)) {
+                        SettingsRowLabel(
+                            label: group.name,
+                            description: Format.memberCount(group.memberCount) + (group.muted ? ", muted" : "")
+                        ) {
+                            GroupBadge(group: group, size: 36)
+                        }
+                    }
+                    .buttonStyle(.settingsRow)
+                }
+
+                Button {
+                    // The shell presents the new group sheet.
+                    router.showingNewGroup = true
+                } label: {
+                    SettingsRowLabel(label: "New group", showsChevron: false) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.fg)
+                            .frame(width: 36, height: 36)
+                            .background(.bg, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                            .accessibilityHidden(true)
+                    }
+                }
+                .buttonStyle(.settingsRow)
+            }
+            .motion(.fwEase, value: groups.groups.map(\.id))
+        }
+    }
+
+    // MARK: - Help & about
+
+    private var helpSection: some View {
+        SettingsSection("Help & about") {
+            SettingsGroup {
+                SettingsButtonRow("Report a problem", systemImage: "questionmark.circle") {
+                    reporting = true
+                }
+                NavigationLink(value: AppRoute.settings(.terms)) {
+                    SettingsRowLabel("Terms and privacy policy", systemImage: "doc.text")
+                }
+                .buttonStyle(.settingsRow)
+                SettingsValueRow("Version", systemImage: "info.circle", value: AppConfig.version)
+            }
+        }
+    }
+
+    // MARK: - Sign out
+
+    private var signOutSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let signOutError {
+                InlineAlert(message: signOutError)
+            }
+            SettingsGroup {
+                SettingsButtonRow(
+                    isSigningOut ? "Signing out…" : "Sign out",
+                    systemImage: "rectangle.portrait.and.arrow.right",
+                    strong: true
+                ) {
+                    Task { await signOut() }
+                }
+                .disabled(isSigningOut)
+            }
+        }
+    }
+
+    private func signOut() async {
+        guard !isSigningOut else { return }
+        isSigningOut = true
+        signOutError = nil
         do {
+            // Signed out: the app goes back to the welcome screen.
             try await session.logout()
         } catch {
-            alertMessage = error.asAPIError.message
+            signOutError = error.asAPIError.message
         }
-        isLoggingOut = false
+        isSigningOut = false
     }
 }
 
-/// Whether the app's server, database and photo storage are reachable (the web app's App status
-/// card): folded away unless something's wrong.
+/// Whether the app's server, database and photo storage are reachable (the web app's App
+/// status card): folded away unless something's wrong.
 struct SystemStatusSection: View {
     private struct Service {
         let status: ServiceStatus
@@ -79,32 +203,59 @@ struct SystemStatusSection: View {
     @State private var expanded = false
 
     var body: some View {
-        Section {
-            DisclosureGroup(isExpanded: $expanded) {
-                row("API server", api)
-                row("Database", database)
-                row("Photo storage", storage)
+        SettingsGroup {
+            Button {
+                Haptics.tap()
+                withMotion(.fwEase) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 12) {
+                    Text("App status")
+                        .font(.system(.body, design: .rounded))
+                        .foregroundStyle(.fg)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(headline)
+                        .foregroundStyle(.sub)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.sub)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                        .accessibilityHidden(true)
+                }
+                .settingsRow()
+            }
+            .buttonStyle(.settingsRow)
+            .accessibilityHint(expanded ? "Hides the details" : "Shows the details")
+
+            if expanded {
+                serviceRow("API server", api)
+                serviceRow("Database", database)
+                serviceRow("Photo storage", storage)
                 HStack(spacing: 12) {
                     Text(summary)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
+                        .foregroundStyle(.sub)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
                     Button(isChecking ? "Checking…" : "Recheck") {
                         Task { await check() }
                     }
-                    .font(.footnote.weight(.semibold))
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.fwCompact(.ghost))
                     .disabled(isChecking)
                 }
-            } label: {
-                // On the label, which is always on screen, so the check runs once.
-                LabeledContent("App status", value: headline)
-                    .task { await check() }
-                    .onChange(of: isChecking) { _, checking in
-                        // Opens by itself when a check finds something wrong.
-                        if !checking, !allOK { expanded = true }
-                    }
+                .settingsRow(trailingPadding: 4)
             }
+        }
+        .task {
+            // Once per visit to Settings: not again when coming back from a screen under it,
+            // unless the last check never finished.
+            guard report == nil, failure == nil, !isChecking else { return }
+            await check()
+        }
+        .onChange(of: isChecking) { _, checking in
+            // Opens by itself when a check finds something wrong (not when one was cancelled,
+            // e.g. by opening a screen under Settings mid-check: that leaves no result).
+            if !checking, report != nil || failure != nil, !allOK { withMotion(.fwEase) { expanded = true } }
         }
     }
 
@@ -153,20 +304,24 @@ struct SystemStatusSection: View {
         return "Something isn't connected right now, so some features may not work."
     }
 
-    private func row(_ title: String, _ service: Service) -> some View {
-        HStack {
+    private func serviceRow(_ title: String, _ service: Service) -> some View {
+        HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
+                    .foregroundStyle(.fg)
                 if let detail = service.detail {
                     Text(detail)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.sub)
                         .lineLimit(1)
                 }
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
             StatusIndicator(status: service.status)
         }
+        .settingsRow(trailingPadding: 16)
+        .accessibilityElement(children: .combine)
+        .transition(.opacity)
     }
 
     private func check() async {

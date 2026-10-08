@@ -43,10 +43,13 @@ enum WrappedSlide: Decodable, Hashable {
     typealias PersonCount = YearStats.PersonCount
 
     case intro
-    case photos(total: Int, photographerCount: Int)
+    /// `byUser`: everyone who posted, most first (people who turned off "Show my name in
+    /// Wrapped" count in the total but aren't listed).
+    case photos(total: Int, photographerCount: Int, byUser: [PersonCount])
     case topPhotographer(top: PersonCount, runnersUp: [PersonCount])
     /// `month` is 1–12; `byMonth` has 12 counts, January first.
-    case busiestMonth(month: Int, count: Int, byMonth: [Int], busiestDay: YearStats.DayCount?)
+    /// `byUser`: who posted in that month, most first.
+    case busiestMonth(month: Int, count: Int, byMonth: [Int], busiestDay: YearStats.DayCount?, byUser: [PersonCount])
     case mostReactedPhoto(photo: Photo, count: Int)
     case reactions(total: Int, comments: Int, topReactor: PersonCount?)
     /// Up to 9 highlights, at least 2.
@@ -59,7 +62,7 @@ enum WrappedSlide: Decodable, Hashable {
         case type
         case total, photographerCount
         case top, runnersUp
-        case month, count, byMonth, busiestDay
+        case month, count, byMonth, busiestDay, byUser
         case photo
         case comments, topReactor
         case photos, reactions, people
@@ -73,7 +76,8 @@ enum WrappedSlide: Decodable, Hashable {
         case "photos":
             self = try .photos(
                 total: container.decode(Int.self, forKey: .total),
-                photographerCount: container.decode(Int.self, forKey: .photographerCount)
+                photographerCount: container.decode(Int.self, forKey: .photographerCount),
+                byUser: container.decodeIfPresent([PersonCount].self, forKey: .byUser) ?? []
             )
         case "topPhotographer":
             self = try .topPhotographer(
@@ -85,7 +89,8 @@ enum WrappedSlide: Decodable, Hashable {
                 month: container.decode(Int.self, forKey: .month),
                 count: container.decode(Int.self, forKey: .count),
                 byMonth: container.decode([Int].self, forKey: .byMonth),
-                busiestDay: container.decodeIfPresent(YearStats.DayCount.self, forKey: .busiestDay)
+                busiestDay: container.decodeIfPresent(YearStats.DayCount.self, forKey: .busiestDay),
+                byUser: container.decodeIfPresent([PersonCount].self, forKey: .byUser) ?? []
             )
         case "mostReactedPhoto":
             self = try .mostReactedPhoto(

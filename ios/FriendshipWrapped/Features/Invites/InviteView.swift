@@ -20,38 +20,62 @@ struct InviteView: View {
         Group {
             if let preview {
                 content(preview)
+                    .transition(.opacity)
             } else if let loadFailure {
-                failureView(loadFailure)
+                ScrollView {
+                    failureView(loadFailure)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .transition(.opacity)
             } else {
-                ProgressView()
+                InviteSkeleton()
+                    .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.bg.ignoresSafeArea())
+        .motion(.fwEase, value: preview)
+        .motion(.fwEase, value: loadFailure)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
     }
 
     private func content(_ preview: InvitePreview) -> some View {
         ScrollView {
-            VStack(spacing: 8) {
+            VStack(spacing: 0) {
                 Text("You've been invited to join")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                GroupEmojiTile(emoji: preview.group.emoji, size: .large)
-                    .padding(.vertical, 12)
+                    .foregroundStyle(.sub)
+                    .riseIn()
+
+                // You can't see into the group yet, so its emoji sits on a plain tile.
+                GroupBadge(groupID: nil, emoji: preview.group.emoji, size: 88)
+                    .popIn(delay: 0.06)
+                    .padding(.vertical, 20)
+
                 Text(preview.group.name)
-                    .font(.title.weight(.black))
+                    .font(Theme.title(.title))
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                    .riseIn(delay: 0.1)
+
                 Text(Format.memberCount(preview.group.memberCount))
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.sub)
+                    .padding(.top, 6)
+                    .riseIn(delay: 0.12)
 
                 actions(preview)
-                    .padding(.top, 28)
+                    .padding(.top, 32)
+                    .riseIn(delay: 0.18)
             }
-            .padding(24)
+            .padding(.horizontal, 24)
+            .padding(.top, 24)
+            .padding(.bottom, 32)
             .frame(maxWidth: .infinity)
         }
+        .scrollBounceBehavior(.basedOnSize)
     }
 
     private func actions(_ preview: InvitePreview) -> some View {
@@ -59,30 +83,29 @@ struct InviteView: View {
             if let groupID = preview.memberOfGroupId {
                 Text("You're already in this group.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.sub)
+                    .multilineTextAlignment(.center)
                 Button("Open group") { onOpenGroup(groupID) }
-                    .buttonStyle(.brand)
+                    .buttonStyle(.fwPrimary)
             } else if let user = session.user {
                 if let joinFailure {
-                    Text(joinFailure)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
+                    InlineAlert(message: joinFailure)
                 }
                 PrimaryButton(title: "Join \(preview.group.name)", pendingTitle: "Joining…", isPending: isJoining) {
                     Task { await join() }
                 }
                 Text("Joining as @\(user.username)")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.sub)
             } else {
                 // After signing up or logging in, people come straight back to this invite.
                 Button("Create an account to join") { router.startAuth(.register, returningTo: token) }
-                    .buttonStyle(.brand)
+                    .buttonStyle(.fwPrimary)
                 Button("I already have an account") { router.startAuth(.login, returningTo: token) }
-                    .buttonStyle(.brandSecondary)
+                    .buttonStyle(.fwSecondary)
             }
         }
+        .motion(.fwQuick, value: joinFailure)
     }
 
     @ViewBuilder private func failureView(_ failure: APIError) -> some View {
@@ -99,7 +122,7 @@ struct InviteView: View {
                 message: "Check your connection and try again."
             ) {
                 Button("Try again") { Task { await load() } }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.fwCompact(.primary))
             }
         }
     }
@@ -116,6 +139,7 @@ struct InviteView: View {
     }
 
     private func join() async {
+        guard !isJoining else { return }
         isJoining = true
         joinFailure = nil
         do {
@@ -123,11 +147,34 @@ struct InviteView: View {
             store.didJoin(group)
             // The group's Wrapped are yours now too.
             wrapped.setNeedsRefresh()
+            Haptics.success()
             onOpenGroup(group.id)
         } catch {
             joinFailure = error.asAPIError.message
             isJoining = false
         }
+    }
+}
+
+/// Grey shapes where the invite will be, while it loads.
+private struct InviteSkeleton: View {
+    var body: some View {
+        VStack(spacing: 14) {
+            Capsule().fill(.surface).frame(width: 170, height: 14)
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(.surface)
+                .frame(width: 88, height: 88)
+                .padding(.vertical, 6)
+            Capsule().fill(.surface).frame(width: 210, height: 28)
+            Capsule().fill(.surface).frame(width: 90, height: 14)
+            Capsule().fill(.surface).frame(height: 48).padding(.top, 18)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .modifier(SkeletonPulse())
+        .accessibilityElement()
+        .accessibilityLabel("Loading invite")
     }
 }
 
@@ -151,3 +198,4 @@ struct InviteSheet: View {
         }
     }
 }
+

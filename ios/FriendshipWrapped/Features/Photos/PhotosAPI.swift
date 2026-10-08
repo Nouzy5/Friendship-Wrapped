@@ -14,13 +14,20 @@ extension APIClient {
         cursor: String? = nil,
         limit: Int = 24,
         before: Date? = nil,
-        favoritesOnly: Bool = false
+        favoritesOnly: Bool = false,
+        uploaderID: String? = nil
     ) async throws -> PhotoPage {
         var path = "/groups/\(groupID.pathSegment)/photos?limit=\(limit)"
         if let cursor { path += "&cursor=\(cursor.queryValue)" }
         if let before { path += "&before=\(ISO8601DateFormatter().string(from: before).queryValue)" }
         if favoritesOnly { path += "&favorites=true" }
+        if let uploaderID { path += "&uploaderId=\(uploaderID.queryValue)" }
         return try await send(.get, path)
+    }
+
+    /// The full-size image as a file to keep (`canSave` photos only; others get a 403).
+    func downloadFullImage(of photo: Photo) async throws -> Data {
+        try await imageData(atServerPath: photo.imageUrls.full + "?download=1")
     }
 
     /// Photos from today's date in earlier years. Days begin at midnight in your own time zone.

@@ -9,14 +9,18 @@ import SwiftUI
 @Observable
 final class NetworkMonitor {
     private(set) var isOnline = true
+    /// On mobile data (Settings → Photos & data → "Upload on mobile data" can make posts wait for Wi-Fi).
+    private(set) var isOnCellular = false
 
     @ObservationIgnored private let monitor = NWPathMonitor()
 
     init() {
         monitor.pathUpdateHandler = { [weak self] path in
             let online = path.status == .satisfied
+            let cellular = path.usesInterfaceType(.cellular)
             Task { @MainActor in
                 self?.isOnline = online
+                self?.isOnCellular = cellular
             }
         }
         monitor.start(queue: DispatchQueue(label: "FriendshipWrapped.NetworkMonitor"))
@@ -34,11 +38,11 @@ final class NetworkMonitor {
 struct OfflineBanner: View {
     var body: some View {
         Label("You're offline. Some things can't load until you're back.", systemImage: "wifi.slash")
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(Color.ink950)
+            .font(.system(.footnote, design: .rounded, weight: .semibold))
+            .foregroundStyle(.onInverse)
             .padding(.horizontal, 16)
-            .padding(.vertical, 6)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity)
-            .background(Color.brandGold.ignoresSafeArea(edges: .top))
+            .background(Color.inverse.ignoresSafeArea(edges: .top))
     }
 }

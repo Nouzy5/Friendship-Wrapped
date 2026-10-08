@@ -8,8 +8,21 @@ struct YearStats: Decodable {
     struct PersonCount: Decodable, Identifiable, Hashable {
         let user: UserSummary
         let count: Int
+        /// Their colour in the group now; nil for people who have left.
+        let color: MemberColor?
 
         var id: String { user.id }
+
+        private enum CodingKeys: String, CodingKey {
+            case user, count, color
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            user = try container.decode(UserSummary.self, forKey: .user)
+            count = try container.decode(Int.self, forKey: .count)
+            color = container.decodeMemberColor(forKey: .color)
+        }
     }
 
     struct MonthCount: Decodable, Hashable {

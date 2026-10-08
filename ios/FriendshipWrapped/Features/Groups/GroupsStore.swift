@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// Cached groups and members, shared by every screen so edits show up everywhere
-/// (the web app's TanStack Query cache for groups).
+/// (the web app's TanStack Query cache for groups), and the group you're looking at.
 @MainActor
 @Observable
 final class GroupsStore {
@@ -18,22 +18,67 @@ final class GroupsStore {
     private(set) var listState: ListState = .idle
     private var groupsByID: [String: FriendGroup] = [:]
     private var membersByGroupID: [String: [GroupMember]] = [:]
+    @ObservationIgnored private var membersLoadedAt: [String: Date] = [:]
+    @ObservationIgnored private var membersInFlight: [String: Task<Void, Never>] = [:]
     /// Counts groups created, joined or left here: a list that was already on its way from
     /// before such a change would bring a left group back (or drop a new one), so it's fetched again.
     private var membershipChanges = 0
+    /// The group you last looked at (remembered on this phone): Home opens it, the camera posts
+    /// to it, Memories shows it, and your colour in it is the app's accent.
+    private var rememberedGroupID: String?
 
     private let api: APIClient
+    @ObservationIgnored private let defaults: UserDefaults
+    private static let currentGroupKey = "fw.current-group"
+    /// How long a group's member list counts as fresh (colours rarely change).
+    private static let membersFreshFor: TimeInterval = 60
 
-    init(api: APIClient = .shared) {
+    init(api: APIClient = .shared, defaults: UserDefaults = .standard) {
         self.api = api
+        self.defaults = defaults
+        rememberedGroupID = defaults.string(forKey: Self.currentGroupKey)
     }
 
     func group(_ groupID: String) -> FriendGroup? {
         groupsByID[groupID]
     }
 
+    /// Owner first, then by join date. Nil until loaded (see `loadMembersIfNeeded`).
     func members(of groupID: String) -> [GroupMember]? {
         membersByGroupID[groupID]
+    }
+
+    /// Someone in a group, or nil for people who have left (they show neutral).
+    func member(_ userID: String, in groupID: String) -> GroupMember? {
+        membersByGroupID[groupID]?.first { $0.user.id == userID }
+    }
+
+    /// A person's colour in a group: it marks their photos, reactions and comments.
+    func colorOf(_ userID: String, in groupID: String) -> MemberColor? {
+        member(userID, in: groupID)?.color
+    }
+
+    /// The members' colours in the order they joined, for the group's badge.
+    func badgeColors(of groupID: String) -> [MemberColor?]? {
+        membersByGroupID[groupID]?.sorted { $0.joinedAt < $1.joinedAt }.map(\.color)
+    }
+
+    // MARK: - The group you're looking at
+
+    /// The remembered group while you're still in it, else your first one. Nil while your groups
+    /// load and when you have none (check `listState`).
+    var currentGroup: FriendGroup? {
+        if let rememberedGroupID, let group = groupsByID[rememberedGroupID], groups.contains(where: { $0.id == group.id }) {
+            return group
+        }
+        return groups.first
+    }
+
+    /// Looking at a group makes it the current one.
+    func setCurrentGroup(_ groupID: String) {
+        guard rememberedGroupID != groupID else { return }
+        rememberedGroupID = groupID
+        defaults.set(groupID, forKey: Self.currentGroupKey)
     }
 
     // MARK: - Loading
@@ -76,7 +121,23 @@ final class GroupsStore {
     }
 
     func loadMembers(of groupID: String) async throws {
-        membersByGroupID[groupID] = try await api.fetchMembers(ofGroup: groupID)
+        let members = try await api.fetchMembers(ofGroup: groupID)
+        membersByGroupID[groupID] = members
+        membersLoadedAt[groupID] = Date()
+    }
+
+    /// Loads the members unless they're fresh or already on their way. Failures are quiet:
+    /// people just show neutral until the next try.
+    func loadMembersIfNeeded(of groupID: String) async {
+        if let loadedAt = membersLoadedAt[groupID], Date().timeIntervalSince(loadedAt) < Self.membersFreshFor { return }
+        if let inFlight = membersInFlight[groupID] { return await inFlight.value }
+        let task = Task { [weak self] in
+            guard let self else { return }
+            try? await self.loadMembers(of: groupID)
+        }
+        membersInFlight[groupID] = task
+        await task.value
+        membersInFlight[groupID] = nil
     }
 
     // MARK: - Changes
@@ -92,6 +153,30 @@ final class GroupsStore {
         let group = try await api.updateGroup(groupID, GroupUpdate(name: name, emoji: emoji))
         remember(group)
         return group
+    }
+
+    /// Your colour or mute. A colour someone else just took is a `409 COLOR_TAKEN`: the members
+    /// are reloaded either way, so the picker shows who has what now.
+    @discardableResult
+    func updateMyMembership(in groupID: String, color: MemberColor? = nil, muted: Bool? = nil) async throws -> FriendGroup {
+        do {
+            let group = try await api.updateMyMembership(inGroup: groupID, MembershipUpdate(color: color, muted: muted))
+            remember(group)
+            if color != nil { try? await loadMembers(of: groupID) }
+            return group
+        } catch {
+            if color != nil { try? await loadMembers(of: groupID) }
+            throw error
+        }
+    }
+
+    /// The group photo (owner only).
+    func setGroupPhoto(_ groupID: String, jpeg: Data) async throws {
+        remember(try await api.uploadGroupAvatar(groupID, jpeg: jpeg))
+    }
+
+    func removeGroupPhoto(_ groupID: String) async throws {
+        remember(try await api.removeGroupAvatar(groupID))
     }
 
     /// Leaves the group on the server. Navigate away first, then call `forget(_:)`,
@@ -110,22 +195,35 @@ final class GroupsStore {
         membershipChanges += 1
         remember(group)
         membersByGroupID[group.id] = nil
+        membersLoadedAt[group.id] = nil
     }
 
     func forget(_ groupID: String) {
         membershipChanges += 1
         groupsByID[groupID] = nil
         membersByGroupID[groupID] = nil
+        membersLoadedAt[groupID] = nil
         groups.removeAll { $0.id == groupID }
     }
 
-    /// Drops everything, e.g. when someone signs out, so the next account sees nothing of this one's data.
+    /// After blocking or unblocking someone: what each group shows of them changes.
+    func invalidateMembers() {
+        membersLoadedAt = [:]
+    }
+
+    /// Drops everything, e.g. when someone signs out, so the next account sees nothing of this one's data
+    /// (nor starts in its group, or its colour).
     func reset() {
         membershipChanges += 1
         groups = []
         listState = .idle
         groupsByID = [:]
         membersByGroupID = [:]
+        membersLoadedAt = [:]
+        for task in membersInFlight.values { task.cancel() }
+        membersInFlight = [:]
+        rememberedGroupID = nil
+        defaults.removeObject(forKey: Self.currentGroupKey)
     }
 
     private func remember(_ group: FriendGroup) {

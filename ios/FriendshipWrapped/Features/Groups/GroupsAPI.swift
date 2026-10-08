@@ -71,3 +71,31 @@ extension APIClient {
         try await perform(.delete, "\(groupPath(groupID))/members/\(userID.pathSegment)")
     }
 }
+
+/// Your own colour and notifications in a group. Nil fields are left as they are.
+struct MembershipUpdate: Encodable {
+    var color: MemberColor?
+    var muted: Bool?
+}
+
+extension APIClient {
+    /// `409 COLOR_TAKEN` when someone else has that colour now.
+    func updateMyMembership(inGroup groupID: String, _ update: MembershipUpdate) async throws -> FriendGroup {
+        let response: GroupResponse = try await send(.patch, "/groups/\(groupID.pathSegment)/members/me", body: update)
+        return response.group
+    }
+
+    /// The group photo (owner only). Multipart: the image in `avatar`; the server crops it square.
+    func uploadGroupAvatar(_ groupID: String, jpeg: Data) async throws -> FriendGroup {
+        var form = MultipartForm()
+        form.addFile("avatar", filename: "group.jpg", mimeType: "image/jpeg", data: jpeg)
+        let response: GroupResponse = try await upload(.put, "/groups/\(groupID.pathSegment)/avatar", form: form)
+        return response.group
+    }
+
+    /// Back to the badge of everyone's colours (owner only).
+    func removeGroupAvatar(_ groupID: String) async throws -> FriendGroup {
+        let response: GroupResponse = try await send(.delete, "/groups/\(groupID.pathSegment)/avatar")
+        return response.group
+    }
+}

@@ -50,6 +50,29 @@ enum Format {
         return date.formatted(.dateTime.day().month(.abbreviated).year())
     }
 
+    /// For a photo's name tag: "Now", "5 min", "2 h", "Yesterday", "Monday", then "12 Oct"
+    /// (or "12 Oct 2025" in another year).
+    static func shortAgo(_ date: Date, now: Date = Date()) -> String {
+        let elapsed = now.timeIntervalSince(date)
+        if elapsed < 60 { return "Now" }
+        if elapsed < 3600 { return "\(Int(elapsed / 60)) min" }
+        if elapsed < 86_400 { return "\(Int(elapsed / 3600)) h" }
+        let calendar = Calendar.current
+        let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day ?? 0
+        if days <= 1 { return "Yesterday" }
+        if days < 7 { return date.formatted(.dateTime.weekday(.wide)) }
+        if calendar.isDate(date, equalTo: now, toGranularity: .year) {
+            return date.formatted(.dateTime.day().month(.abbreviated))
+        }
+        return date.formatted(.dateTime.day().month(.abbreviated).year())
+    }
+
+    /// "Tomáš, Marek and Adam".
+    static func list(_ names: [String]) -> String {
+        guard names.count > 1, let last = names.last else { return names.first ?? "" }
+        return names.dropLast().joined(separator: ", ") + " and " + last
+    }
+
     /// "45s", "12m", "3h 20m".
     static func uptime(_ seconds: Int) -> String {
         if seconds < 60 { return "\(seconds)s" }

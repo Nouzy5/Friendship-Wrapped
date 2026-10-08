@@ -1,444 +1,414 @@
 import SwiftUI
 
-private enum MemoriesTab: Hashable {
+/// What the Memories tab lists under On This Day.
+enum MemoriesTab: Hashable {
     case timeline, albums, favorites
 }
 
-/// A group's shared archive: On This Day, then the timeline, albums and your favorites.
+/// A group's shared archive (the web app's MemoriesPage): On This Day, then the timeline
+/// (everyone's, or one person's), the albums and your favorites. It always shows the current
+/// group; picking another one here makes that the current group everywhere.
 struct MemoriesView: View {
     @Environment(GroupsStore.self) private var groups
     @Environment(AppRouter.self) private var router
 
-    @State private var selectedGroupID: String?
+    /// Kept when you switch groups (the person and month filters aren't).
     @State private var tab: MemoriesTab = .timeline
-
-    private var currentGroup: FriendGroup? {
-        groups.groups.first { $0.id == selectedGroupID } ?? groups.groups.first
-    }
 
     var body: some View {
         content
-            .navigationTitle("Memories")
+            .toolbar(.hidden, for: .navigationBar)
+            .background(Color.bg.ignoresSafeArea())
+            .safeAreaInset(edge: .top, spacing: 0) {
+                // Paper behind the status bar, so photos don't scroll under the clock.
+                Color.clear
+                    .frame(height: 0)
+                    .background(.bg)
+            }
             .task { await groups.loadGroupsIfNeeded() }
     }
 
     @ViewBuilder private var content: some View {
-        if let group = currentGroup {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    if groups.groups.count > 1 {
-                        GroupSwitcher(groups: groups.groups, selectedID: group.id) { selectedGroupID = $0 }
-                    }
-
-                    OnThisDayCard(groupID: group.id)
-                        .id("on-this-day-\(group.id)")
-
-                    Picker("Show", selection: $tab) {
-                        Text("Timeline").tag(MemoriesTab.timeline)
-                        Text("Albums").tag(MemoriesTab.albums)
-                        Text("Favorites").tag(MemoriesTab.favorites)
-                    }
-                    .pickerStyle(.segmented)
-
-                    // Keyed by group, so switching groups starts each tab afresh.
-                    switch tab {
-                    case .timeline:
-                        TimelineSection(group: group)
-                            .id("timeline-\(group.id)")
-                    case .albums:
-                        AlbumsSection(groupID: group.id)
-                            .id("albums-\(group.id)")
-                    case .favorites:
-                        FavoritesSection(groupID: group.id)
-                            .id("favorites-\(group.id)")
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 24)
-            }
+        if let group = groups.currentGroup {
+            // Keyed by group: another group starts afresh, without the last one's filters.
+            MemoriesGroupScreen(group: group, tab: $tab)
+                .id(group.id)
         } else {
-            switch groups.listState {
-            case .idle, .loading:
-                ProgressView()
-            case .failed:
-                EmptyStateView(emoji: "📡", title: "Couldn't load your groups", message: "Check your connection and try again.") {
-                    Button("Try again") { Task { await groups.loadGroups() } }
-                        .buttonStyle(.borderedProminent)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    MemoriesHeader(group: nil)
+                    placeholder
                 }
-            case .loaded:
-                EmptyStateView(
-                    emoji: "🫶",
-                    title: "No memories yet",
-                    message: "Memories are made with friends. Create a group, or open an invite link from a friend."
-                ) {
-                    Button("Create a group") {
-                        router.selectedTab = .home
-                        router.showingNewGroup = true
-                    }
-                    .buttonStyle(.brand)
-                    .frame(maxWidth: 240)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 32)
+            }
+            .refreshable { await groups.loadGroups() }
+        }
+    }
+
+    @ViewBuilder private var placeholder: some View {
+        switch groups.listState {
+        case .idle, .loading:
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 64)
+        case .failed:
+            EmptyStateView(emoji: "📡", title: "Couldn't load your groups", message: "Check your connection and try again.") {
+                Button("Try again") {
+                    Task { await groups.loadGroups() }
                 }
+                .buttonStyle(.fwCompact(.primary))
+            }
+        case .loaded:
+            EmptyStateView(
+                emoji: "🫶",
+                title: "No memories yet",
+                message: "Memories are made with friends. Create a group, or open an invite link from a friend."
+            ) {
+                Button("Create a group") {
+                    router.showingNewGroup = true
+                }
+                .buttonStyle(.fwCompact(.primary))
             }
         }
     }
 }
 
-/// Which group's memories to show, as a row of chips (it scrolls when there are many).
-private struct GroupSwitcher: View {
-    let groups: [FriendGroup]
-    let selectedID: String
-    let onSelect: (String) -> Void
+/// "Memories", with the group picker on the right.
+private struct MemoriesHeader: View {
+    let group: FriendGroup?
+
+    @Environment(GroupsStore.self) private var groups
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(groups) { group in
-                    let selected = group.id == selectedID
-                    Button {
-                        onSelect(group.id)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(group.emoji)
-                            Text(group.name)
-                                .lineLimit(1)
+        HStack(spacing: 12) {
+            Text("Memories")
+                .font(Theme.title(.title))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .layoutPriority(1)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 0)
+            if let group {
+                GroupPicker(current: group, style: .pill, onSelect: { next in
+                    groups.setCurrentGroup(next.id)
+                })
+            }
+        }
+        .frame(minHeight: 44)
+    }
+}
+
+/// One group's memories. The lists live here (not in the tabs) so pull to refresh can reload
+/// them, and so switching tabs keeps each one's place.
+private struct MemoriesGroupScreen: View {
+    let group: FriendGroup
+    @Binding var tab: MemoriesTab
+
+    @Environment(GroupsStore.self) private var groups
+    @Environment(PhotosStore.self) private var photos
+    @Environment(AlbumsStore.self) private var albums
+    @Environment(AppRouter.self) private var router
+
+    @State private var onThisDay: OnThisDay?
+    @State private var onThisDayFailed = false
+    /// "Taken by": one member's photos, or nil for everyone's.
+    @State private var uploaderID: String?
+    /// The timeline from this month back, or nil for the latest photos.
+    @State private var from: MonthYear?
+    @State private var timeline: PhotoListModel
+    @State private var favorites: PhotoListModel
+    @State private var creatingAlbum = false
+
+    init(group: FriendGroup, tab: Binding<MemoriesTab>) {
+        self.group = group
+        _tab = tab
+        _timeline = State(initialValue: Self.timelineModel(groupID: group.id, from: nil, uploaderID: nil))
+        let groupID = group.id
+        _favorites = State(initialValue: PhotoListModel { cursor in
+            try await APIClient.shared.fetchGroupPhotos(groupID, cursor: cursor, favoritesOnly: true)
+        })
+    }
+
+    private var tabOptions: [SegmentedPicker<MemoriesTab>.Option] {
+        [
+            .init(value: .timeline, label: "Timeline"),
+            .init(value: .albums, label: "Albums"),
+            .init(value: .favorites, label: "Favorites"),
+        ]
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                MemoriesHeader(group: group)
+
+                MemoriesOnThisDay(groupID: group.id, result: onThisDay, failed: onThisDayFailed)
+                    // Again each time you come back, so it's for today and without deleted photos.
+                    .task { await loadOnThisDay() }
+
+                VStack(alignment: .leading, spacing: 12) {
+                    SegmentedPicker(options: tabOptions, selection: $tab)
+                    if tab == .timeline {
+                        MemoriesPeopleFilter(groupID: group.id, selected: uploaderID) { person in
+                            showTimeline(from: from, uploaderID: person)
                         }
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 14)
-                        .frame(height: 38)
-                        .background(selected ? Color.accentColor.opacity(0.15) : Color(.tertiarySystemFill), in: Capsule())
-                        .overlay(Capsule().strokeBorder(selected ? Color.accentColor.opacity(0.7) : Color.clear))
+                        .transition(.opacity)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(selected ? .isSelected : [])
+                }
+
+                // Each tab crossfades in when it's chosen (the picker animates the change).
+                ZStack(alignment: .top) {
+                    tabContent
+                        .id(tab)
+                        .transition(.opacity)
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+            .padding(.bottom, 32)
+        }
+        .refreshable { await refresh() }
+        // Outside the refreshable scroll view, so the sheet doesn't inherit its pull to refresh.
+        .sheet(isPresented: $creatingAlbum) {
+            AlbumNameSheet(title: "New album", submitTitle: "Create album") { name in
+                let album = try await albums.create(in: group.id, name: name)
+                router.push(.album(album.id))
+            }
+        }
+        .task { await groups.loadMembersIfNeeded(of: group.id) }
+    }
+
+    @ViewBuilder private var tabContent: some View {
+        switch tab {
+        case .timeline:
+            MemoriesTimeline(group: group, model: timeline, from: from, uploaderID: uploaderID) { month in
+                showTimeline(from: month, uploaderID: uploaderID)
+            }
+        case .albums:
+            AlbumsSection(groupID: group.id) {
+                creatingAlbum = true
+            }
+        case .favorites:
+            MemoriesFavorites(model: favorites)
+        }
+    }
+
+    // MARK: - Loading
+
+    private func loadOnThisDay() async {
+        do {
+            let loaded = try await APIClient.shared.fetchOnThisDay(group.id)
+            photos.remember(loaded.years.flatMap(\.photos))
+            onThisDay = loaded
+            onThisDayFailed = false
+        } catch is CancellationError {
+            return
+        } catch {
+            // Keep showing what's there when a reload fails.
+            onThisDayFailed = onThisDay == nil
+        }
+    }
+
+    /// Pull to refresh: the groups (and your colours), On This Day and the list you're on, together.
+    private func refresh() async {
+        let groupID = group.id
+        // Separate tasks, so the scroll view's refresh ending early can't cancel the requests.
+        let work: [Task<Void, Never>] = [
+            Task { await groups.loadGroups() },
+            Task { _ = try? await groups.loadMembers(of: groupID) },
+            Task { await loadOnThisDay() },
+            Task { await reloadTab() },
+        ]
+        for task in work {
+            await task.value
+        }
+    }
+
+    private func reloadTab() async {
+        switch tab {
+        case .timeline:
+            await timeline.reload()
+        case .albums:
+            _ = try? await albums.loadAlbums(in: group.id)
+        case .favorites:
+            await favorites.reload()
+        }
+    }
+
+    /// Jumping to a month or choosing whose photos: the timeline starts again from there.
+    private func showTimeline(from month: MonthYear?, uploaderID person: String?) {
+        guard month != from || person != uploaderID else { return }
+        let next = Self.timelineModel(groupID: group.id, from: month, uploaderID: person)
+        next.store = photos
+        withMotion(.fwEase) {
+            from = month
+            uploaderID = person
+            timeline = next
+        }
+    }
+
+    private static func timelineModel(groupID: String, from: MonthYear?, uploaderID: String?) -> PhotoListModel {
+        let before = from?.end
+        return PhotoListModel { cursor in
+            try await APIClient.shared.fetchGroupPhotos(groupID, cursor: cursor, before: before, uploaderID: uploaderID)
         }
     }
 }
 
-/// Photos from today's date in earlier years, or a note that there's nothing yet.
-private struct OnThisDayCard: View {
+/// Photos from today's date in earlier years, each tagged with who took it, as a row to swipe
+/// through; or a note that there's nothing yet.
+private struct MemoriesOnThisDay: View {
     let groupID: String
+    let result: OnThisDay?
+    let failed: Bool
 
+    @Environment(GroupsStore.self) private var groups
     @Environment(PhotosStore.self) private var photos
-    @State private var result: OnThisDay?
-    @State private var failed = false
+
+    private struct Memory: Identifiable {
+        let photo: Photo
+        let ago: String
+
+        var id: String { photo.id }
+    }
 
     private var today: String {
         Date().formatted(.dateTime.day().month(.wide))
     }
 
+    /// Every photo, newest year first, without any deleted since it loaded (a year left with
+    /// nothing in it goes with them).
+    private var memories: [Memory] {
+        guard let result else { return [] }
+        let thisYear = Int(result.date.prefix(4)) ?? Calendar.current.component(.year, from: Date())
+        let deleted = photos.deletedPhotoIDs
+        return result.years.flatMap { entry in
+            entry.photos
+                .filter { !deleted.contains($0.id) }
+                .map { Memory(photo: $0, ago: Self.yearsAgo(thisYear - entry.year)) }
+        }
+    }
+
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
-
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("On this day")
-                    .font(.headline)
-                Text("· \(today)")
-                    .foregroundStyle(.secondary)
+                    .font(Theme.title(.title3))
+                Text(today)
+                    .font(.subheadline)
+                    .foregroundStyle(.sub)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
 
-            if let result {
-                if result.years.isEmpty {
-                    Text("Nothing from \(today) in earlier years yet. Keep capturing: next year, today shows up here.")
+            if result != nil {
+                let items = memories
+                if items.isEmpty {
+                    Text("Nothing from \(today) in earlier years yet. Next year, today shows up here.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.sub)
+                        .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    let thisYear = Int(result.date.prefix(4)) ?? Calendar.current.component(.year, from: Date())
-                    // Without any deleted since it loaded (it reloads on coming back), and without
-                    // years left with nothing in them.
-                    ForEach(result.years.filter { year in year.photos.contains { !photos.deletedPhotoIDs.contains($0.id) } }) { entry in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("\(Self.yearsAgo(thisYear - entry.year)) · \(String(entry.year))")
-                                .font(.subheadline.weight(.semibold))
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(entry.photos.filter { !photos.deletedPhotoIDs.contains($0.id) }) { photo in
-                                        NavigationLink(value: AppRoute.photo(photo.id)) {
-                                            PhotoThumbnail(photo: photo)
-                                                .frame(width: 112, height: 112)
-                                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                        }
-                                        .buttonStyle(.plain)
-                                        .accessibilityLabel(photo.altText)
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    row(items)
                 }
             } else if failed {
                 Text("Couldn't look back right now.")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.sub)
             } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
+                skeleton
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground), in: shape)
-        .overlay(shape.strokeBorder(Color.accentColor.opacity(0.3)))
-        .task { await load() }
+    }
+
+    private func row(_ items: [Memory]) -> some View {
+        ScrollView(.horizontal) {
+            HStack(alignment: .top, spacing: 12) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    tile(item)
+                        .riseIn(delay: Double(min(index, 8)) * 0.06)
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .scrollIndicators(.hidden)
+        .scrollTargetBehavior(.viewAligned)
+        .contentMargins(.horizontal, 16, for: .scrollContent)
+        // Edge to edge: past the screen's 16-point margins.
+        .padding(.horizontal, -16)
+    }
+
+    private func tile(_ item: Memory) -> some View {
+        let photo = item.photo
+
+        return NavigationLink(value: AppRoute.photo(photo.id)) {
+            VStack(alignment: .leading, spacing: 6) {
+                PhotoImage(photo: photo, variant: .thumbnail)
+                    .frame(width: 124, height: 124)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(alignment: .bottomLeading) {
+                        NameTag(
+                            name: memoriesFirstName(photo.uploader.displayName),
+                            color: groups.colorOf(photo.uploader.id, in: groupID),
+                            small: true
+                        )
+                        .frame(maxWidth: 108, alignment: .leading)
+                        .padding(8)
+                    }
+                Text(item.ago)
+                    .font(.footnote)
+                    .foregroundStyle(.fg)
+                    .lineLimit(1)
+            }
+            .frame(width: 124, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressScaleButtonStyle(scale: 0.96))
+        .accessibilityLabel("\(photo.altText), \(item.ago)")
+    }
+
+    private var skeleton: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 12) {
+                ForEach(0..<3, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(.surface)
+                        .frame(width: 124, height: 124)
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+        .scrollDisabled(true)
+        .contentMargins(.horizontal, 16, for: .scrollContent)
+        .padding(.horizontal, -16)
+        .modifier(SkeletonPulse())
+        .accessibilityElement()
+        .accessibilityLabel("Loading")
     }
 
     static func yearsAgo(_ years: Int) -> String {
         years == 1 ? "1 year ago" : "\(years) years ago"
     }
-
-    private func load() async {
-        failed = false
-        do {
-            let loaded = try await APIClient.shared.fetchOnThisDay(groupID)
-            photos.remember(loaded.years.flatMap(\.photos))
-            result = loaded
-        } catch is CancellationError {
-            return
-        } catch {
-            failed = true
-        }
-    }
-}
-
-/// A calendar month in the viewer's time zone.
-struct MonthYear: Hashable, Identifiable, Comparable {
-    let year: Int
-    /// 1–12.
-    let month: Int
-
-    init(year: Int, month: Int) {
-        self.year = year
-        self.month = month
-    }
-
-    init(date: Date) {
-        let parts = Calendar.current.dateComponents([.year, .month], from: date)
-        year = parts.year ?? 1970
-        month = parts.month ?? 1
-    }
-
-    static var current: MonthYear { MonthYear(date: Date()) }
-
-    var id: String { "\(year)-\(month)" }
-
-    var start: Date {
-        Calendar.current.date(from: DateComponents(year: year, month: month, day: 1)) ?? Date()
-    }
-
-    /// When the following month begins locally: the timeline lists photos from before it.
-    var end: Date {
-        Calendar.current.date(byAdding: .month, value: 1, to: start) ?? start
-    }
-
-    /// e.g. "October 2026".
-    var title: String {
-        start.formatted(.dateTime.month(.wide).year())
-    }
-
-    static func < (lhs: MonthYear, rhs: MonthYear) -> Bool {
-        (lhs.year, lhs.month) < (rhs.year, rhs.month)
-    }
-}
-
-/// The group's photos month by month, newest first, with a way to jump back to any month.
-private struct TimelineSection: View {
-    let group: FriendGroup
-
-    @Environment(PhotosStore.self) private var photos
-    @State private var model: PhotoListModel
-    /// Showing this month and earlier; nil for the latest photos.
-    @State private var from: MonthYear?
-    @State private var pickedMonth: Int
-    @State private var pickedYear: Int
-
-    init(group: FriendGroup) {
-        self.group = group
-        _model = State(initialValue: Self.makeModel(groupID: group.id, from: nil))
-        let now = MonthYear.current
-        _pickedMonth = State(initialValue: now.month)
-        _pickedYear = State(initialValue: now.year)
-    }
-
-    private struct MonthGroup: Identifiable {
-        let month: MonthYear
-        var photos: [Photo]
-        var id: String { month.id }
-    }
-
-    /// Consecutive photos grouped by their local month (the list is already newest first).
-    private var monthGroups: [MonthGroup] {
-        var result: [MonthGroup] = []
-        for photo in model.photos {
-            let month = MonthYear(date: photo.createdAt)
-            if let last = result.indices.last, result[last].month == month {
-                result[last].photos.append(photo)
-            } else {
-                result.append(MonthGroup(month: month, photos: [photo]))
-            }
-        }
-        return result
-    }
-
-    private var years: [Int] {
-        let now = MonthYear.current.year
-        let first = min(MonthYear(date: group.createdAt).year, now)
-        return Array((first...now).reversed())
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            monthJump
-
-            if let from {
-                HStack(spacing: 8) {
-                    Text("Showing \(from.title) and earlier")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Button("Back to the latest") { jump(to: nil) }
-                        .font(.subheadline.weight(.medium))
-                }
-            }
-
-            switch model.phase {
-            case .loading:
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
-            case .failed:
-                EmptyStateView(emoji: "📡", title: "Couldn't load photos") {
-                    Button("Try again") { Task { await model.reload() } }
-                        .buttonStyle(.borderedProminent)
-                }
-            case .loaded:
-                if model.photos.isEmpty {
-                    if from != nil {
-                        EmptyStateView(emoji: "🕰️", title: "Nothing that far back", message: "This group had no photos yet by then.")
-                    } else {
-                        EmptyStateView(emoji: "📸", title: "No photos yet", message: "Photos shared in the group show up here by month.")
-                    }
-                } else {
-                    LazyVStack(alignment: .leading, spacing: 8, pinnedViews: [.sectionHeaders]) {
-                        ForEach(monthGroups) { monthGroup in
-                            Section {
-                                PhotoGrid(photos: monthGroup.photos)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                    .padding(.bottom, 8)
-                            } header: {
-                                // Sticks to the top while its month scrolls past.
-                                Text(monthGroup.month.title)
-                                    .font(.headline)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.vertical, 8)
-                                    .background(Color(.systemBackground))
-                            }
-                        }
-                        footer
-                    }
-                }
-            }
-        }
-        .task {
-            model.store = photos
-            if model.photos.isEmpty { await model.reload() }
-        }
-    }
-
-    private var monthJump: some View {
-        HStack(spacing: 8) {
-            Text("Jump to")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Picker("Month", selection: $pickedMonth) {
-                ForEach(1...12, id: \.self) { month in
-                    Text(Calendar.current.monthSymbols[month - 1]).tag(month)
-                }
-            }
-            .pickerStyle(.menu)
-            Picker("Year", selection: $pickedYear) {
-                ForEach(years, id: \.self) { year in
-                    Text(String(year)).tag(year)
-                }
-            }
-            .pickerStyle(.menu)
-            Spacer(minLength: 0)
-            Button("Go") {
-                let picked = MonthYear(year: pickedYear, month: pickedMonth)
-                jump(to: picked < MonthYear.current ? picked : nil)
-            }
-            .buttonStyle(.bordered)
-        }
-    }
-
-    @ViewBuilder private var footer: some View {
-        if model.hasMore {
-            if model.loadMoreFailed {
-                LoadMoreRow(title: "Load earlier photos", isLoading: false, failed: true) {
-                    Task { await model.loadMore() }
-                }
-            } else {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .id(model.photos.count)
-                    .onAppear { Task { await model.loadMore() } }
-            }
-        } else {
-            Text("That's the very beginning ✨")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-        }
-    }
-
-    private func jump(to month: MonthYear?) {
-        from = month
-        let current = month ?? MonthYear.current
-        pickedMonth = current.month
-        pickedYear = current.year
-        let next = Self.makeModel(groupID: group.id, from: month)
-        next.store = photos
-        model = next
-        Task { await next.reload() }
-    }
-
-    private static func makeModel(groupID: String, from: MonthYear?) -> PhotoListModel {
-        let before = from?.end
-        return PhotoListModel { cursor in
-            try await APIClient.shared.fetchGroupPhotos(groupID, cursor: cursor, before: before)
-        }
-    }
 }
 
 /// The photos you've starred in this group, newest first. Only you see them.
-private struct FavoritesSection: View {
-    let groupID: String
+private struct MemoriesFavorites: View {
+    let model: PhotoListModel
 
     @Environment(PhotosStore.self) private var photos
-    @State private var model: PhotoListModel
-
-    init(groupID: String) {
-        self.groupID = groupID
-        _model = State(initialValue: PhotoListModel { cursor in
-            try await APIClient.shared.fetchGroupPhotos(groupID, cursor: cursor, favoritesOnly: true)
-        })
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            switch model.phase {
-            case .loading:
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
-            case .failed:
+            if model.phase == .failed {
                 EmptyStateView(emoji: "📡", title: "Couldn't load favorites") {
-                    Button("Try again") { Task { await model.reload() } }
-                        .buttonStyle(.borderedProminent)
+                    Button("Try again") {
+                        Task { await model.reload() }
+                    }
+                    .buttonStyle(.fwCompact(.primary))
                 }
-            case .loaded:
+            } else if model.phase == .loaded {
                 if model.photos.isEmpty {
                     EmptyStateView(
                         emoji: "⭐",
@@ -448,25 +418,21 @@ private struct FavoritesSection: View {
                 } else {
                     Text("Only you can see your favorites.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    PhotoGrid(photos: model.photos)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    if model.hasMore {
-                        LoadMoreRow(
-                            title: "Load more favorites",
-                            isLoading: model.isLoadingMore,
-                            failed: model.loadMoreFailed
-                        ) {
-                            Task { await model.loadMore() }
-                        }
-                    }
+                        .foregroundStyle(.sub)
                 }
             }
+
+            MemoriesPhotoList(model: model, loadMoreLabel: "Load more favorites")
         }
-        // Reloaded every time it appears, so starring or unstarring in the viewer shows up here.
-        .onAppear {
+        // Again each time it shows, so starring or unstarring in the viewer shows up here.
+        .task {
             model.store = photos
-            Task { await model.reload() }
+            await model.reload()
         }
     }
+}
+
+/// "Tomáš" from "Tomáš Novák", for name tags and chips.
+func memoriesFirstName(_ displayName: String) -> String {
+    displayName.split(whereSeparator: \.isWhitespace).first.map { String($0) } ?? displayName
 }

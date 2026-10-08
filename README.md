@@ -19,7 +19,7 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 9 | Wrapped: the year as a full-screen story, saved once the year is over | ✅ Done |
 | 10 | Polish: loading, empty, error and offline states, accessibility, camera and upload, Wrapped transitions, account deletion, home screen install | ✅ Done |
 
-The native iOS app in [`ios/`](ios/README.md) covers phases 1–10 too.
+The native iOS app in [`ios/`](ios/README.md) covers phases 1–10 and the Colour-coded redesign too.
 
 ## Stack
 
@@ -481,7 +481,7 @@ The web app's look, chosen from two design directions. Everyone in a group has t
 
   Appearance and Photos & data are per device (`lib/device-settings.ts`, in localStorage). Account, notification and privacy settings are stored with your account.
 - **Service worker** (`client/public/sw.js`): shows push notifications and opens the right page when you tap one, and keeps photo images you've seen in a cache (photos never change once posted). Signing out empties it and unsubscribes the device.
-- **API additions.** All additive, so the iOS app keeps working.
+- **API additions.** All additive, so older app builds keep working. The iOS app uses them all except push (the iPhone app can't receive notifications yet; its notification settings still apply to the web app).
   - **Colours:** `PATCH /api/groups/:groupId/members/me` `{ color?, muted? }` (`409 COLOR_TAKEN`). `color` on members, and `myColor`, `muted` and `avatarUrl` on groups.
   - **Group photo:** `PUT`, `DELETE` and `GET /api/groups/:groupId/avatar` (owner sets it; members see it).
   - **Photos:** `reactions.reactors` (`{ userId, type }[]`), `canSave`, `GET /api/photos/:id/images/full?download=1`, `GET /api/groups/:groupId/photos?uploaderId=…`.
