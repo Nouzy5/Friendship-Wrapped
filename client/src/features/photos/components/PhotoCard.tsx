@@ -9,6 +9,7 @@ import type { Photo } from "../types";
 import { fromFeedState, photoPath } from "../viewer-link";
 import { NameTag } from "./NameTag";
 import { PhotoCaption } from "./PhotoCaption";
+import { MediaBadge } from "./MediaBadge";
 import { PhotoImage } from "./PhotoImage";
 import { PhotoMenu } from "./PhotoMenu";
 
@@ -25,8 +26,9 @@ export function PhotoCard({ photo, groupName, priority = false }: { photo: Photo
   return (
     <article className="flex flex-col">
       <div className="relative mx-2">
-        <Link to={photoPath(photo.id)} state={fromFeedState} className="block rounded-[1.75rem]">
+        <Link to={photoPath(photo.id)} state={fromFeedState} className="relative block rounded-[1.75rem]">
           <PhotoImage photo={photo} variant="medium" priority={priority} className="rounded-[1.75rem]" style={{ aspectRatio: feedAspectRatio(photo) }} />
+          <MediaBadge photo={photo} className="right-4 bottom-4" />
         </Link>
         <div className="pointer-events-none absolute top-3 left-3 max-w-[calc(100%-4.5rem)]">
           <NameTag name={photo.uploader.displayName} color={colorOf(photo.uploader.id)}>

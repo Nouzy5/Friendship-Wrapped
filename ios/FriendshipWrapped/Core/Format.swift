@@ -17,6 +17,12 @@ enum Format {
         count == 1 ? singular : (plural ?? singular + "s")
     }
 
+    /// A clip's length as a player shows it: 7 seconds is "0:07", a minute is "1:00". Rounded up, so a clip is never "0:00".
+    static func duration(milliseconds: Int) -> String {
+        let seconds = max(1, Int((Double(milliseconds) / 1000).rounded(.up)))
+        return "\(seconds / 60):" + String(format: "%02d", seconds % 60)
+    }
+
     /// e.g. "October 2026" in the viewer's locale.
     static func monthYear(_ date: Date) -> String {
         date.formatted(.dateTime.month(.wide).year())

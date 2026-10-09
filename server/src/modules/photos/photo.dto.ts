@@ -9,6 +9,11 @@ export function photoSelect(viewerId: string) {
   return {
     id: true,
     groupId: true,
+    momentId: true,
+    kind: true,
+    videoDurationMs: true,
+    videoSizeBytes: true,
+    videoIsLive: true,
     caption: true,
     width: true,
     height: true,
@@ -33,6 +38,12 @@ type PhotoDetailRow = Prisma.PhotoGetPayload<{ select: ReturnType<typeof photoDe
 export type PhotoView = {
   id: string;
   groupId: string;
+  /** The moment it was posted into, if any. */
+  momentId: string | null;
+  /** A video is still a post like any other: its three images below are its poster frame. */
+  kind: "photo" | "video";
+  /** Set for a video only. */
+  video: VideoView | null;
   caption: string | null;
   /** Pixel size of the full rendition, so clients can reserve space before it loads. */
   width: number;
@@ -54,6 +65,16 @@ export type PhotoView = {
   isFavorite: boolean;
 };
 
+/** How to play a video post. The file is served through the API like the images, with `Range` support. */
+export type VideoView = {
+  /** Access-checked, like the images. */
+  url: string;
+  durationMs: number;
+  sizeBytes: number;
+  /** A Live Photo's motion: plays by itself, muted and looping. */
+  isLive: boolean;
+};
+
 /** The photos either side of this one in its group feed, for swiping through the viewer. */
 export type FeedNeighbors = { newerId: string | null; olderId: string | null };
 
@@ -65,6 +86,10 @@ export type PhotoDetailView = PhotoView & {
 
 export function photoImageUrl(photoId: string, variant: PhotoVariant): string {
   return apiPath(`/photos/${photoId}/images/${variant}`);
+}
+
+export function photoVideoUrl(photoId: string): string {
+  return apiPath(`/photos/${photoId}/video`);
 }
 
 function imageUrls(photoId: string): Record<PhotoVariant, string> {
@@ -94,6 +119,17 @@ export function toPhotoView(
   return {
     id: photo.id,
     groupId: photo.groupId,
+    momentId: photo.momentId,
+    kind: photo.kind === "VIDEO" ? "video" : "photo",
+    video:
+      photo.kind === "VIDEO"
+        ? {
+            url: photoVideoUrl(photo.id),
+            durationMs: photo.videoDurationMs ?? 0,
+            sizeBytes: photo.videoSizeBytes ?? 0,
+            isLive: photo.videoIsLive,
+          }
+        : null,
     caption: photo.caption,
     width: photo.width,
     height: photo.height,

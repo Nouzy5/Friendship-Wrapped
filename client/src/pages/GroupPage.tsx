@@ -9,6 +9,8 @@ import { GroupAvatar } from "../features/groups/components/GroupAvatar";
 import { GroupPicker } from "../features/groups/components/GroupPicker";
 import { useGroupContext } from "../features/groups/components/GroupRoute";
 import { InviteFriendsCard } from "../features/invites/components/InviteFriendsCard";
+import { OpenMomentStrip } from "../features/moments/components/OpenMomentStrip";
+import { GroupPulseCard } from "../features/pulse/components/GroupPulseCard";
 import { GroupFeed, type FeedLayout } from "../features/photos/components/GroupFeed";
 import { formatMemberCount } from "../lib/format";
 import { usePageTitle } from "../lib/usePageTitle";
@@ -74,9 +76,14 @@ export function GroupPage() {
       </header>
 
       {/* Until there's someone to share photos with, inviting comes first. */}
-      {alone && (
+      {alone ? (
         <div className="px-4 pt-2 pb-4">
           <InviteFriendsCard group={group} highlight />
+        </div>
+      ) : (
+        <div className="pt-2">
+          <OpenMomentStrip group={group} />
+          <GroupPulseCard group={group} />
         </div>
       )}
       <GroupFeed group={group} layout={layout} />

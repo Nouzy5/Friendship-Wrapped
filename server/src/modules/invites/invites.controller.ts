@@ -1,12 +1,13 @@
 import type { RequestHandler } from "express";
 import { authenticate, currentUser } from "../auth/auth.middleware.js";
 import { groupParamsSchema } from "../groups/groups.schemas.js";
-import { inviteParamsSchema, myInviteParamsSchema } from "./invites.schemas.js";
+import { createInviteBodySchema, inviteParamsSchema, myInviteParamsSchema } from "./invites.schemas.js";
 import * as invitesService from "./invites.service.js";
 
 export const createInvite: RequestHandler = async (req, res) => {
   const { groupId } = groupParamsSchema.parse(req.params);
-  const invite = await invitesService.createInvite(groupId, currentUser(req).id);
+  const { lifetimeDays } = createInviteBodySchema.parse(req.body ?? {});
+  const invite = await invitesService.createInvite(groupId, currentUser(req).id, lifetimeDays);
   res.status(201).json({ invite });
 };
 

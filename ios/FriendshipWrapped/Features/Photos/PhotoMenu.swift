@@ -85,13 +85,13 @@ struct PhotoMenuButton: View {
                 }
             }
             if photo.canSave {
-                Button("Save photo", systemImage: "square.and.arrow.down") {
+                Button("Save \(photo.noun)", systemImage: "square.and.arrow.down") {
                     Task { await save() }
                 }
                 .disabled(isSaving)
             }
             if !isMine {
-                Button("Report photo", systemImage: "flag") {
+                Button("Report \(photo.noun)", systemImage: "flag") {
                     request = .report
                 }
                 Button("Block \(posterFirstName)", systemImage: "nosign") {
@@ -99,7 +99,7 @@ struct PhotoMenuButton: View {
                 }
             }
             if photo.canDelete {
-                Button("Delete photo", systemImage: "trash") {
+                Button("Delete \(photo.noun)", systemImage: "trash") {
                     request = .delete
                 }
             }
@@ -123,12 +123,17 @@ struct PhotoMenuButton: View {
         .accessibilityLabel("More options")
     }
 
-    /// Downloads the full-size photo (only allowed when `canSave`) and adds it to the photo
-    /// library, asking for add-only access the first time.
+    /// Downloads the full-size photo or the video (only allowed when `canSave`) and adds it to the
+    /// photo library, asking for add-only access the first time.
     private func save() async {
         guard !isSaving else { return }
         isSaving = true
         defer { isSaving = false }
+
+        if photo.isVideo {
+            await saveVideo()
+            return
+        }
 
         do {
             let data = try await APIClient.shared.downloadFullImage(of: photo)
@@ -153,6 +158,32 @@ struct PhotoMenuButton: View {
             ToastCenter.shared.show(error.message, isError: true)
         } catch {
             ToastCenter.shared.show("Couldn't save the photo.", isError: true)
+        }
+    }
+}
+
+extension PhotoMenuButton {
+    @MainActor
+    fileprivate func saveVideo() async {
+        do {
+            let file = try await APIClient.shared.downloadVideo(of: photo)
+            defer { try? FileManager.default.removeItem(at: file) }
+            let access = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            guard access == .authorized || access == .limited else {
+                ToastCenter.shared.show("To save videos, allow Friendship Wrapped to add to your photos in the Settings app.", isError: true)
+                return
+            }
+            try await PHPhotoLibrary.shared().performChanges {
+                _ = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: file)
+            }
+            Haptics.success()
+            ToastCenter.shared.show("Saved to your photos")
+        } catch is CancellationError {
+            // Nothing to say.
+        } catch let error as APIError {
+            ToastCenter.shared.show(error.message, isError: true)
+        } catch {
+            ToastCenter.shared.show("Couldn't save the video.", isError: true)
         }
     }
 }
@@ -206,13 +237,13 @@ private struct PhotoMenuPresentations: ViewModifier {
                     .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: isPresented(.report)) {
-                ReportSheet(photoID: photo.id, title: "Report this photo")
+                ReportSheet(photoID: photo.id, title: "Report this \(photo.noun)")
             }
             .blockConfirmation(personToBlock, context: groupName) {
                 onBlocked?()
             }
-            .alert("Delete this photo?", isPresented: isPresented(.delete)) {
-                Button("Delete photo") {
+            .alert("Delete this \(photo.noun)?", isPresented: isPresented(.delete)) {
+                Button("Delete \(photo.noun)") {
                     Task { await delete() }
                 }
                 Button("Cancel", role: .cancel) {}
@@ -245,7 +276,7 @@ private struct PhotoMenuPresentations: ViewModifier {
         do {
             try await photos.delete(photo)
             Haptics.success()
-            ToastCenter.shared.show("Photo deleted")
+            ToastCenter.shared.show(photo.isVideo ? "Video deleted" : "Photo deleted")
             onDeleted?()
             photos.forget(photo.id)
             wrapped.setNeedsRefresh()

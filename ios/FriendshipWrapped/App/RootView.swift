@@ -7,6 +7,7 @@ struct RootView: View {
     @Environment(GroupsStore.self) private var groups
     @Environment(PhotosStore.self) private var photos
     @Environment(AlbumsStore.self) private var albums
+    @Environment(MomentsStore.self) private var moments
     @Environment(WrappedStore.self) private var wrapped
     @Environment(AccountStore.self) private var account
     @Environment(DeviceSettings.self) private var settings
@@ -62,16 +63,19 @@ struct RootView: View {
                 groups.reset()
                 photos.reset()
                 albums.reset()
+                moments.reset()
                 wrapped.reset()
                 account.reset()
                 ImageCache.shared.removeAll()
                 if newID == nil {
                     lastAccent = ""
                     router.didSignOut()
+                    PushRegistrar.shared.sessionDidEnd()
                 } else {
                     // Decides whether the Wrapped tab shows.
                     wrapped.setNeedsRefresh()
                     Task { await account.syncTimeZone() }
+                    Task { await PushRegistrar.shared.sessionDidStart() }
                     if oldID == nil {
                         router.didSignIn(isNewAccount: session.justRegistered)
                     }
@@ -171,7 +175,7 @@ struct MainTabView: View {
         }
         .motion(.fwEase, value: network.isOnline)
         .fullScreenCover(item: $router.cameraRequest) { request in
-            CaptureFlowView(preferredGroupID: request.groupID)
+            CaptureFlowView(preferredGroupID: request.groupID, momentID: request.momentID)
         }
         .fullScreenCover(item: $router.playingWrapped) { summary in
             WrappedStoryView(groupID: summary.group.id, year: summary.year)
@@ -198,8 +202,18 @@ struct MainTabView: View {
             guard phase == .active else { return }
             Task { await groups.loadGroups() }
             Task { await account.syncTimeZone() }
+            Task { await PushRegistrar.shared.appDidBecomeActive() }
             wrapped.setNeedsRefresh()
         }
+        // A tapped notification opens the page it is about. Also when the tap launched the app.
+        .onChange(of: PushRegistrar.shared.pendingPath) { _, _ in openTappedNotification() }
+        .task { openTappedNotification() }
+    }
+
+    private func openTappedNotification() {
+        guard let path = PushRegistrar.shared.pendingPath else { return }
+        PushRegistrar.shared.pendingPath = nil
+        router.openNotification(path: path, wrapped: wrapped.list)
     }
 
     /// One tab's screens. All visited tabs stay alive (keeping their place); the one you switch
@@ -301,6 +315,8 @@ struct AppRouteDestination: View {
             PhotoDetailView(photoID: photoID, scrollToComments: true)
         case .album(let albumID):
             AlbumDetailView(albumID: albumID)
+        case .moment(let momentID):
+            MomentDetailView(momentID: momentID)
         case .groupSettings(let groupID):
             GroupSettingsView(groupID: groupID)
         case .settings(let screen):

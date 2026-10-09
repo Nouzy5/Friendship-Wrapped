@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { ThumbnailRowSkeleton } from "../../../components/ui/Skeleton";
 import { useGroupPeople } from "../../groups/hooks";
 import { NameTag } from "../../photos/components/NameTag";
+import { MediaBadge } from "../../photos/components/MediaBadge";
 import { photoAlt, PhotoImage } from "../../photos/components/PhotoImage";
 import { fromFeedState, photoPath } from "../../photos/viewer-link";
 import { useOnThisDay } from "../hooks";
@@ -32,6 +33,7 @@ export function OnThisDay({ groupId }: { groupId: string }) {
             <Link to={photoPath(photo.id)} state={fromFeedState} aria-label={`${photoAlt(photo)}, ${ago}`} className="flex flex-col gap-1.5 rounded-[1.375rem]">
               <span className="relative block">
                 <PhotoImage photo={photo} variant="thumbnail" className="size-31 rounded-[1.375rem]" />
+                <MediaBadge photo={photo} className="top-2 right-2" />
                 <span className="absolute bottom-2 left-2 max-w-[calc(100%-1rem)]">
                   <NameTag name={photo.uploader.displayName.split(/\s+/)[0]!} color={colorOf(photo.uploader.id)} small />
                 </span>

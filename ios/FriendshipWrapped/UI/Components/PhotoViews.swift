@@ -30,6 +30,12 @@ struct PhotoTile: View {
                 PhotoImage(photo: photo, variant: .thumbnail)
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay(alignment: .bottomTrailing) {
+                if let video = photo.video {
+                    VideoBadge(video: video)
+                        .padding(8)
+                }
+            }
             .overlay(alignment: .bottomLeading) {
                 if showsDot {
                     Circle()
@@ -42,6 +48,6 @@ struct PhotoTile: View {
             }
             .contentShape(Rectangle())
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Photo by \(photo.uploader.displayName), \(Format.dayMonth(photo.createdAt))")
+            .accessibilityLabel("\(photo.isVideo ? "Video" : "Photo") by \(photo.uploader.displayName), \(Format.dayMonth(photo.createdAt))")
     }
 }

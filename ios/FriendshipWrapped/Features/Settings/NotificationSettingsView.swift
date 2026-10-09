@@ -1,8 +1,9 @@
 import SwiftUI
+import UIKit
 
-/// Settings → Notifications (the web app's NotificationSettingsPage). These are kept with your
-/// account; the iPhone app can't receive push notifications yet, so for now they decide what the
-/// web app sends to your devices. Switches flip at once and flip back if saving fails.
+/// Settings → Notifications (the web app's NotificationSettingsPage). The choices are kept with
+/// your account and decide what the server sends to every device you've turned notifications on
+/// for, this iPhone included. Switches flip at once and flip back if saving fails.
 struct NotificationSettingsView: View {
     @Environment(AccountStore.self) private var account
     @Environment(GroupsStore.self) private var groups
@@ -14,10 +15,7 @@ struct NotificationSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                InlineAlert(
-                    message: "The iPhone app can't receive notifications yet. These choices are saved with your account and apply to the web app on your devices.",
-                    systemImage: "bell.slash"
-                )
+                ThisPhoneNotifications()
                 content
             }
             .padding(.horizontal, 16)
@@ -80,6 +78,11 @@ struct NotificationSettingsView: View {
                         description: "When someone joins one of your groups",
                         isOn: toggle(notifications.members) { UserSettingsChange.NotificationChange(members: $0) }
                     )
+                    SettingsToggleRow(
+                        "Moments",
+                        description: "When someone starts a moment in one of your groups",
+                        isOn: toggle(notifications.moments) { UserSettingsChange.NotificationChange(moments: $0) }
+                    )
                 }
             }
             .riseIn(delay: 0.04)
@@ -99,6 +102,20 @@ struct NotificationSettingsView: View {
                 }
             }
             .riseIn(delay: 0.08)
+
+            SettingsSection(
+                "Reminders",
+                footnote: "Never more than one every two weeks, and never about anyone else: it only says it has been a while since you posted."
+            ) {
+                SettingsGroup {
+                    SettingsToggleRow(
+                        "Gentle reminders",
+                        description: "In the early evening, when you haven't posted for a while",
+                        isOn: toggle(notifications.nudges) { UserSettingsChange.NotificationChange(nudges: $0) }
+                    )
+                }
+            }
+            .riseIn(delay: 0.1)
 
             quietHoursSection(notifications.quietHours)
                 .riseIn(delay: 0.12)
@@ -224,6 +241,75 @@ struct NotificationSettingsView: View {
             } catch {
                 ToastCenter.shared.show("Couldn't save that setting.", isError: true)
             }
+        }
+    }
+}
+
+/// "Notifications on this iPhone": whether this phone gets them at all. iOS asks its own
+/// permission the first time; once refused, only iOS Settings can change it.
+private struct ThisPhoneNotifications: View {
+    @State private var push = PushRegistrar.shared
+    @State private var isChanging = false
+
+    var body: some View {
+        SettingsSection("This iPhone", footnote: footnote) {
+            SettingsGroup {
+                if push.serverCanPush == false {
+                    SettingsValueRow(
+                        "Notifications on this iPhone",
+                        description: "This server isn't set up to send them to iPhones yet",
+                        systemImage: "bell.slash"
+                    )
+                } else {
+                    SettingsToggleRow(
+                        "Notifications on this iPhone",
+                        description: description,
+                        isOn: Binding(get: { push.isOn }, set: { on in change(to: on) })
+                    )
+                    .disabled(isChanging || push.permission == .unknown)
+
+                    if push.permission == .denied {
+                        SettingsButtonRow("Open iOS Settings", description: "Allow notifications for Friendship Wrapped", systemImage: "gearshape") {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .task { await push.refreshStatus() }
+        .riseIn()
+    }
+
+    private var description: String {
+        switch push.permission {
+        case .denied: return "Turned off for this app in iOS Settings"
+        case .allowed where push.isOn && push.isRegistered: return "On"
+        case .allowed where push.isOn: return "Setting up…"
+        default: return "Off"
+        }
+    }
+
+    private var footnote: String? {
+        if let failure = push.failure, push.isOn {
+            return "This build can't receive notifications: \(failure)"
+        }
+        return "Which ones you get is up to the switches below, and they follow you to every device."
+    }
+
+    private func change(to on: Bool) {
+        guard !isChanging else { return }
+        isChanging = true
+        Task {
+            if on {
+                if await push.turnOn() == .denied, push.permission == .denied {
+                    ToastCenter.shared.show("Turn notifications on for Friendship Wrapped in iOS Settings.", isError: true)
+                }
+            } else {
+                await push.turnOff()
+            }
+            isChanging = false
         }
     }
 }

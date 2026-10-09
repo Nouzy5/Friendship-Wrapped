@@ -10,6 +10,9 @@ final class InviteLinkModel {
     private(set) var isCreating = false
     private(set) var failure: String?
     private(set) var copied = false
+    /// How long the next link will last. Kept when the link is cleared, so "Make another link" starts from it.
+    var lifetimeDays = InviteLifetime.defaultDays
+    var showsQRCode = false
 
     /// Bumped by `clear()`, so a link still being made for the old state is dropped.
     @ObservationIgnored private var generation = 0
@@ -25,7 +28,7 @@ final class InviteLinkModel {
         isCreating = true
         failure = nil
         do {
-            let created = try await APIClient.shared.createInvite(forGroup: groupID)
+            let created = try await APIClient.shared.createInvite(forGroup: groupID, lifetimeDays: lifetimeDays)
             guard started == generation else { return }
             invite = created
         } catch {
@@ -48,13 +51,14 @@ final class InviteLinkModel {
         }
     }
 
-    /// Forgets the link: another group, or every link was just turned off.
+    /// Forgets the link: another group, every link was just turned off, or "Make another link".
     func clear() {
         generation += 1
         copiedReset?.cancel()
         invite = nil
         failure = nil
         copied = false
+        showsQRCode = false
         isCreating = false
     }
 }
@@ -158,8 +162,21 @@ private struct InviteLinkPanel: View {
                     .padding(.top, 16)
                     .transition(.opacity.combined(with: .offset(y: 8)))
             } else {
-                PrimaryButton(title: "Create invite link", pendingTitle: "Creating link…", isPending: model.isCreating) {
-                    Task { await model.create(for: group.id) }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Link works for")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(.sub)
+                        .accessibilityHidden(true)
+                    // The panel is grey, so the picker's track takes the page's colour.
+                    SegmentedPicker(
+                        options: InviteLifetime.options,
+                        selection: Binding(get: { model.lifetimeDays }, set: { model.lifetimeDays = $0 }),
+                        track: Theme.bg
+                    )
+                    .accessibilityLabel("How long the link works")
+                    PrimaryButton(title: "Create invite link", pendingTitle: "Creating link…", isPending: model.isCreating) {
+                        Task { await model.create(for: group.id) }
+                    }
                 }
                 .padding(.top, 16)
                 .transition(.opacity)
@@ -208,10 +225,37 @@ private struct InviteLinkActions: View {
                 }
             }
 
-            Text("Link works until \(Format.dayMonth(invite.expiresAt)). Make a new one any time.")
+            Button {
+                withMotion(.fwEase) { model.showsQRCode.toggle() }
+            } label: {
+                Label(model.showsQRCode ? "Hide QR code" : "Show QR code", systemImage: "qrcode")
+            }
+            .buttonStyle(PanelButtonStyle())
+            .accessibilityValue(model.showsQRCode ? "Shown" : "Hidden")
+
+            if model.showsQRCode {
+                VStack(spacing: 8) {
+                    InviteQRCode(url: url, groupName: group.name)
+                    Text("Friends can scan this with their phone's camera.")
+                        .font(.footnote)
+                        .foregroundStyle(.sub)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+                .transition(.opacity.combined(with: .offset(y: 8)))
+            }
+
+            Text("Link works until \(Format.dayMonth(invite.expiresAt)).")
                 .font(.footnote)
                 .foregroundStyle(.sub)
                 .fixedSize(horizontal: false, vertical: true)
+
+            // The link you have keeps working until it runs out.
+            Button("Make another link") {
+                withMotion(.fwEase) { model.clear() }
+            }
+            .buttonStyle(.fwCompact(.ghost))
         }
     }
 

@@ -13,6 +13,10 @@ export const captionSchema = multilineTextSchema(CAPTION_MAX_LENGTH, "Caption").
 /** The multipart text fields sent alongside the photo file. */
 export const createPhotoSchema = z.object({
   caption: captionSchema.optional(),
+  /** The moment to post into: one of the group's, and still open. */
+  momentId: idSchema.optional(),
+  /** Sent with a video that is a Live Photo's motion: it plays by itself, muted and looping. */
+  live: z.stringbool().optional(),
 });
 
 export const photoParamsSchema = z.object({ photoId: idSchema });

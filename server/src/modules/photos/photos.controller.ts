@@ -1,6 +1,7 @@
 import type { RequestHandler } from "express";
 import { sendImage } from "../../lib/send-image.js";
-import { readImageUpload } from "../../lib/upload.js";
+import { sendUnsatisfiableRange, sendVideo } from "../../lib/send-video.js";
+import { readMediaUpload } from "../../lib/upload.js";
 import { currentUser } from "../auth/auth.middleware.js";
 import { groupParamsSchema } from "../groups/groups.schemas.js";
 import {
@@ -13,17 +14,24 @@ import {
 } from "./photos.schemas.js";
 import * as photosService from "./photos.service.js";
 
-/** POST /groups/:groupId/photos — multipart: `photo` (file) and optional `caption`. */
+/**
+ * POST /groups/:groupId/photos — multipart: `photo` (an image) and/or `video` (a video; with a
+ * `photo` it is that video's poster picture), optional `caption`, `momentId` and `live`.
+ */
 export const uploadPhoto: RequestHandler = async (req, res) => {
   const { groupId } = groupParamsSchema.parse(req.params);
   const userId = currentUser(req).id;
 
   await photosService.assertCanPost(groupId, userId);
-  const { file, fields } = await readImageUpload(req, res, "photo");
-  const { caption } = createPhotoSchema.parse(fields);
-
-  const photo = await photosService.createPhoto(groupId, userId, file, caption ?? null);
-  res.status(201).json({ photo });
+  const upload = await readMediaUpload(req, res);
+  try {
+    const { caption, momentId, live } = createPhotoSchema.parse(upload.fields);
+    const video = upload.video && { ...upload.video, isLive: live ?? false };
+    const photo = await photosService.createPhoto(groupId, userId, upload.photo, caption ?? null, momentId ?? null, video);
+    res.status(201).json({ photo });
+  } finally {
+    await upload.discard();
+  }
 };
 
 export const listGroupPhotos: RequestHandler = async (req, res) => {
@@ -60,4 +68,22 @@ export const deletePhoto: RequestHandler = async (req, res) => {
   const { photoId } = photoParamsSchema.parse(req.params);
   await photosService.deletePhoto(photoId, currentUser(req).id);
   res.status(204).end();
+};
+
+/**
+ * GET /photos/:photoId/video — a video post's MP4, in pieces if asked (`Range`), so players start
+ * at once and can seek. `?download=1` as an attachment, if the viewer may save it.
+ */
+export const getPhotoVideo: RequestHandler = async (req, res) => {
+  const { photoId } = photoParamsSchema.parse(req.params);
+  const { download } = photoImageQuerySchema.parse(req.query);
+  const result = await photosService.getPhotoVideo(photoId, currentUser(req).id, {
+    rangeHeader: req.headers.range,
+    download: download ?? false,
+  });
+  if (result.unsatisfiable) {
+    sendUnsatisfiableRange(res, result.size);
+    return;
+  }
+  await sendVideo(res, result.video, { size: result.size, range: result.range, downloadName: result.downloadName });
 };

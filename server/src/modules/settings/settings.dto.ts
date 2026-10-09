@@ -12,6 +12,8 @@ export const settingsSelect = {
   notifyMembers: true,
   notifyOnThisDay: true,
   notifyWrapped: true,
+  notifyNudges: true,
+  notifyMoments: true,
   quietHoursEnabled: true,
   quietHoursStart: true,
   quietHoursEnd: true,
@@ -31,13 +33,15 @@ const DEFAULTS: SettingsRow = {
   notifyMembers: false,
   notifyOnThisDay: true,
   notifyWrapped: true,
+  notifyNudges: true,
+  notifyMoments: true,
   quietHoursEnabled: true,
   quietHoursStart: "23:00",
   quietHoursEnd: "08:00",
 };
 
 /** The event kinds a person can switch notifications on and off for. */
-export type NotificationKind = "photos" | "reactions" | "comments" | "members" | "onThisDay" | "wrapped";
+export type NotificationKind = "photos" | "reactions" | "comments" | "members" | "onThisDay" | "wrapped" | "nudges" | "moments";
 
 /** The settings kept on the server. Appearance and camera preferences stay on the device. */
 export type UserSettings = {
@@ -68,6 +72,8 @@ export function toUserSettings(row: SettingsRow | null): UserSettings {
       members: s.notifyMembers,
       onThisDay: s.notifyOnThisDay,
       wrapped: s.notifyWrapped,
+      nudges: s.notifyNudges,
+      moments: s.notifyMoments,
       quietHours: { enabled: s.quietHoursEnabled, start: s.quietHoursStart, end: s.quietHoursEnd },
     },
   };

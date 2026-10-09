@@ -18,6 +18,8 @@ export const updateSettingsSchema = z.object({
       members: z.boolean(),
       onThisDay: z.boolean(),
       wrapped: z.boolean(),
+      nudges: z.boolean(),
+      moments: z.boolean(),
       quietHours: z.object({ enabled: z.boolean(), start: timeOfDaySchema, end: timeOfDaySchema }).partial(),
     })
     .partial()

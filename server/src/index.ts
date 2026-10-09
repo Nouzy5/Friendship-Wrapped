@@ -1,8 +1,10 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { createApp } from "./app.js";
 import { env } from "./config/env.js";
+import { closeApns } from "./lib/apns.js";
 import { logger } from "./lib/logger.js";
 import { prisma } from "./lib/prisma.js";
+import { sweepStaleUploads } from "./lib/upload.js";
 import { checkDatabase, checkStorage } from "./modules/health/health.service.js";
 import { startNotificationScheduler } from "./modules/notifications/notification-scheduler.js";
 import { settleNotifications } from "./modules/notifications/notifications.service.js";
@@ -36,6 +38,11 @@ const server = app.listen(env.API_PORT, env.API_HOST, async (error) => {
 // Queued (quiet-hours) notifications, On This Day and Wrapped announcements.
 const stopScheduler = startNotificationScheduler();
 
+// Temporary video files a crash left behind: cleared now and then.
+void sweepStaleUploads();
+const uploadSweep = setInterval(() => void sweepStaleUploads(), 60 * 60 * 1000);
+uploadSweep.unref();
+
 let shuttingDown = false;
 
 async function shutdown(signal: string): Promise<void> {
@@ -45,7 +52,9 @@ async function shutdown(signal: string): Promise<void> {
 
   server.close();
   stopScheduler();
+  clearInterval(uploadSweep);
   await settleNotifications();
+  closeApns();
   await prisma.$disconnect();
   process.exit(0);
 }

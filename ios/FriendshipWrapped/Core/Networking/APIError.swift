@@ -12,12 +12,16 @@ struct APIError: LocalizedError, Equatable {
     let code: String
     let message: String
     let issues: [FieldIssue]
+    /// Extra facts some errors carry as `details` when it's an object of strings, e.g. who sent an
+    /// expired invite. Empty for every other error.
+    let info: [String: String]
 
-    init(status: Int, code: String, message: String, issues: [FieldIssue] = []) {
+    init(status: Int, code: String, message: String, issues: [FieldIssue] = [], info: [String: String] = [:]) {
         self.status = status
         self.code = code
         self.message = message
         self.issues = issues
+        self.info = info
     }
 
     var errorDescription: String? { message }

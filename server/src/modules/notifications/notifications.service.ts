@@ -1,4 +1,5 @@
 import type { ReactionType } from "../../generated/prisma/client.js";
+import { apnsEnabled, apnsSender, isDeviceGone } from "../../lib/apns.js";
 import { logger } from "../../lib/logger.js";
 import { isSubscriptionGone, pushSender, vapidPublicKey, type PushPayload } from "../../lib/push.js";
 import * as blocksRepository from "../blocks/blocks.repository.js";
@@ -7,10 +8,15 @@ import { toUserSettings, wantsNotification, type NotificationKind, type UserSett
 import * as notificationsRepository from "./notifications.repository.js";
 import type { RecipientRow } from "./notifications.repository.js";
 import { quietHoursEnd } from "./quiet-hours.js";
-import type { SubscriptionInput } from "./notifications.schemas.js";
+import type { DeviceInput, SubscriptionInput } from "./notifications.schemas.js";
 
 export function getPushKey(): string | null {
   return vapidPublicKey;
+}
+
+/** What the clients ask before offering notifications: which kinds of device this server can reach. */
+export function getPushStatus(): { publicKey: string | null; apns: boolean } {
+  return { publicKey: vapidPublicKey, apns: apnsEnabled() };
 }
 
 /** Subscribing the same browser again (same endpoint) updates it. */
@@ -23,6 +29,23 @@ export async function unsubscribe(userId: string, endpoint: string): Promise<voi
   await notificationsRepository.deleteSubscription(userId, endpoint);
 }
 
+/**
+ * Registers the iPhone for the session it asks with. Registering again (the app does, every
+ * launch, since Apple may change the token) updates it; signing in as someone else on the
+ * same phone moves it to them.
+ */
+export async function registerDevice(userId: string, sessionId: string, { token, environment }: DeviceInput): Promise<void> {
+  await notificationsRepository.upsertDevice(userId, sessionId, {
+    token,
+    environment: environment === "sandbox" ? "SANDBOX" : "PRODUCTION",
+  });
+}
+
+/** Removing an iPhone that isn't registered (or isn't yours) is a no-op. */
+export async function removeDevice(userId: string, token: string): Promise<void> {
+  await notificationsRepository.deleteDevice(userId, token);
+}
+
 // ---------------------------------------------------------------------------------------
 // Delivery
 
@@ -30,26 +53,51 @@ export type Recipient = {
   userId: string;
   settings: UserSettings;
   subscriptions: { id: string; endpoint: string; p256dh: string; auth: string }[];
+  devices: { id: string; token: string; environment: "SANDBOX" | "PRODUCTION" }[];
 };
 
-export function toRecipient(row: RecipientRow): Recipient {
-  return { userId: row.id, settings: toUserSettings(row.settings), subscriptions: row.pushSubscriptions };
+export function toRecipient(row: RecipientRow, now = new Date()): Recipient {
+  return {
+    userId: row.id,
+    settings: toUserSettings(row.settings),
+    subscriptions: row.pushSubscriptions,
+    // A phone whose session has run out is signed out, whether or not the row has been swept up yet.
+    devices: row.apnsDevices
+      .filter((device) => device.session.expiresAt.getTime() > now.getTime())
+      .map(({ id, token, environment }) => ({ id, token, environment })),
+  };
 }
 
-/** Sends to every browser the person subscribed, dropping subscriptions the push service says are gone. */
+/**
+ * Sends to every browser the person subscribed and every iPhone signed in as them, dropping
+ * the ones the push services say are gone.
+ */
 async function sendNow(recipient: Recipient, payload: PushPayload): Promise<void> {
-  const send = pushSender();
-  if (!send) return;
-  await Promise.all(
-    recipient.subscriptions.map(async ({ id, endpoint, p256dh, auth }) => {
-      try {
-        await send({ endpoint, keys: { p256dh, auth } }, payload);
-      } catch (error) {
-        if (isSubscriptionGone(error)) await notificationsRepository.deleteSubscriptionById(id);
-        else logger.warn(`Push notification to ${new URL(endpoint).host} failed`, error);
-      }
-    }),
-  );
+  const sendWeb = pushSender();
+  const sendApns = apnsSender();
+
+  await Promise.all([
+    ...(sendWeb
+      ? recipient.subscriptions.map(async ({ id, endpoint, p256dh, auth }) => {
+          try {
+            await sendWeb({ endpoint, keys: { p256dh, auth } }, payload);
+          } catch (error) {
+            if (isSubscriptionGone(error)) await notificationsRepository.deleteSubscriptionById(id);
+            else logger.warn(`Push notification to ${new URL(endpoint).host} failed`, error);
+          }
+        })
+      : []),
+    ...(sendApns
+      ? recipient.devices.map(async ({ id, token, environment }) => {
+          try {
+            await sendApns({ token, environment }, payload);
+          } catch (error) {
+            if (isDeviceGone(error)) await notificationsRepository.deleteDeviceById(id);
+            else logger.warn("Push notification to an iPhone failed", error);
+          }
+        })
+      : []),
+  ]);
 }
 
 /** Sends now, or (during the person's quiet hours) queues it for when they end. */
@@ -65,7 +113,7 @@ export async function deliverQueued(now: Date): Promise<void> {
     const due = await notificationsRepository.listDueNotifications(now, 100);
     for (const { id, user, ...payload } of due) {
       if (!(await notificationsRepository.claimQueuedNotification(id))) continue;
-      const recipient = toRecipient(user);
+      const recipient = toRecipient(user, now);
       // They may have switched notifications off since.
       if (recipient.settings.notifications.enabled) await sendNow(recipient, payload);
     }
@@ -79,7 +127,7 @@ export async function deliverQueued(now: Date): Promise<void> {
 const pending = new Set<Promise<void>>();
 
 function inBackground(job: () => Promise<void>): void {
-  if (!pushSender()) return; // push is off
+  if (!pushSender() && !apnsSender()) return; // push is off
   const promise: Promise<void> = job()
     .catch((error: unknown) => logger.error("Failed to send push notifications", error))
     .finally(() => pending.delete(promise));
@@ -119,7 +167,7 @@ function notifyGroup({ kind, groupId, actorId, to, uploaderId, payload }: GroupE
     await Promise.all(
       rows
         .filter((row) => row.id !== actorId && !blocked.has(row.id))
-        .map(toRecipient)
+        .map((row) => toRecipient(row, now))
         .filter((recipient) => wantsNotification(recipient.settings, kind))
         .map((recipient) => deliver(recipient, message, now)),
     );
@@ -138,8 +186,8 @@ function snippet(text: string, length = 80): string {
 
 type PhotoRef = { id: string; groupId: string; uploaderId: string };
 
-/** "Tomáš posted a photo", to the rest of the group. */
-export function photoPosted(photoId: string, groupId: string, uploaderId: string): void {
+/** "Tomáš posted a photo" (or "a video"), to the rest of the group. */
+export function photoPosted(photoId: string, groupId: string, uploaderId: string, kind: "photo" | "video" = "photo"): void {
   notifyGroup({
     kind: "photos",
     groupId,
@@ -148,7 +196,7 @@ export function photoPosted(photoId: string, groupId: string, uploaderId: string
     uploaderId,
     payload: ({ group, actor }) => ({
       title: groupTitle(group),
-      body: `${actor.displayName} posted a photo`,
+      body: `${actor.displayName} posted a ${kind}`,
       url: `/photos/${photoId}`,
       tag: `photos:${groupId}`,
     }),
@@ -188,6 +236,22 @@ export function commented(photo: PhotoRef, actorId: string, body: string): void 
         tag: `comments:${photo.id}`,
       }),
     });
+  });
+}
+
+/** "Tomáš started a moment: 🌙 Friday at the lake", to the rest of the group. */
+export function momentStarted(momentId: string, groupId: string, creatorId: string, moment: { title: string; emoji: string | null }): void {
+  notifyGroup({
+    kind: "moments",
+    groupId,
+    actorId: creatorId,
+    to: null,
+    payload: ({ group, actor }) => ({
+      title: groupTitle(group),
+      body: `${actor.displayName} started a moment: ${moment.emoji ? `${moment.emoji} ` : ""}${moment.title}`,
+      url: `/memories/moments/${momentId}`,
+      tag: `moments:${groupId}`,
+    }),
   });
 }
 

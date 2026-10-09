@@ -53,6 +53,8 @@ const DEFAULTS = {
     members: false,
     onThisDay: true,
     wrapped: true,
+    nudges: true,
+    moments: true,
     quietHours: { enabled: true, start: "23:00", end: "08:00" },
   },
 };

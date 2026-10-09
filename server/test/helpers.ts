@@ -1,13 +1,20 @@
 import type { Express } from "express";
+import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import sharp from "sharp";
 import request, { type Response } from "supertest";
 import { expect } from "vitest";
+import { env } from "../src/config/env.js";
+import { videoSupported } from "../src/lib/ffmpeg.js";
 import { prisma } from "../src/lib/prisma.js";
 import { deletePrefix } from "../src/lib/storage.js";
 
 /** Deletes all rows, children before parents. */
 export async function resetDatabase(): Promise<void> {
   await prisma.queuedNotification.deleteMany();
+  await prisma.apnsDevice.deleteMany();
   await prisma.pushSubscription.deleteMany();
   await prisma.report.deleteMany();
   await prisma.block.deleteMany();
@@ -104,10 +111,14 @@ export function makeImage({ width = 64, height = 48, format = "jpeg", orientatio
 export type PhotoBody = {
   id: string;
   groupId: string;
+  momentId: string | null;
   caption: string | null;
   width: number;
   height: number;
   imageUrls: { full: string; medium: string; thumbnail: string };
+  kind: "photo" | "video";
+  video: { url: string; durationMs: number; sizeBytes: number; isLive: boolean } | null;
+  canSave: boolean;
   canDelete: boolean;
   canInteract: boolean;
   reactions: { counts: Record<string, number>; total: number; mine: string | null };
@@ -169,4 +180,93 @@ export function sessionCookiePair(res: Response): string {
   const cookie = sessionSetCookie(res)?.split(";")[0];
   if (!cookie) throw new Error("Response did not set a session cookie");
   return cookie;
+}
+
+// ---------------------------------------------------------------------------------------
+// Videos (these need ffmpeg, which tests skip themselves without)
+
+/** Whether ffmpeg and ffprobe run here. */
+export const hasFfmpeg = await videoSupported();
+
+function runTool(command: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString("utf8")));
+    child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf8")));
+    child.on("error", reject);
+    child.on("close", (code) => (code === 0 ? resolve(stdout) : reject(new Error(`${command} failed: ${stderr.slice(-500)}`))));
+  });
+}
+
+type VideoOptions = {
+  seconds?: number;
+  width?: number;
+  height?: number;
+  audio?: boolean;
+  /** Embedded tags, like the place a phone filmed it. */
+  tags?: Record<string, string>;
+  fps?: number;
+};
+
+/** A real, encoded MP4 (a test pattern), as a phone would send it. */
+export async function makeVideo({ seconds = 2, width = 320, height = 240, audio = true, tags = {}, fps = 10 }: VideoOptions = {}) {
+  const folder = await mkdtemp(join(tmpdir(), "fw-test-video-"));
+  try {
+    const out = join(folder, "in.mp4");
+    const args = ["-y", "-v", "error", "-f", "lavfi", "-i", `testsrc=duration=${seconds}:size=${width}x${height}:rate=${fps}`];
+    if (audio) args.push("-f", "lavfi", "-i", `sine=frequency=440:duration=${seconds}`);
+    args.push("-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p");
+    if (audio) args.push("-c:a", "aac");
+    for (const [name, value] of Object.entries(tags)) args.push("-metadata", `${name}=${value}`);
+    args.push("-movflags", "+faststart", out);
+    await runTool(env.FFMPEG_PATH ?? "ffmpeg", args);
+    return await readFile(out);
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+
+export type ProbeResult = {
+  streams: { codec_type: string; codec_name: string; width?: number; height?: number; tags?: Record<string, string> }[];
+  format: { duration: string; tags?: Record<string, string> };
+};
+
+/** What ffprobe says about a video's bytes. */
+export async function probeBytes(data: Buffer): Promise<ProbeResult> {
+  const folder = await mkdtemp(join(tmpdir(), "fw-test-probe-"));
+  try {
+    const file = join(folder, "probe.mp4");
+    await writeFile(file, data);
+    const out = await runTool(env.FFPROBE_PATH ?? "ffprobe", [
+      "-v", "error", "-print_format", "json", "-show_format", "-show_streams", file,
+    ]);
+    return JSON.parse(out) as ProbeResult;
+  } finally {
+    await rm(folder, { recursive: true, force: true });
+  }
+}
+
+/** Posts a video (and, as a Live Photo, the still that goes with it). Returns the pending request. */
+export function postVideo(
+  agent: Agent,
+  groupId: string,
+  video: Buffer,
+  fields: Record<string, string> = {},
+  still?: Buffer,
+  filename = "clip.mp4",
+) {
+  const req = agent.post(`/api/groups/${groupId}/photos`);
+  for (const [name, value] of Object.entries(fields)) req.field(name, value);
+  if (still) req.attach("photo", still, { filename: "still.jpg", contentType: "image/jpeg" });
+  req.attach("video", video, { filename, contentType: "video/mp4" });
+  return req;
+}
+
+/** Posts a small video and returns it as the API presents it. */
+export async function uploadVideo(agent: Agent, groupId: string, video?: Buffer, fields: Record<string, string> = {}) {
+  const res = await postVideo(agent, groupId, video ?? (await makeVideo()), fields);
+  expect(res.status, JSON.stringify(res.body)).toBe(201);
+  return res.body.photo as PhotoBody;
 }

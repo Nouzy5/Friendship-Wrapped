@@ -3,7 +3,14 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { sha256Hex } from "../src/lib/tokens.js";
-import { createGroup, createInvite, groupWith as sharedGroupWith, resetDatabase, signUp } from "./helpers.js";
+import {
+  createGroup,
+  createInvite,
+  groupWith as sharedGroupWith,
+  resetDatabase,
+  signUp,
+  type Agent,
+} from "./helpers.js";
 
 const app = createApp();
 
@@ -277,6 +284,145 @@ describe("invites", () => {
     await bob.agent.post(`/api/groups/${group.id}/leave`);
 
     expect((await request(app).get(`/api/invites/${bobsToken}`)).status).toBe(404);
+  });
+
+  it("names who sent a valid link", async () => {
+    const { token } = await groupWith("alice");
+    const res = await request(app).get(`/api/invites/${token}`);
+
+    expect(res.body.invite.invitedBy).toBe("Alice");
+  });
+});
+
+describe("invite lifetimes", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  async function lifetimeOf(agent: Agent, groupId: string, body?: object) {
+    const before = Date.now();
+    const res = await agent.post(`/api/groups/${groupId}/invites`).send(body);
+    expect(res.status).toBe(201);
+    return (new Date(res.body.invite.expiresAt).getTime() - before) / DAY;
+  }
+
+  it("lasts a week unless the creator picks another length", async () => {
+    const { owner, group } = await groupWith("alice");
+
+    expect(await lifetimeOf(owner.agent, group.id)).toBeCloseTo(7, 1);
+    expect(await lifetimeOf(owner.agent, group.id, {})).toBeCloseTo(7, 1);
+    expect(await lifetimeOf(owner.agent, group.id, { lifetimeDays: 1 })).toBeCloseTo(1, 1);
+    expect(await lifetimeOf(owner.agent, group.id, { lifetimeDays: 7 })).toBeCloseTo(7, 1);
+    expect(await lifetimeOf(owner.agent, group.id, { lifetimeDays: 30 })).toBeCloseTo(30, 1);
+  });
+
+  it("refuses any other length", async () => {
+    const { owner, group } = await groupWith("alice");
+
+    for (const lifetimeDays of [0, 2, 365, -1, 7.5, "7", null]) {
+      const res = await owner.agent.post(`/api/groups/${group.id}/invites`).send({ lifetimeDays });
+      expect(res.status, JSON.stringify(lifetimeDays)).toBe(400);
+      expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    }
+    expect(await prisma.inviteToken.count()).toBe(1); // only the one groupWith made
+  });
+
+  it("lets any member choose, not just the owner", async () => {
+    const { members, group } = await groupWith("alice", "bob");
+
+    expect(await lifetimeOf(members[0]!.agent, group.id, { lifetimeDays: 30 })).toBeCloseTo(30, 1);
+  });
+
+  it("lists a link in its creator's account with the length they chose", async () => {
+    const { owner, group } = await groupWith("alice");
+    await owner.agent.post(`/api/groups/${group.id}/invites`).send({ lifetimeDays: 1 });
+
+    const res = await owner.agent.get("/api/users/me/invites");
+    const lengths = res.body.invites.map(
+      (invite: { createdAt: string; expiresAt: string }) =>
+        Math.round((new Date(invite.expiresAt).getTime() - new Date(invite.createdAt).getTime()) / DAY),
+    );
+    expect(lengths.sort()).toEqual([1, 7]);
+  });
+});
+
+describe("expired invite links", () => {
+  const expire = (ago: number) =>
+    prisma.inviteToken.updateMany({ data: { expiresAt: new Date(Date.now() - ago) } });
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it("say who sent them, so the page can say who to ask", async () => {
+    const { members, group } = await groupWith("alice", "bob");
+    const bob = members[0]!;
+    const token = await createInvite(bob.agent, group.id);
+    await prisma.inviteToken.updateMany({ where: { id: sha256Hex(token) }, data: { expiresAt: new Date(Date.now() - 1000) } });
+
+    const stranger = await signUp(app, "carol");
+    for (const res of [
+      await request(app).get(`/api/invites/${token}`),
+      await stranger.agent.get(`/api/invites/${token}`),
+      await stranger.agent.post(`/api/invites/${token}/accept`),
+    ]) {
+      expect(res.status).toBe(404); // older apps only look at the status
+      expect(res.body.error).toMatchObject({
+        code: "INVITE_EXPIRED",
+        details: { invitedBy: "Bob", groupName: "The Boys", groupEmoji: "🍻" },
+      });
+    }
+    expect(await prisma.groupMember.count({ where: { userId: stranger.user.id } })).toBe(0);
+  });
+
+  it("are told apart from links that were turned off or never existed", async () => {
+    const { owner, group, token } = await groupWith("alice");
+    await owner.agent.delete(`/api/groups/${group.id}/invites`);
+
+    for (const dead of [token, "x".repeat(22), "short"]) {
+      const res = await request(app).get(`/api/invites/${dead}`);
+      expect(res.status).toBe(404);
+      expect(res.body.error.code).toBe("INVITE_INVALID");
+      expect(res.body.error.details).toBeUndefined();
+    }
+  });
+
+  it("are kept for 30 days, then count as gone", async () => {
+    const { token } = await groupWith("alice");
+
+    await expire(29 * DAY);
+    expect((await request(app).get(`/api/invites/${token}`)).body.error.code).toBe("INVITE_EXPIRED");
+
+    await expire(31 * DAY);
+    const res = await request(app).get(`/api/invites/${token}`);
+    expect(res.body.error.code).toBe("INVITE_INVALID");
+    expect(res.body.error.details).toBeUndefined();
+  });
+
+  it("are swept up by the next new link, but only once they are past the 30 days", async () => {
+    const { owner, group } = await groupWith("alice");
+    const recent = await createInvite(owner.agent, group.id);
+    const old = await createInvite(owner.agent, group.id);
+    await prisma.inviteToken.update({ where: { id: sha256Hex(recent) }, data: { expiresAt: new Date(Date.now() - 2 * DAY) } });
+    await prisma.inviteToken.update({ where: { id: sha256Hex(old) }, data: { expiresAt: new Date(Date.now() - 40 * DAY) } });
+
+    await createInvite(owner.agent, group.id);
+
+    expect(await prisma.inviteToken.findUnique({ where: { id: sha256Hex(recent) } })).not.toBeNull();
+    expect(await prisma.inviteToken.findUnique({ where: { id: sha256Hex(old) } })).toBeNull();
+  });
+
+  it("don't name anyone once their sender has left the group", async () => {
+    const { members, group } = await groupWith("alice", "bob");
+    const bob = members[0]!;
+    const token = await createInvite(bob.agent, group.id);
+    await prisma.inviteToken.updateMany({ where: { id: sha256Hex(token) }, data: { expiresAt: new Date(Date.now() - 1000) } });
+
+    await bob.agent.post(`/api/groups/${group.id}/leave`);
+
+    expect((await request(app).get(`/api/invites/${token}`)).body.error.code).toBe("INVITE_INVALID");
+  });
+
+  it("are left out of the sender's list of links that work", async () => {
+    const { owner } = await groupWith("alice");
+    await expire(1000);
+
+    expect((await owner.agent.get("/api/users/me/invites")).body.invites).toEqual([]);
   });
 });
 

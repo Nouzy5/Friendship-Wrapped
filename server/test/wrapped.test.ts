@@ -86,6 +86,7 @@ describe("a group's Wrapped", () => {
       "mostReactedPhoto",
       "reactions",
       "collage",
+      "you",
       "outro",
     ]);
     expect(slide(wrapped, "photos")).toMatchObject({ type: "photos", total: 4, photographerCount: 3 });
@@ -187,7 +188,7 @@ describe("a group's Wrapped", () => {
     await photoAt(owner.agent, group.id, "2025-05-01T10:00:00Z");
 
     const { wrapped } = (await wrappedOf(owner.agent, group.id, 2025)).body;
-    expect(types(wrapped)).toEqual(["intro", "photos", "topPhotographer", "busiestMonth", "outro"]);
+    expect(types(wrapped)).toEqual(["intro", "photos", "topPhotographer", "busiestMonth", "you", "outro"]);
     expect(slide(wrapped, "topPhotographer").runnersUp).toEqual([]);
   });
 
@@ -213,7 +214,7 @@ describe("a group's Wrapped", () => {
     // A photo deleted since drops out of the story; the numbers stay as they were.
     expect((await alice.agent.delete(`/api/photos/${first.id}`)).status).toBe(204);
     const later = (await wrappedOf(alice.agent, group.id, 2025)).body.wrapped as Wrapped;
-    expect(types(later)).toEqual(["intro", "photos", "topPhotographer", "busiestMonth", "reactions", "outro"]);
+    expect(types(later)).toEqual(["intro", "photos", "topPhotographer", "busiestMonth", "reactions", "you", "outro"]);
     expect(slide(later, "photos").total).toBe(2);
 
     // Someone in another time zone gets their own year.
@@ -229,7 +230,7 @@ describe("a group's Wrapped", () => {
     await prisma.wrapped.updateMany({ data: { stats: { version: 0 } } });
     const { wrapped } = (await wrappedOf(owner.agent, group.id, 2025)).body;
     expect(slide(wrapped, "photos").total).toBe(1);
-    expect((await prisma.wrapped.findFirstOrThrow()).stats).toMatchObject({ version: 3, photos: { total: 1 } });
+    expect((await prisma.wrapped.findFirstOrThrow()).stats).toMatchObject({ version: 4, photos: { total: 1 } });
   });
 
   it("leaves a Wrapped saved by a newer server alone", async () => {

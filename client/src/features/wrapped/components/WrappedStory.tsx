@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, PauseIcon, PlayIcon } from "../../../components/ui/icons";
+import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, PauseIcon, PlayIcon, ShareIcon } from "../../../components/ui/icons";
+import { toast } from "../../../lib/toast";
 import { usePageHidden } from "../../../lib/usePageHidden";
+import { useCurrentUser } from "../../auth/hooks";
 import { GroupAvatar } from "../../groups/components/GroupAvatar";
 import { useGroupPeople } from "../../groups/hooks";
+import { planShareCard } from "../share/card-plan";
+import { renderCard } from "../share/card-render";
+import { shareCard } from "../share/share-card";
 import type { Wrapped, WrappedSlideType } from "../types";
 import { useStoryGestures } from "../useStoryGestures";
 import { slideImageUrls, slideTone, StorySlide } from "./StorySlide";
@@ -16,6 +21,7 @@ const SLIDE_MS: Record<WrappedSlideType, number> = {
   mostReactedPhoto: 7000,
   reactions: 7000,
   collage: 8000,
+  you: 8000,
   outro: 6000,
 };
 
@@ -69,8 +75,10 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
   const [leaving, setLeaving] = useState<Layer | null>(null);
   const [userPaused, setUserPaused] = useState(false);
   const [holding, setHolding] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const hidden = usePageHidden();
   const rootRef = useRef<HTMLElement>(null);
+  const me = useCurrentUser();
   const { colorOf } = useGroupPeople(wrapped.group.id);
 
   const index = Math.min(position.index, slides.length - 1);
@@ -78,7 +86,23 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
   const isFirst = index === 0;
   const isLast = index === slides.length - 1;
   const paused = userPaused || holding || hidden;
-  const tone = slideTone(slide, colorOf);
+  const tone = slideTone(slide, colorOf, me.id);
+  const card = planShareCard(slide, { wrapped, me, colorOf });
+
+  /** Draws this slide as a card on this device and opens the share sheet with it. */
+  async function share() {
+    if (!card || sharing) return;
+    setSharing(true);
+    setUserPaused(true);
+    try {
+      const image = await renderCard(card);
+      if ((await shareCard(image, card.filename, card.title)) === "saved") toast("Card saved to your downloads");
+    } catch {
+      toast("Couldn't make that card. Try again.", "error");
+    } finally {
+      setSharing(false);
+    }
+  }
 
   function goTo(target: number) {
     if (target < 0 || target >= slides.length || target === index) return;
@@ -197,6 +221,11 @@ export function WrappedStory({ wrapped, onClose }: WrappedStoryProps) {
             <span className="min-w-0 flex-1 truncate text-[0.9375rem]">
               <span className="font-semibold">{wrapped.group.name}</span> {wrapped.year}
             </span>
+            {card && (
+              <button type="button" onClick={() => void share()} disabled={sharing} aria-label="Share this slide as an image" className={`${roundButton} disabled:opacity-40`}>
+                <ShareIcon className="size-5" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setUserPaused((value) => !value)}

@@ -3,6 +3,8 @@ import { useEffect } from "react";
 import { deletePhoto, fetchGroupPhotos, fetchPhoto, uploadPhoto, type GroupPhotosFilter } from "./api";
 import { findCachedPhotoDetail, photoKeys, removeCachedPhoto, updateCachedFeed, type FeedData } from "./cache";
 import { onThisDayKeys } from "../memories/hooks";
+import { momentKeys } from "../moments/hooks";
+import { pulseKeys } from "../pulse/hooks";
 import { wrappedKeys } from "../wrapped/hooks";
 import type { Photo } from "./types";
 
@@ -71,6 +73,10 @@ export function useUploadPhoto() {
       void queryClient.invalidateQueries({ queryKey: photoKeys.details() });
       // It may start this year's Wrapped, and it counts in it.
       void queryClient.invalidateQueries({ queryKey: wrappedKeys.all });
+      // And in this month's numbers and the weekly streak.
+      void queryClient.invalidateQueries({ queryKey: pulseKeys.all });
+      // A moment it was posted into has one more photo.
+      if (photo.momentId) void queryClient.invalidateQueries({ queryKey: momentKeys.all });
     },
   });
 }
@@ -86,9 +92,11 @@ export function useDeletePhoto(photo: Pick<Photo, "id" | "groupId">) {
       removeCachedPhoto(queryClient, photo);
       void queryClient.invalidateQueries({ queryKey: photoKeys.group(photo.groupId) });
       void queryClient.invalidateQueries({ queryKey: onThisDayKeys.group(photo.groupId) });
-      // Album counts and covers may have included it, and so may Wrapped.
+      // Album counts and covers may have included it, and so may Wrapped and the month's numbers.
       void queryClient.invalidateQueries({ queryKey: ["albums"] });
       void queryClient.invalidateQueries({ queryKey: wrappedKeys.all });
+      void queryClient.invalidateQueries({ queryKey: pulseKeys.all });
+      void queryClient.invalidateQueries({ queryKey: momentKeys.all });
     },
   });
 }

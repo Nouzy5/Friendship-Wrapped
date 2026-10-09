@@ -12,10 +12,18 @@ private struct JoinedGroupResponse: Decodable {
     let group: FriendGroup
 }
 
+private struct CreateInviteBody: Encodable {
+    let lifetimeDays: Int
+}
+
 extension APIClient {
-    /// Any member can create a link. It lasts 7 days.
-    func createInvite(forGroup groupID: String) async throws -> CreatedInvite {
-        let response: CreatedInviteResponse = try await send(.post, "/groups/\(groupID.pathSegment)/invites")
+    /// Any member can create a link. It lasts 1, 7 (the default) or 30 days.
+    func createInvite(forGroup groupID: String, lifetimeDays: Int = InviteLifetime.defaultDays) async throws -> CreatedInvite {
+        let response: CreatedInviteResponse = try await send(
+            .post,
+            "/groups/\(groupID.pathSegment)/invites",
+            body: CreateInviteBody(lifetimeDays: lifetimeDays)
+        )
         return response.invite
     }
 

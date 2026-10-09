@@ -346,6 +346,14 @@ export function DownloadIcon(props: IconProps) {
   );
 }
 
+export function ShareIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 15V3M8 7l4-4 4 4M5 12v6.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V12" />
+    </Icon>
+  );
+}
+
 export function BlockIcon(props: IconProps) {
   return (
     <Icon {...props}>

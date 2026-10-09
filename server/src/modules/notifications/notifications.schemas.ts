@@ -14,3 +14,22 @@ export const subscriptionSchema = z.object({
 export const unsubscribeSchema = z.object({ endpoint: endpointSchema });
 
 export type SubscriptionInput = z.infer<typeof subscriptionSchema>;
+
+/**
+ * The token iOS gives the app, in hex: 32 bytes today, and Apple says it may grow to 100.
+ * Stored lowercase, so one phone is one token however it was spelled.
+ */
+const deviceTokenSchema = z
+  .string()
+  .regex(/^[0-9a-fA-F]{64,200}$/, "Invalid device token")
+  .transform((token) => token.toLowerCase());
+
+/** An iPhone registering for Apple push: the app reports which of Apple's servers its token is for. */
+export const deviceSchema = z.object({
+  token: deviceTokenSchema,
+  environment: z.enum(["sandbox", "production"], { error: "environment must be sandbox or production" }),
+});
+
+export const removeDeviceSchema = z.object({ token: deviceTokenSchema });
+
+export type DeviceInput = z.infer<typeof deviceSchema>;

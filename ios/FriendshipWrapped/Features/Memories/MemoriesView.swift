@@ -2,7 +2,7 @@ import SwiftUI
 
 /// What the Memories tab lists under On This Day.
 enum MemoriesTab: Hashable {
-    case timeline, albums, favorites
+    case timeline, moments, albums, favorites
 }
 
 /// A group's shared archive (the web app's MemoriesPage): On This Day, then the timeline
@@ -109,6 +109,7 @@ private struct MemoriesGroupScreen: View {
     @Environment(GroupsStore.self) private var groups
     @Environment(PhotosStore.self) private var photos
     @Environment(AlbumsStore.self) private var albums
+    @Environment(MomentsStore.self) private var moments
     @Environment(AppRouter.self) private var router
 
     @State private var onThisDay: OnThisDay?
@@ -120,6 +121,7 @@ private struct MemoriesGroupScreen: View {
     @State private var timeline: PhotoListModel
     @State private var favorites: PhotoListModel
     @State private var creatingAlbum = false
+    @State private var startingMoment = false
 
     init(group: FriendGroup, tab: Binding<MemoriesTab>) {
         self.group = group
@@ -134,6 +136,7 @@ private struct MemoriesGroupScreen: View {
     private var tabOptions: [SegmentedPicker<MemoriesTab>.Option] {
         [
             .init(value: .timeline, label: "Timeline"),
+            .init(value: .moments, label: "Moments"),
             .init(value: .albums, label: "Albums"),
             .init(value: .favorites, label: "Favorites"),
         ]
@@ -177,6 +180,12 @@ private struct MemoriesGroupScreen: View {
                 router.push(.album(album.id))
             }
         }
+        .sheet(isPresented: $startingMoment) {
+            StartMomentSheet { title, emoji, hours in
+                let started = try await moments.start(in: group.id, title: title, emoji: emoji, durationHours: hours)
+                router.push(.moment(started.id))
+            }
+        }
         .task { await groups.loadMembersIfNeeded(of: group.id) }
     }
 
@@ -185,6 +194,10 @@ private struct MemoriesGroupScreen: View {
         case .timeline:
             MemoriesTimeline(group: group, model: timeline, from: from, uploaderID: uploaderID) { month in
                 showTimeline(from: month, uploaderID: uploaderID)
+            }
+        case .moments:
+            MomentsSection(groupID: group.id) {
+                startingMoment = true
             }
         case .albums:
             AlbumsSection(groupID: group.id) {
@@ -230,6 +243,8 @@ private struct MemoriesGroupScreen: View {
         switch tab {
         case .timeline:
             await timeline.reload()
+        case .moments:
+            try? await moments.loadMoments(in: group.id)
         case .albums:
             _ = try? await albums.loadAlbums(in: group.id)
         case .favorites:
@@ -348,6 +363,12 @@ private struct MemoriesOnThisDay: View {
                 PhotoImage(photo: photo, variant: .thumbnail)
                     .frame(width: 124, height: 124)
                     .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .overlay(alignment: .topTrailing) {
+                        if let video = photo.video {
+                            VideoBadge(video: video)
+                                .padding(8)
+                        }
+                    }
                     .overlay(alignment: .bottomLeading) {
                         NameTag(
                             name: memoriesFirstName(photo.uploader.displayName),

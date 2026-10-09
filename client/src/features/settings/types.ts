@@ -19,6 +19,10 @@ export type NotificationSettings = {
   members: boolean;
   onThisDay: boolean;
   wrapped: boolean;
+  /** A gentle reminder to post, at most one every two weeks. */
+  nudges: boolean;
+  /** When someone in a group starts a moment. */
+  moments: boolean;
   /** Times are "HH:MM", 24-hour, in your time zone. */
   quietHours: { enabled: boolean; start: string; end: string };
 };

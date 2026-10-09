@@ -23,9 +23,11 @@ struct StoryTone: Equatable {
     }
 
     /// The slide's tone. `colorOf` gives a person's colour in the group, for slides that only
-    /// carry their id.
-    static func of(_ slide: WrappedSlide, colorOf: (String) -> MemberColor?) -> StoryTone {
+    /// carry their id; `me` is who's watching, for the slide that is about them.
+    static func of(_ slide: WrappedSlide, me: String? = nil, colorOf: (String) -> MemberColor?) -> StoryTone {
         switch slide {
+        case .you:
+            return .person(me.flatMap(colorOf))
         case .topPhotographer(let top, _):
             return .person(top.color ?? colorOf(top.user.id))
         case .mostReactedPhoto(let photo, _):
@@ -48,9 +50,10 @@ struct StorySlideView: View {
     let size: CGSize
 
     @Environment(GroupsStore.self) private var groups
+    @Environment(SessionStore.self) private var session
 
     var body: some View {
-        let slideTone = StoryTone.of(slide) { userID in groups.colorOf(userID, in: wrapped.group.id) }
+        let slideTone = StoryTone.of(slide, me: session.user?.id) { userID in groups.colorOf(userID, in: wrapped.group.id) }
 
         switch slide {
         case .intro:
@@ -75,6 +78,8 @@ struct StorySlideView: View {
             ReactionsSlide(total: total, comments: comments, topReactor: topReactor, tone: slideTone, size: size)
         case .collage(let photos):
             CollageSlide(photos: photos, year: wrapped.year, tone: slideTone, size: size)
+        case .you(let yours):
+            YouSlide(yours: yours, year: wrapped.year, tone: slideTone, size: size)
         case .outro(let photos, let reactions, let comments, let people):
             OutroSlide(
                 photos: photos,
@@ -923,6 +928,97 @@ private struct CollagePhoto: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(photo.altText)
             .accessibilityAddTraits(.isImage)
+    }
+}
+
+/// Your own year in the group, in your colour. Only you see it, and it holds nothing about anyone else.
+private struct YouSlide: View {
+    let yours: WrappedSlide.Yours
+    let year: Int
+    let tone: StoryTone
+    let size: CGSize
+
+    private struct Tile: Identifiable {
+        let value: Int
+        let label: String
+
+        var id: String { label }
+    }
+
+    /// What there is to say: a count of nothing isn't worth a tile.
+    private var tiles: [Tile] {
+        var tiles: [Tile] = []
+        if yours.photos > 0 {
+            tiles.append(Tile(value: yours.photos, label: Format.noun(yours.photos, "photo")))
+        }
+        if yours.reactionsReceived > 0 {
+            tiles.append(Tile(value: yours.reactionsReceived, label: "\(Format.noun(yours.reactionsReceived, "reaction")) on your photos"))
+        }
+        if yours.reactionsGiven > 0 {
+            tiles.append(Tile(value: yours.reactionsGiven, label: "\(Format.noun(yours.reactionsGiven, "reaction")) sent"))
+        }
+        if yours.commentsWritten > 0 {
+            tiles.append(Tile(value: yours.commentsWritten, label: "\(Format.noun(yours.commentsWritten, "comment")) written"))
+        }
+        return tiles
+    }
+
+    var body: some View {
+        SlideFrame(tone: tone, centered: true) {
+            Text(verbatim: "Your \(String(year)), just you.")
+                .font(.story(storyHeadlineSize(size.width)))
+                .minimumScaleFactor(0.7)
+                .accessibilityAddTraits(.isHeader)
+                .storyRise()
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                ForEach(Array(tiles.enumerated()), id: \.element.id) { index, tile in
+                    VStack(spacing: 2) {
+                        StoryCountUp(value: tile.value, delay: 0.25 + Double(index) * 0.12, duration: 1.0)
+                            .font(Theme.display(size: 30))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                        Text(tile.label)
+                            .font(.system(size: 14, design: .rounded))
+                            .multilineTextAlignment(.center)
+                            .opacity(0.85)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 12)
+                    .background(tone.ink.opacity(0.1), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            .storyRise(after: 0.25)
+            if let best = yours.bestPhoto {
+                HStack(spacing: 16) {
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .overlay { PhotoImage(photo: best.photo, variant: .medium) }
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .padding(6)
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .rotationEffect(.degrees(-3))
+                        .frame(width: min(size.width * 0.34, 140))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Your most loved photo")
+                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        Text("\(Format.number(best.count)) \(Format.noun(best.count, "reaction"))")
+                            .font(.system(size: 16, design: .rounded))
+                    }
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .accessibilityElement(children: .combine)
+                .storyRise(after: 0.9)
+            }
+            if let busiest = yours.busiestMonth {
+                Text("You posted the most in \(StoryDate.monthName(busiest.month)): \(Format.number(busiest.count)) \(Format.noun(busiest.count, "photo")).")
+                    .font(.system(size: 16, design: .rounded))
+                    .storyRise(after: 1.2)
+            }
+        }
     }
 }
 

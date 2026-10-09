@@ -2,8 +2,8 @@ import { useState, type CSSProperties } from "react";
 import { useDeviceSettings } from "../../../lib/device-settings";
 import type { Photo, PhotoVariant } from "../types";
 
-export function photoAlt(photo: Pick<Photo, "caption" | "uploader">): string {
-  return photo.caption ?? `Photo by ${photo.uploader.displayName}`;
+export function photoAlt(photo: Pick<Photo, "caption" | "uploader"> & { kind?: Photo["kind"] }): string {
+  return photo.caption ?? `${photo.kind === "video" ? "Video" : "Photo"} by ${photo.uploader.displayName}`;
 }
 
 type PhotoImageProps = {

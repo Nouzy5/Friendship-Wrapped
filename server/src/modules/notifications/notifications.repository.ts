@@ -5,14 +5,55 @@ import { settingsSelect } from "../settings/settings.dto.js";
 
 const subscriptionSelect = { id: true, endpoint: true, p256dh: true, auth: true } satisfies Prisma.PushSubscriptionSelect;
 
+/** An iPhone, and when the session that registered it runs out (after that it gets nothing). */
+const deviceSelect = {
+  id: true,
+  token: true,
+  environment: true,
+  session: { select: { expiresAt: true } },
+} satisfies Prisma.ApnsDeviceSelect;
+
 /** Everything needed to decide whether, when and where to notify someone. */
 export const recipientSelect = {
   id: true,
   settings: { select: settingsSelect },
   pushSubscriptions: { select: subscriptionSelect },
+  apnsDevices: { select: deviceSelect },
 } satisfies Prisma.UserSelect;
 
 export type RecipientRow = Prisma.UserGetPayload<{ select: typeof recipientSelect }>;
+
+/** Anyone with a browser or an iPhone to notify. */
+export const hasPushTarget = {
+  OR: [{ pushSubscriptions: { some: {} } }, { apnsDevices: { some: {} } }],
+} satisfies Prisma.UserWhereInput;
+
+/**
+ * Registers an iPhone for the session it came with. The same phone again (same token) updates
+ * it, and moves it to whoever is signed in on it now.
+ */
+export function upsertDevice(
+  userId: string,
+  sessionId: string,
+  { token, environment }: { token: string; environment: "SANDBOX" | "PRODUCTION" },
+  db: DbClient = prisma,
+) {
+  return db.apnsDevice.upsert({
+    where: { token },
+    create: { userId, sessionId, token, environment },
+    update: { userId, sessionId, environment },
+    select: { id: true },
+  });
+}
+
+export function deleteDevice(userId: string, token: string, db: DbClient = prisma) {
+  return db.apnsDevice.deleteMany({ where: { userId, token } });
+}
+
+/** For tokens Apple says are dead. */
+export function deleteDeviceById(id: string, db: DbClient = prisma) {
+  return db.apnsDevice.deleteMany({ where: { id } });
+}
 
 /** Adds the browser's subscription, or moves it to this user (one browser, another account). */
 export function upsertSubscription(
@@ -38,8 +79,8 @@ export function deleteSubscriptionById(id: string, db: DbClient = prisma) {
 }
 
 /**
- * Members of the group who could be notified (they have a push subscription and haven't
- * muted it), out of `userIds`, or out of everyone in the group when it's null.
+ * Members of the group who could be notified (they have a browser or an iPhone to send to
+ * and haven't muted the group), out of `userIds`, or out of everyone in the group when it's null.
  */
 export async function findGroupRecipients(groupId: string, userIds: string[] | null, db: DbClient = prisma) {
   const rows = await db.groupMember.findMany({
@@ -47,7 +88,7 @@ export async function findGroupRecipients(groupId: string, userIds: string[] | n
       groupId,
       muted: false,
       ...(userIds && { userId: { in: userIds } }),
-      user: { pushSubscriptions: { some: {} } },
+      user: hasPushTarget,
     },
     select: { user: { select: recipientSelect } },
   });
@@ -88,17 +129,77 @@ export async function claimQueuedNotification(id: string, db: DbClient = prisma)
   return count === 1;
 }
 
-/** People the scheduler may have something for: a time zone, notifications on, and a subscription. */
+/** People the scheduler may have something for: a time zone, notifications on, and somewhere to send them. */
 export function listScheduledRecipients(db: DbClient = prisma) {
   return db.userSettings.findMany({
     where: {
       timeZone: { not: null },
       notificationsEnabled: true,
-      OR: [{ notifyOnThisDay: true }, { notifyWrapped: true }],
-      user: { pushSubscriptions: { some: {} } },
+      OR: [{ notifyOnThisDay: true }, { notifyWrapped: true }, { notifyNudges: true }],
+      user: hasPushTarget,
     },
-    select: { onThisDayCheckedOn: true, wrappedAnnouncedYear: true, user: { select: recipientSelect } },
+    select: {
+      onThisDayCheckedOn: true,
+      wrappedAnnouncedYear: true,
+      nudgedAt: true,
+      nudgeCheckedOn: true,
+      user: { select: recipientSelect },
+    },
   });
+}
+
+/** Marks the person as looked at for a nudge on their local day; false if they already were. */
+export async function claimNudgeCheck(userId: string, day: string, db: DbClient = prisma): Promise<boolean> {
+  const { count } = await db.userSettings.updateMany({
+    where: { userId, OR: [{ nudgeCheckedOn: null }, { nudgeCheckedOn: { not: day } }] },
+    data: { nudgeCheckedOn: day },
+  });
+  return count === 1;
+}
+
+/**
+ * Records a nudge, unless the person had one at or after `notBefore`: false then. Two scheduler
+ * runs at once can't both send, so a person gets at most one a fortnight.
+ */
+export async function claimNudge(userId: string, now: Date, notBefore: Date, db: DbClient = prisma): Promise<boolean> {
+  const { count } = await db.userSettings.updateMany({
+    where: { userId, OR: [{ nudgedAt: null }, { nudgedAt: { lte: notBefore } }] },
+    data: { nudgedAt: now },
+  });
+  return count === 1;
+}
+
+type NudgeGroupRow = { id: string; name: string; emoji: string };
+
+/**
+ * The group to nudge the person about, or null. They must not have posted anywhere since
+ * `quietSince`; the group must be one they've been in since `memberBefore`, haven't muted,
+ * and where somebody else has posted since `activeSince` (so there is something to join).
+ * Of those, the one with the newest photo from someone else.
+ */
+export async function findNudgeGroup(
+  userId: string,
+  { quietSince, memberBefore, activeSince }: { quietSince: Date; memberBefore: Date; activeSince: Date },
+  db: DbClient = prisma,
+): Promise<NudgeGroupRow | null> {
+  const rows = await db.$queryRaw<NudgeGroupRow[]>`
+    SELECT g.id AS id, g.name AS name, g.emoji AS emoji
+    FROM group_members m
+    JOIN \`groups\` g ON g.id = m.group_id
+    WHERE m.user_id = ${userId}
+      AND m.muted = 0
+      AND m.joined_at <= ${memberBefore}
+      AND NOT EXISTS (SELECT 1 FROM photos own WHERE own.uploader_id = m.user_id AND own.created_at > ${quietSince})
+      AND EXISTS (
+        SELECT 1 FROM photos other
+        WHERE other.group_id = m.group_id AND other.uploader_id <> m.user_id AND other.created_at > ${activeSince}
+      )
+    ORDER BY (
+      SELECT MAX(latest.created_at) FROM photos latest
+      WHERE latest.group_id = m.group_id AND latest.uploader_id <> m.user_id
+    ) DESC
+    LIMIT 1`;
+  return rows[0] ?? null;
 }
 
 /** Marks On This Day as done for the person's local day; false if it already was. */

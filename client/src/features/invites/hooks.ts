@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { groupKeys } from "../groups/hooks";
 import { wrappedKeys } from "../wrapped/hooks";
-import { acceptInvite, createInvite, fetchInvitePreview, resetInvites } from "./api";
+import { acceptInvite, createInvite, fetchInvitePreview, resetInvites, type InviteLifetimeDays } from "./api";
 
 /** Keyed by viewer too: whether you're already a member depends on who's signed in. */
 export function useInvitePreview(token: string, viewerId: string | null) {
@@ -25,7 +25,7 @@ export function useAcceptInvite() {
 }
 
 export function useCreateInvite(groupId: string) {
-  return useMutation({ mutationFn: () => createInvite(groupId) });
+  return useMutation({ mutationFn: (lifetimeDays: InviteLifetimeDays) => createInvite(groupId, lifetimeDays) });
 }
 
 export function useResetInvites(groupId: string) {

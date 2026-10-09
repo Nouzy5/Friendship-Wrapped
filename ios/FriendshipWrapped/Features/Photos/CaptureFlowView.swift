@@ -3,18 +3,29 @@ import Combine
 import PhotosUI
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
-/// A photo taken or picked, waiting to be posted.
+/// A video picked from the library, or a Live Photo's motion, converted and waiting to be posted.
+private struct ShotVideo {
+    /// The MP4 that is uploaded.
+    let file: URL
+    let durationMs: Int
+    let isLive: Bool
+}
+
+/// A photo taken or picked (or a video), waiting to be posted.
 private struct Shot {
     enum Source {
         case camera, library
     }
 
-    /// What's uploaded (and saved, with Settings → Photos & data → Save to this device).
+    /// What's uploaded (and saved, with Settings → Photos & data → Save to this device). For a
+    /// video, a frame of it; for a Live Photo, its still picture, which is uploaded with the motion.
     let image: UIImage
     /// A smaller copy for the screen.
     let preview: UIImage
     let source: Source
+    var video: ShotVideo?
 }
 
 /// The camera, full screen from the shutter in the tab bar (the web app's /camera page): the
@@ -23,10 +34,13 @@ private struct Shot {
 struct CaptureFlowView: View {
     /// The group the camera was opened from, if any.
     let preferredGroupID: String?
+    /// A moment to post into, if the camera was opened from one. It only counts while it's open, in the group you're sharing with.
+    var momentID: String?
 
     @Environment(GroupsStore.self) private var groups
     @Environment(PhotosStore.self) private var photos
     @Environment(WrappedStore.self) private var wrapped
+    @Environment(MomentsStore.self) private var moments
     @Environment(NetworkMonitor.self) private var network
     @Environment(DeviceSettings.self) private var settings
     @Environment(AppRouter.self) private var router
@@ -54,6 +68,10 @@ struct CaptureFlowView: View {
     /// Half turns of the switch-camera icon.
     @State private var flipTurns = 0
     @State private var showingNewGroup = false
+    /// The moment the camera was opened for, once it has loaded.
+    @State private var requestedMoment: Moment?
+    /// It closed while the photo was being posted, so the photo goes to the group instead.
+    @State private var leftMoment = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -85,6 +103,10 @@ struct CaptureFlowView: View {
         }
         .environment(\.accentMemberColor, accentColor)
         .task { await groups.loadGroupsIfNeeded() }
+        .task(id: momentID) {
+            guard let momentID else { return }
+            requestedMoment = try? await APIClient.shared.fetchMoment(momentID)
+        }
         .sheet(isPresented: $showingNewGroup) {
             // The new group joins your list and is picked here, so the camera opens on it.
             NewGroupView(onCreated: { created in
@@ -101,7 +123,13 @@ struct CaptureFlowView: View {
             // A post still waiting (or uploading) doesn't go up after the camera has closed.
             poster.cancel()
             camera.deactivate()
+            discardVideoFile(of: shot)
         }
+    }
+
+    /// Photos and videos from the library (Live Photos are among the photos).
+    private var pickerFilter: PHPickerFilter {
+        .any(of: [.images, .videos])
     }
 
     // MARK: - Header
@@ -200,8 +228,12 @@ struct CaptureFlowView: View {
                 .layoutPriority(1)
             controls
                 .padding(.top, 40)
+            if activeMoment != nil {
+                momentNote
+                    .padding(.top, 24)
+            }
             CameraAudience(group: group)
-                .padding(.top, 32)
+                .padding(.top, activeMoment == nil ? 32 : 12)
             Spacer(minLength: 12)
         }
         .onAppear { camera.activate(preferred: preferredSide) }
@@ -282,7 +314,7 @@ struct CaptureFlowView: View {
             CameraMessage(
                 systemImage: "camera",
                 title: "Camera access is off",
-                message: "Allow it in Settings to take photos here, or choose one from your library."
+                message: "Allow it in Settings to take photos here, or choose a photo or video from your library."
             ) {
                 Button("Open Settings") { openSystemSettings() }
                     .buttonStyle(.fwCompact(.accent))
@@ -293,8 +325,8 @@ struct CaptureFlowView: View {
                 title: "No camera here",
                 message: "Choose a photo from your library instead."
             ) {
-                PhotosPicker(selection: $pickerItem, matching: .images) {
-                    Text("Choose a photo")
+                PhotosPicker(selection: $pickerItem, matching: pickerFilter, photoLibrary: .shared()) {
+                    Text("Choose a photo or video")
                 }
                 .buttonStyle(.fwCompact(.accent))
                 .disabled(isOpeningPick)
@@ -330,7 +362,7 @@ struct CaptureFlowView: View {
     /// The library, the shutter and the switch-camera button.
     private var controls: some View {
         HStack(spacing: 0) {
-            PhotosPicker(selection: $pickerItem, matching: .images) {
+            PhotosPicker(selection: $pickerItem, matching: pickerFilter, photoLibrary: .shared()) {
                 Image(systemName: "photo.on.rectangle")
                     .font(.system(size: 22, weight: .medium))
                     .foregroundStyle(.fg)
@@ -340,7 +372,7 @@ struct CaptureFlowView: View {
             }
             .buttonStyle(PressScaleButtonStyle())
             .disabled(isOpeningPick || camera.isCapturing)
-            .accessibilityLabel("Choose from your photos")
+            .accessibilityLabel("Choose from your photos and videos")
 
             Spacer(minLength: 16)
 
@@ -423,20 +455,61 @@ struct CaptureFlowView: View {
             pickerItem = nil
         }
         do {
-            if let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+            let isMovie = item.supportedContentTypes.contains { $0.conforms(to: .movie) }
+            if isMovie {
+                if let movie = try await item.loadTransferable(type: PickedMovie.self) {
+                    try await openVideo(movie.url, still: nil, isLive: false)
+                    return
+                }
+            } else if let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                // A Live Photo posts its motion too, when the library can be read for it (otherwise just the still).
+                let isLivePhoto = item.supportedContentTypes.contains { $0.conforms(to: .livePhoto) }
+                if isLivePhoto, let identifier = item.itemIdentifier,
+                    let motion = await LivePhotoMotion.file(forAssetIdentifier: identifier)
+                {
+                    if (try? await openVideo(motion, still: image, isLive: true)) != nil { return }
+                }
                 let preview = await Task.detached(priority: .userInitiated) {
                     CameraImage.displayCopy(of: image)
                 }.value
                 show(Shot(image: image, preview: preview, source: .library))
                 return
             }
+        } catch VideoPreparation.Failure.tooLong {
+            showNotice("Videos can be at most 60 seconds. Choose a shorter one.")
+            return
         } catch {
             // Falls through to the message below.
         }
-        showNotice("That photo couldn't be opened. Try another one.")
+        showNotice("That couldn't be opened. Try another photo or video.")
+    }
+
+    /// Converts the chosen video (or a Live Photo's motion) and shows it ready to post. `source` is
+    /// the file made for us; it is removed once converted.
+    private func openVideo(_ source: URL, still: UIImage?, isLive: Bool) async throws {
+        defer { try? FileManager.default.removeItem(at: source) }
+        let prepared = try await VideoPreparation.prepare(source)
+        let image = still ?? prepared.poster
+        let preview = await Task.detached(priority: .userInitiated) {
+            CameraImage.displayCopy(of: image)
+        }.value
+        show(
+            Shot(
+                image: image,
+                preview: preview,
+                source: .library,
+                video: ShotVideo(file: prepared.file, durationMs: prepared.durationMs, isLive: isLive)
+            )
+        )
+    }
+
+    private func discardVideoFile(of shot: Shot?) {
+        guard let file = shot?.video?.file else { return }
+        try? FileManager.default.removeItem(at: file)
     }
 
     private func show(_ next: Shot) {
+        discardVideoFile(of: shot)
         caption = ""
         poster.clearFailure()
         withMotion(.fwEase) { shot = next }
@@ -466,19 +539,33 @@ struct CaptureFlowView: View {
             Color.black
                 .aspectRatio(1, contentMode: .fit)
                 .overlay {
-                    Image(uiImage: shot.preview)
-                        .resizable()
-                        .scaledToFill()
-                        .allowsHitTesting(false)
-                        .accessibilityLabel(photoAccessibilityLabel)
+                    if let video = shot.video {
+                        LoopingVideoView(url: video.file, gravity: .resizeAspectFill)
+                            .allowsHitTesting(false)
+                            .accessibilityLabel(photoAccessibilityLabel(for: shot))
+                    } else {
+                        Image(uiImage: shot.preview)
+                            .resizable()
+                            .scaledToFill()
+                            .allowsHitTesting(false)
+                            .accessibilityLabel(photoAccessibilityLabel(for: shot))
+                    }
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 44, style: .continuous))
+                .overlay(alignment: .topTrailing) {
+                    if let video = shot.video {
+                        VideoBadge(durationMs: video.durationMs, isLive: video.isLive)
+                            .padding(18)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .overlay(alignment: .bottom) { photoFooter }
                 .padding(.horizontal, 8)
                 .padding(.top, 24)
                 .layoutPriority(1)
 
             VStack(spacing: 12) {
+                momentNote
                 composerMessage
                 postButton(group: group)
                 Button(discardLabel) { discard() }
@@ -539,9 +626,32 @@ struct CaptureFlowView: View {
                 systemImage: "wifi.slash"
             )
         default:
-            if let message = failureMessage {
+            if poster.failure?.code == "MOMENT_ENDED", let moment = requestedMoment {
+                VStack(spacing: 8) {
+                    InlineAlert(message: "“\(moment.title)” has just ended.")
+                    if let group {
+                        Button("Post to \(group.name) instead") {
+                            leftMoment = true
+                            poster.clearFailure()
+                            post(to: group)
+                        }
+                        .buttonStyle(.fwCompact(.secondary))
+                    }
+                }
+            } else if let message = failureMessage {
                 InlineAlert(message: message)
             }
+        }
+    }
+
+    /// What the photo is being posted into, while that's a moment that is open.
+    @ViewBuilder private var momentNote: some View {
+        if let moment = activeMoment {
+            Text("\(moment.emoji ?? "✨") Posting into \(moment.title)")
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+                .accessibilityElement(children: .combine)
         }
     }
 
@@ -550,7 +660,7 @@ struct CaptureFlowView: View {
         switch poster.phase {
         case .waitingForWifi: return 1
         case .waitingForConnection: return 2
-        default: return poster.failure == nil ? 0 : 3
+        default: return poster.failure == nil ? 0 : (poster.failure?.code == "MOMENT_ENDED" ? 4 : 3)
         }
     }
 
@@ -594,8 +704,9 @@ struct CaptureFlowView: View {
         }
     }
 
-    private var photoAccessibilityLabel: String {
-        caption.isEmpty ? "Your photo" : "Your photo: \(caption)"
+    private func photoAccessibilityLabel(for shot: Shot) -> String {
+        let what = shot.video == nil ? "Your photo" : (shot.video?.isLive == true ? "Your Live Photo" : "Your video")
+        return caption.isEmpty ? what : "\(what): \(caption)"
     }
 
     private var captionButtonLabel: String {
@@ -614,10 +725,17 @@ struct CaptureFlowView: View {
     private func post(to group: FriendGroup) {
         guard let shot, !poster.isBusy else { return }
         let text = caption.trimmingCharacters(in: .whitespacesAndNewlines)
+        let payload: CapturePoster.Payload
+        if let video = shot.video {
+            payload = .video(file: video.file, still: video.isLive ? shot.image : nil, isLive: video.isLive)
+        } else {
+            payload = .photo(shot.image)
+        }
         poster.post(
-            image: shot.image,
+            payload,
             caption: text,
             to: group.id,
+            momentID: activeMoment?.id,
             photos: photos,
             network: network,
             settings: settings
@@ -629,6 +747,7 @@ struct CaptureFlowView: View {
     private func didPost(_ photo: Photo, shot: Shot) {
         // It may start this year's Wrapped, and it counts in it.
         wrapped.setNeedsRefresh()
+        if let momentID = photo.momentId { moments.didPost(into: momentID) }
         Haptics.success()
         let groupName = groups.group(photo.groupId)?.name
         groups.setCurrentGroup(photo.groupId)
@@ -638,6 +757,7 @@ struct CaptureFlowView: View {
         if settings.values.saveToDevice, shot.source == .camera {
             PostedPhotoSaver.saveCopy(of: shot.image)
         }
+        discardVideoFile(of: shot)
         dismiss()
     }
 
@@ -645,6 +765,7 @@ struct CaptureFlowView: View {
     private func discard() {
         poster.cancel()
         poster.clearFailure()
+        discardVideoFile(of: shot)
         caption = ""
         // The camera stage is rebuilt: without this its shutter flash would play again.
         flashes = 0
@@ -674,6 +795,12 @@ struct CaptureFlowView: View {
             return preferred
         }
         return groups.currentGroup
+    }
+
+    /// The moment this photo goes into: the one the camera was opened for, while it's open and in the group you're sharing with.
+    private var activeMoment: Moment? {
+        guard let moment = requestedMoment, !leftMoment, moment.isStillOpen(), moment.groupId == group?.id else { return nil }
+        return moment
     }
 
     /// Your colour in the group you're sharing with paints the shutter and the Post button.

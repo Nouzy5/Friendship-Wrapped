@@ -90,6 +90,15 @@ export function yearRangeIn(year: number, timeZone: string): { from: Date; to: D
   };
 }
 
+/** From the local midnight starting the month (1–12) in the zone to the one starting the next month. */
+export function monthRangeIn(year: number, month: number, timeZone: string): { from: Date; to: Date } {
+  return {
+    from: dayRangeIn({ year, month, day: 1 }, timeZone).from,
+    // Month 13 rolls over into January of the next year.
+    to: dayRangeIn({ year, month: month + 1, day: 1 }, timeZone).from,
+  };
+}
+
 /** False for dates that don't exist, such as 29 February in most years. */
 export function isRealDate({ year, month, day }: CalendarDate): boolean {
   const date = new Date(Date.UTC(year, month - 1, day));
@@ -179,3 +188,18 @@ export function addDays({ year, month, day }: CalendarDate, days: number): Calen
 /** "YYYY-MM-DD" */
 export const isoDate = ({ year, month, day }: CalendarDate) =>
   [String(year).padStart(4, "0"), String(month).padStart(2, "0"), String(day).padStart(2, "0")].join("-");
+
+/** The Monday of the week (Monday to Sunday) this date falls in. */
+export function weekStartOf(date: CalendarDate): CalendarDate {
+  // getUTCDay: Sunday is 0, so Monday is 1 and Sunday is 6 days after its Monday.
+  const sinceMonday = (new Date(Date.UTC(date.year, date.month - 1, date.day)).getUTCDay() + 6) % 7;
+  return addDays(date, -sinceMonday);
+}
+
+/** From the local midnight starting the week that begins on `monday` to the one starting the next week. */
+export function weekRangeIn(monday: CalendarDate, timeZone: string): { from: Date; to: Date } {
+  return {
+    from: dayRangeIn(monday, timeZone).from,
+    to: dayRangeIn(addDays(monday, 7), timeZone).from,
+  };
+}

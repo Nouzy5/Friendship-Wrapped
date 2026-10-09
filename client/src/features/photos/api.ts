@@ -35,11 +35,16 @@ export async function fetchPhoto(photoId: string, signal?: AbortSignal): Promise
   return photo;
 }
 
-/** Big photos are scaled down on the device first (see shrinkForUpload). */
-export async function uploadPhoto({ groupId, image, caption, onProgress }: NewPhoto): Promise<Photo> {
+/**
+ * Big photos are scaled down on the device first (see shrinkForUpload). A video goes as it is: the
+ * server converts it, and makes its poster picture.
+ */
+export async function uploadPhoto({ groupId, image, video, caption, momentId, onProgress }: NewPhoto): Promise<Photo> {
   const form = new FormData();
   form.append("caption", caption);
-  form.append("photo", await shrinkForUpload(image, getDeviceSettings().photoQuality), "photo.jpg");
+  if (momentId) form.append("momentId", momentId);
+  if (video) form.append("video", video, "video.mp4");
+  else if (image) form.append("photo", await shrinkForUpload(image, getDeviceSettings().photoQuality), "photo.jpg");
   const { photo } = await apiUpload<{ photo: Photo }>(groupPhotosPath(groupId), form, onProgress);
   return photo;
 }

@@ -121,9 +121,35 @@ final class PhotosStore {
         _ jpeg: Data,
         caption: String,
         to groupID: String,
+        momentID: String? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> Photo {
-        let photo = try await api.uploadPhoto(toGroup: groupID, jpeg: jpeg, caption: caption, progress: progress)
+        let photo = try await api.uploadPhoto(toGroup: groupID, jpeg: jpeg, caption: caption, momentID: momentID, progress: progress)
+        if feeds[groupID]?.photos.contains(where: { $0.id == photo.id }) == false {
+            feeds[groupID]?.photos.insert(photo, at: 0)
+        }
+        return photo
+    }
+
+    /// Posts a video (an MP4 file; for a Live Photo also its still), like `upload`.
+    func uploadVideo(
+        _ video: URL,
+        still: Data? = nil,
+        isLive: Bool = false,
+        caption: String,
+        to groupID: String,
+        momentID: String? = nil,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> Photo {
+        let photo = try await api.uploadVideo(
+            toGroup: groupID,
+            video: video,
+            still: still,
+            isLive: isLive,
+            caption: caption,
+            momentID: momentID,
+            progress: progress
+        )
         if feeds[groupID]?.photos.contains(where: { $0.id == photo.id }) == false {
             feeds[groupID]?.photos.insert(photo, at: 0)
         }

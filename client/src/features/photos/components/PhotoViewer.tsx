@@ -16,6 +16,7 @@ import { cameFromFeed, photoPath } from "../viewer-link";
 import { FullscreenPhoto } from "./FullscreenPhoto";
 import { NameTag } from "./NameTag";
 import { photoAlt, PhotoImage } from "./PhotoImage";
+import { VideoPlayer } from "./VideoPlayer";
 import { PhotoMenu } from "./PhotoMenu";
 
 const stepButtonClasses =
@@ -92,17 +93,21 @@ export function PhotoViewer({ photo }: { photo: PhotoDetail }) {
       </div>
 
       <div className="relative touch-pan-y touch-pinch-zoom" {...swipe}>
-        <button type="button" onClick={() => setFullscreen(true)} aria-label="View full size" className="block w-full cursor-zoom-in rounded-[1.75rem]">
-          <PhotoImage
-            key={photo.id}
-            photo={photo}
-            variant="medium"
-            fit="contain"
-            priority
-            className="max-h-[70dvh] w-full rounded-[1.75rem] bg-black"
-            style={{ aspectRatio: `${photo.width} / ${photo.height}` }}
-          />
-        </button>
+        {photo.video ? (
+          <VideoPlayer key={photo.id} photo={{ ...photo, video: photo.video }} className="max-h-[70dvh] w-full rounded-[1.75rem] bg-black" />
+        ) : (
+          <button type="button" onClick={() => setFullscreen(true)} aria-label="View full size" className="block w-full cursor-zoom-in rounded-[1.75rem]">
+            <PhotoImage
+              key={photo.id}
+              photo={photo}
+              variant="medium"
+              fit="contain"
+              priority
+              className="max-h-[70dvh] w-full rounded-[1.75rem] bg-black"
+              style={{ aspectRatio: `${photo.width} / ${photo.height}` }}
+            />
+          </button>
+        )}
         <div className="pointer-events-none absolute top-3 left-3 max-w-[calc(100%-1.5rem)]">
           <NameTag name={photo.uploader.displayName} color={colorOf(photo.uploader.id)} />
         </div>

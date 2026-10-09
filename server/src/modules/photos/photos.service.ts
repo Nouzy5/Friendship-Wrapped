@@ -1,4 +1,5 @@
 import { badRequest, forbidden, notFound } from "../../lib/errors.js";
+import { parseRange, type ByteRange } from "../../lib/http-range.js";
 import { IMAGE_CONTENT_TYPE, PHOTO_VARIANTS, processPhoto, type PhotoVariant } from "../../lib/images.js";
 import { logger } from "../../lib/logger.js";
 import { toPage, type Cursor } from "../../lib/pagination.js";
@@ -9,7 +10,9 @@ import { getGroup, isMember, requireMembership } from "../groups/groups.service.
 import * as commentsRepository from "../comments/comments.repository.js";
 import * as notifications from "../notifications/notifications.service.js";
 import * as reactionsRepository from "../reactions/reactions.repository.js";
+import { requireOpenMomentIn } from "../moments/moment-guard.js";
 import { newPhotoKeys } from "./photo-keys.js";
+import { prepareVideo } from "./video-post.js";
 import {
   canSavePhoto,
   toPhotoDetailView,
@@ -60,50 +63,77 @@ export async function assertCanPost(groupId: string, userId: string): Promise<vo
   await requireMembership(groupId, userId);
 }
 
+/** A video sent with a post: in a temporary file the caller removes afterwards. */
+export type VideoUpload = { path: string; size: number; /** From a Live Photo. */ isLive: boolean };
+
 /**
- * Validates and processes the image, stores its renditions, then records the photo.
- * If anything fails after the upload, the stored files are removed again.
+ * Validates and processes the image (or, for a video, converts it and takes its poster frame),
+ * stores the renditions, then records the post. A video is a post like any other: its three
+ * images are its poster, so everything that works with photos works with it. If anything fails
+ * after the upload, the stored files are removed again.
  */
 export async function createPhoto(
   groupId: string,
   uploaderId: string,
   image: Buffer | undefined,
   caption: string | null,
+  momentId: string | null = null,
+  video?: VideoUpload,
 ): Promise<PhotoView> {
-  if (!image) throw badRequest("Choose a photo to upload");
+  if (!image && !video) throw badRequest("Choose a photo or video to upload");
+  // Refused before the file is processed. Checked again below, in the same transaction as the write.
+  if (momentId) await requireOpenMomentIn(groupId, momentId);
 
-  const renditions = await processPhoto(image);
-  const keys = newPhotoKeys(groupId);
-
+  // `image` is the still sent with a video, if any: the video's poster.
+  const prepared = video ? await prepareVideo(video, image) : null;
   try {
-    await Promise.all(
-      VARIANTS.map((variant) => storage.putObject(keys[variant], renditions[variant].data, IMAGE_CONTENT_TYPE)),
-    );
+    const renditions = prepared ? prepared.renditions : await processPhoto(image!);
+    const keys = newPhotoKeys(groupId);
 
-    const photo = await withTransaction(async (tx) => {
-      // Re-checked: the uploader may have left or been removed while the image was processing.
-      await requireMembership(groupId, uploaderId, tx);
-      return photosRepository.createPhoto(
-        {
-          groupId,
-          uploaderId,
-          caption,
-          storageKey: keys.full,
-          mediumKey: keys.medium,
-          thumbnailKey: keys.thumbnail,
-          width: renditions.full.width,
-          height: renditions.full.height,
-          sizeBytes: renditions.full.data.length,
-        },
-        tx,
-      );
-    });
+    try {
+      await Promise.all([
+        ...VARIANTS.map((variant) => storage.putObject(keys[variant], renditions[variant].data, IMAGE_CONTENT_TYPE)),
+        ...(prepared ? [storage.putObjectFromFile(keys.video, prepared.file, prepared.sizeBytes, "video/mp4")] : []),
+      ]);
 
-    notifications.photoPosted(photo.id, groupId, uploaderId);
-    return toPhotoView(photo, { viewerId: uploaderId, canInteract: true, reactors: undefined, commentCount: 0 });
-  } catch (error) {
-    await storage.discardObjects(Object.values(keys));
-    throw error;
+      const photo = await withTransaction(async (tx) => {
+        // Re-checked: the uploader may have left or been removed while the file was processing.
+        await requireMembership(groupId, uploaderId, tx);
+        // It may have closed while the file was processing.
+        if (momentId) await requireOpenMomentIn(groupId, momentId, tx);
+        return photosRepository.createPhoto(
+          {
+            groupId,
+            uploaderId,
+            momentId,
+            caption,
+            storageKey: keys.full,
+            mediumKey: keys.medium,
+            thumbnailKey: keys.thumbnail,
+            width: renditions.full.width,
+            height: renditions.full.height,
+            sizeBytes: renditions.full.data.length,
+            ...(prepared &&
+              video && {
+                kind: "VIDEO" as const,
+                videoKey: keys.video,
+                videoDurationMs: prepared.durationMs,
+                videoSizeBytes: prepared.sizeBytes,
+                videoIsLive: video.isLive,
+              }),
+          },
+          tx,
+        );
+      });
+
+      notifications.photoPosted(photo.id, groupId, uploaderId, prepared ? "video" : "photo");
+      return toPhotoView(photo, { viewerId: uploaderId, canInteract: true, reactors: undefined, commentCount: 0 });
+    } catch (error) {
+      await storage.discardObjects(Object.values(keys));
+      throw error;
+    }
+  } finally {
+    await prepared?.discard();
   }
 }
 
@@ -142,6 +172,16 @@ export async function listAlbumPhotos(
   { cursor, limit }: { cursor?: Cursor; limit: number },
 ): Promise<PhotoPage> {
   const rows = await photosRepository.listAlbumPhotos(albumId, viewerId, { cursor, take: limit + 1 });
+  return toPageOfViews(rows, limit, viewerId);
+}
+
+/** A moment's photos, oldest first. Callers check access to the moment (and so its group) first. */
+export async function listMomentPhotos(
+  momentId: string,
+  viewerId: string,
+  { cursor, limit }: { cursor?: Cursor; limit: number },
+): Promise<PhotoPage> {
+  const rows = await photosRepository.listMomentPhotos(momentId, viewerId, { cursor, take: limit + 1 });
   return toPageOfViews(rows, limit, viewerId);
 }
 
@@ -251,5 +291,42 @@ export async function deletePhoto(photoId: string, userId: string): Promise<void
   if (photo.uploaderId !== userId) throw forbidden("Only the person who posted a photo can delete it");
 
   await photosRepository.deletePhoto(photoId);
-  await storage.discardObjects([photo.storageKey, photo.mediumKey, photo.thumbnailKey]);
+  await storage.discardObjects([
+    photo.storageKey,
+    photo.mediumKey,
+    photo.thumbnailKey,
+    ...(photo.videoKey ? [photo.videoKey] : []),
+  ]);
+}
+
+/**
+ * A video post's MP4, or the part of it asked for (`rangeHeader` is the request's `Range`). Only
+ * for viewers who can see the post; as a download (an attachment named after the day it was
+ * posted) only for those who may save it. A range that starts past the end is `unsatisfiable`.
+ */
+export async function getPhotoVideo(
+  photoId: string,
+  viewerId: string,
+  { rangeHeader, download }: { rangeHeader: string | undefined; download: boolean },
+): Promise<
+  | { unsatisfiable: true; size: number }
+  | { unsatisfiable: false; video: storage.StoredObject; size: number; range: ByteRange | null; downloadName: string | undefined }
+> {
+  const photo = await photosRepository.findVisiblePhotoKeys(photoId, viewerId);
+  if (!photo || photo.kind !== "VIDEO" || !photo.videoKey || !photo.videoSizeBytes) throw notFound("Video not found");
+  if (download && !canSavePhoto(photo.uploader, viewerId)) {
+    throw forbidden("The person who posted this video doesn't allow saving it");
+  }
+
+  const size = photo.videoSizeBytes;
+  const range = parseRange(rangeHeader, size);
+  if (range === "unsatisfiable") return { unsatisfiable: true, size };
+
+  const video = await (range ? storage.getObjectRange(photo.videoKey, range) : storage.getObject(photo.videoKey));
+  if (!video) {
+    logger.warn(`Photo ${photoId} has no stored video (${photo.videoKey})`);
+    throw notFound("Video not found");
+  }
+  const downloadName = download ? `friendship-wrapped-${photo.createdAt.toISOString().slice(0, 10)}.mp4` : undefined;
+  return { unsatisfiable: false, video, size, range, downloadName };
 }

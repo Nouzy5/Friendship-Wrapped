@@ -18,8 +18,14 @@ The MVP is built in phases. Each phase is tested before the next one starts.
 | 8 | Analytics: a group's year in numbers, for Wrapped | ✅ Done |
 | 9 | Wrapped: the year as a full-screen story, saved once the year is over | ✅ Done |
 | 10 | Polish: loading, empty, error and offline states, accessibility, camera and upload, Wrapped transitions, account deletion, home screen install | ✅ Done |
+| 11 | Invite polish: QR code, link lifetime (a day, a week, a month), an expired screen that names who sent it | ✅ Done |
+| 12 | iPhone push (APNs): new photos, reactions, comments, nudges, On This Day and Wrapped alerts | ✅ Server and app built; ⚠️ needs a real iPhone and an APNs key to try end to end |
+| 13 | Nudges and group pulse: one gentle reminder per person per fortnight, a "this month" card, a weekly group streak | ✅ Done |
+| 14 | Wrapped share cards and a personal card (Wrapped format 4) | ✅ Done |
+| 15 | Moments: a few hours in which the group posts into one shared place | ✅ Done |
+| 16 | Videos and Live Photos: a video is a photo post with a video attached | ✅ Server and web built and tested with real ffmpeg; ⚠️ iPhone playback needs a real iPhone (see [Videos and Live Photos](#videos-and-live-photos)) |
 
-The native iOS app in [`ios/`](../ios/README.md) covers phases 1–10 and the Colour-coded redesign too.
+The native iOS app in [`ios/`](../ios/README.md) covers phases 1–16 and the Colour-coded redesign too.
 
 ## Stack
 
@@ -46,6 +52,7 @@ Also used: TypeScript 7, React Router 8, TanStack Query 5, Zod 4, sharp (image p
   go install github.com/minio/minio@latest
   ```
   This puts `minio` in Go's bin folder (`%USERPROFILE%\go\bin` on Windows), which the Go installer adds to `PATH`. You don't run it yourself: `npm run dev` and `npm test` start it. To use a binary somewhere else, set `MINIO_BIN`.
+- ffmpeg and ffprobe, optional: needed to post videos (see [Videos and Live Photos](#videos-and-live-photos)). Without them the app works as before and videos are turned away with a clear message. Put them on `PATH` or set `FFMPEG_PATH` and `FFPROBE_PATH`. The video tests skip themselves when they can't run.
 
 ### Database
 
@@ -196,11 +203,14 @@ Users come back with an `avatarUrl` (or `null`). The URL changes whenever the pi
   - **Owner only:** rename the group or change its emoji, remove members, reset invite links.
   - **Any member:** see members, create invite links, leave.
 - **Privacy.** Every group endpoint checks membership on the server (`requireMembership` / `requireOwner` in `groups.service.ts`). Non-members get a **404**, never a 403, so they can't tell a group exists. New features scoped to a group (photos and so on) must go through the same check.
-- **Invite links.** `/invite/<token>`: 128 random bits, valid for 7 days, and only the token's SHA-256 is stored, so a link can't be shown again later. Members just create a new one. The link is the credential:
-  - Anyone holding it can see a preview (name, emoji, member count) without an account, then sign up or log in and come back to join.
+- **Invite links.** `/invite/<token>`: 128 random bits, and only the token's SHA-256 is stored, so a link can't be shown again later. Members just create a new one. The link is the credential:
+  - **How long it lasts:** the creator picks 1, 7 (the default) or 30 days (`lifetimeDays`; no body means 7, so older apps are unaffected). Any other number is a 400.
+  - **QR code:** the invite card can show the link as a QR code, drawn on the device (web: `uqr`; iPhone: Core Image). It's black on white in every theme, since inverted codes don't scan reliably.
+  - Anyone holding it can see a preview (name, emoji, member count, who invited them) without an account, then sign up or log in and come back to join.
   - Accepting twice is harmless.
   - Links stop working if the owner resets them, or if the person who created them leaves.
   - Removing someone resets every link of the group (they may have kept any of them), so they can only come back with a new one.
+  - **Expired links:** an expired link is kept for 30 more days so its page can say who to ask ("Alice invited you to join 🍻 The Boys, but the link has run out"). It answers `404 INVITE_EXPIRED` with `details: { invitedBy, groupName, groupEmoji }`. It's a 404 like any dead link, so older apps still show their expired message. A link that was turned off, never existed, or expired more than 30 days ago answers `404 INVITE_INVALID` with no details; so does one whose creator has left, since there is nobody to name. The next link made in the group sweeps up the ones past 30 days.
 - **Leaving** runs in a serializable transaction (`withTransaction`) so the one-owner rule always holds:
   - If the owner leaves, ownership passes to the longest-standing member.
   - If the last member leaves, the group is deleted.
@@ -216,7 +226,7 @@ Users come back with an `avatarUrl` (or `null`). The URL changes whenever the pi
 | `GET` | `/api/groups/:groupId/members` | member | Member list (owner first) |
 | `DELETE` | `/api/groups/:groupId/members/:userId` | owner | Remove a member |
 | `POST` | `/api/groups/:groupId/leave` | member | Leave (returns `{ groupDeleted }`) |
-| `POST` | `/api/groups/:groupId/invites` | member | Create an invite link |
+| `POST` | `/api/groups/:groupId/invites` | member | Create an invite link. Optional `{ lifetimeDays: 1 \| 7 \| 30 }` (default 7) |
 | `DELETE` | `/api/groups/:groupId/invites` | owner | Reset (revoke) all invite links |
 | `GET` | `/api/invites/:token` | anyone with the link | Preview the group |
 | `POST` | `/api/invites/:token/accept` | signed in | Join the group |
@@ -253,11 +263,28 @@ Users come back with an `avatarUrl` (or `null`). The URL changes whenever the pi
 
 | Method | Endpoint | Who | Purpose |
 | --- | --- | --- | --- |
-| `POST` | `/api/groups/:groupId/photos` | member | Post a photo |
+| `POST` | `/api/groups/:groupId/photos` | member | Post a photo or a video (`photo` and/or `video`) |
 | `GET` | `/api/groups/:groupId/photos` | member | Newest first: `{ photos, nextCursor }`. Optional `before` (ISO instant) and `favorites=true` |
 | `GET` | `/api/photos/:photoId` | uploader or member | Photo details, its group, and its neighbours in the feed (`feed`) |
 | `GET` | `/api/photos/:photoId/images/:variant` | uploader or member | `thumbnail`, `medium` or `full` (WebP) |
+| `GET` | `/api/photos/:photoId/video` | uploader or member | A video post's MP4, with `Range` support; `?download=1` as an attachment where saving is allowed |
 | `DELETE` | `/api/photos/:photoId` | uploader | Delete the photo and its files |
+
+## Videos and Live Photos
+
+A video is a **photo post with a video attached**, not a second kind of thing. `Photo.kind` is `PHOTO` or `VIDEO`, and a video's poster frame goes through `processPhoto` into the same three renditions as any photo. So the feed, grid, viewer, reactions, comments, favourites, albums, moments, On This Day, Wrapped, share cards, the photo archive and blocking all work for videos unchanged. Only the code that *plays* a video knows the difference.
+
+- **Posting.** `POST /api/groups/:groupId/photos` takes `video` (a file, ≤ 100 MB, at most 60 seconds) instead of or as well as `photo`. A `photo` sent with a video is its **still picture** (a Live Photo's still); without one a frame about a second in is the poster. `live=true` marks a Live Photo's motion. Membership is checked before the body is read, as for photos. The video is streamed to a temporary file as it arrives (never held in memory) and the file is removed afterwards, however the request ended.
+- **Validation** (`modules/photos/video-post.ts`), before the server converts anything:
+  - the first bytes must be an MP4/MOV box or a WebM/Matroska header (never the file name or MIME type), so playlists and scripts that name other files or addresses are turned away (`415 UNSUPPORTED_VIDEO`);
+  - `ffprobe` must find a video stream with a duration; over 60 seconds is `413 VIDEO_TOO_LONG`, over about 36 megapixels `413 VIDEO_TOO_LARGE`;
+  - ffmpeg is only ever allowed to read local files (`-protocol_whitelist file`), and arguments always go as a list, never through a shell.
+- **Conversion** (`lib/ffmpeg.ts`): H.264 (High, yuv420p) + AAC stereo MP4 at most 1280 px on the long side, turned upright, all metadata and chapters dropped (so *where it was filmed* is gone, like a photo's GPS), the index at the front (`+faststart`) so it plays while it downloads. At most 2 conversions run at once and each is stopped after 3 minutes. The upload itself is not kept. Without ffmpeg the answer is `503 VIDEO_UNAVAILABLE`, and photos carry on.
+- **Storage.** `…/photos/<random>/video.mp4` beside the three WebP renditions. Deleting a post, the account or the group removes it with them. `Photo.videoDurationMs`, `videoSizeBytes` and `videoIsLive` ride along; the API shows `kind: "photo" | "video"` and `video: { url, durationMs, sizeBytes, isLive } | null`, both additive.
+- **Playing.** `GET /api/photos/:photoId/video` streams the MP4 to uploader and members (404 to anyone else, and when blocked) with `Accept-Ranges: bytes`. A `Range` request gets `206` with the piece asked for (`lib/http-range.ts` follows RFC 9110: one range, a suffix, an end past the file cut back, `416` with `Content-Range: bytes */size` when it starts past the end, several ranges or nonsense just get the whole file), fetched from storage as a ranged read. That is what lets a browser start at once and scrub, and AVPlayer play at all. `?download=1` is an attachment, only if the uploader allows saving (`canSave`), never cached.
+- **Web.** The gallery button offers photos and videos. A video is checked for type, size and length in the browser before it is sent (a codec the browser can't read just goes to the server's check). The viewer shows the `<video>` with the poster, the grid and feed show a play badge with the length, and "Save video" downloads the MP4. A Live Photo's motion plays by itself, muted and looping, unless Data saver is on or motion is reduced.
+- **iPhone.** The picker offers photos, videos and Live Photos. A video (or a Live Photo's paired video, read from the library, which asks for permission the first time) is converted on the phone to a 720p H.264 MP4 first, because the camera's HEVC and 4K recordings can be hundreds of megabytes. The server converts again regardless. Playback sends the session cookie to AVPlayer by hand (`AVURLAssetHTTPHeaderFieldsKey`), because AVPlayer doesn't send cookies by itself. **This is the first thing to test on a real phone.** If the player can't start streaming, the app downloads the video and plays it from disk, so it still plays.
+- **Not done.** Recording video inside the app's camera (videos come from the library and from Live Photos); trimming a too-long video on the device (it must be at most a minute).
 
 ## Feed
 
@@ -356,6 +383,31 @@ Every photo comes back with `reactions: { counts, total, mine }`, `commentCount`
 | `DELETE` | `/api/albums/:albumId/photos/:photoId` | member | Take a photo out. Returns `{ album }` |
 | `GET` | `/api/photos/:photoId/albums` | member | `{ albumIds }`: the albums a photo is in |
 
+## Moments
+
+A **moment** is something the group is doing right now: "Friday at the lake". Anyone in the group starts one; for a few hours it is open, friends are told, and photos posted into it are collected on its page (Memories → Moments, and a banner above the feed while it lasts). It closes by itself.
+
+It is its own model (`moments`), not an extension of albums: an album is a collection of photos that already exist, picked by hand afterwards; a moment is open while it happens, and photos join it as they are posted. (The roadmap named the model but not its behaviour, so this is the design that was built: it is easy to change.)
+
+- **Starting.** `{ title (1–60 characters, one line), emoji? (a single emoji), durationHours? (1, 3, 12 or 24; default 3) }`. A group has **one open moment at a time**: starting another while one is open is `409 MOMENT_ALREADY_OPEN` with the open one's id in `details`. The check and the write share a serializable transaction, so two people starting at once can't both succeed.
+- **Posting into it.** `POST /api/groups/:groupId/photos` takes an optional `momentId` field. It must be one of the group's moments and still open: another group's is a 400, one that isn't there a 404, and one that has ended `409 MOMENT_ENDED` (nothing is posted; the apps offer "Post to the group instead"). It is checked before the image is processed and again in the same transaction as the write, so a moment closing mid-upload can't take a late photo. A photo is in at most one moment (`photos.moment_id`); photos show it as `momentId`.
+- **Ending and deleting.** The creator and the group owner can end a moment early (`endsAt` moves to now; ending one that has ended changes nothing) or delete it. Deleting leaves its photos in the group (`moment_id` becomes `NULL`). Other members get a 403.
+- **The page.** A moment's photos are listed oldest first with the usual cursor, minus photos by people with a block between them and the viewer; its photo count and cover (the newest photo) follow the same rule.
+- **Accounts and groups.** A moment belongs to its group, like an album: if its creator's account is deleted it stays (`created_by_id` becomes `NULL`, and the owner can still manage it), and their photos in it are deleted with the rest of their photos. It goes when the group does.
+- **Notifications.** A new kind, `moments` (on by default; Settings → Notifications), tells the rest of the group "Tomáš started a moment: 🌙 Friday at the lake", under the usual rules (never the person who did it, never across a block, mutes, quiet hours). Tapping it opens `/memories/moments/:id`.
+
+| Method | Endpoint | Who | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/groups/:groupId/moments` | member | Newest first: `{ moments, nextCursor }` |
+| `GET` | `/api/groups/:groupId/moments/open` | member | `{ moment }`: the one taking photos now, or `null` |
+| `POST` | `/api/groups/:groupId/moments` | member | `{ title, emoji?, durationHours? }`: start one |
+| `GET` | `/api/moments/:momentId` | member | One moment |
+| `POST` | `/api/moments/:momentId/end` | creator or owner | End it now |
+| `DELETE` | `/api/moments/:momentId` | creator or owner | Delete it (not its photos) |
+| `GET` | `/api/moments/:momentId/photos` | member | Oldest first: `{ photos, nextCursor }` |
+
+A moment comes back as `{ id, groupId, title, emoji, startsAt, endsAt, isOpen, createdBy, photoCount, cover, canManage }`.
+
 ## Analytics
 
 `GET /api/groups/:groupId/stats/:year?tz=Europe/Bratislava` returns `{ stats }`: everything the Wrapped slides need, for members of the group (others get 404). It's counted live from photos, reactions and comments, with no aggregate tables.
@@ -386,6 +438,23 @@ Every photo comes back with `reactions: { counts, total, mine }`, `commentCount`
   - **Why no aggregate tables:** the spec says to add them only if performance requires it. A Wrapped is opened rarely, and a finished year's numbers are saved (see Wrapped below).
   - **If it's ever needed:** the next step would be copying `group_id` onto reactions and comments, so their counts become a single index range scan.
 
+## Group pulse and nudges
+
+Two gentle ways to keep a group going. **Neither ever names, counts or hints at who hasn't posted.**
+
+- **This month.** `GET /api/groups/:groupId/pulse?tz=Europe/Bratislava` returns `{ pulse }` for members (others get 404): the group's photos, reactions given and comments written this calendar month in the viewer's time zone, and its weekly streak. The card sits above the feed on Home (web and iPhone) once there is someone else in the group, and says "A fresh month" when nothing has happened yet.
+  - **Only the group.** The response has no people in it at all: no ids, names or per-person counts. A test asserts its exact keys.
+  - **Weekly streak.** Weeks run Monday to Sunday from local midnight in the viewer's zone. The streak is the number of weeks in a row with at least one photo from anyone in the group, counting this week once it has one. A week still in progress doesn't break it: with no photo yet, it counts back from last week and `thisWeekDone` is false ("a photo this week keeps it going"). It is counted one indexed lookup per week, eight at a time, until a week with no photo (at most 520 weeks), so it costs little. It is the same for every member.
+  - **Cache.** On the web, posting or deleting a photo refreshes the card (`pulseKeys`).
+- **Gentle reminders** (a notification kind, `nudges`, on by default; Settings → Notifications → Reminders). The scheduler considers each person once a day, in the early evening (17:00–20:00 their time), and sends at most one reminder per person per fortnight, whichever group it is about (`user_settings.nudged_at`, claimed atomically so two server processes can't both send).
+  - **Who:** someone who hasn't posted in any group for 10 days, about a group they've been in for at least a week, haven't muted, and where somebody else has posted in the last 14 days. If there are several, the group with the newest photo from someone else. If none qualifies, the person keeps their fortnight.
+  - **What it says:** "Got a moment from this week? Share it with The Boys 📸". It is about the person's own quiet, with no names and nothing about anyone else. Tapping it opens the camera for that group (`/camera?group=…`).
+  - **How it travels:** like any notification: browsers and iPhones, quiet hours, the master switch and the per-kind switch all apply. A person needs a time zone (the apps keep it up to date) for it to know when evening is.
+
+| Method | Endpoint | Who | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/api/groups/:groupId/pulse?tz=…` | member | `{ pulse: { timeZone, month: { year, month, from, to, photos, reactions, comments }, streak: { weeks, thisWeekDone } } }` |
+
 ## Wrapped
 
 A group's year, played as a full-screen story of slides. There's a Wrapped for each group and each year in which the group posted at least one photo (years in the viewer's time zone). The **Wrapped** tab appears in the bottom navigation once you have one.
@@ -401,20 +470,30 @@ A group's year, played as a full-screen story of slides. There's a Wrapped for e
   5. `mostReactedPhoto`: the photo and its reaction count
   6. `reactions`: reactions sent, comments written and who reacted most
   7. `collage`: up to 9 highlights
-  8. `outro`: "That's your year together. ❤️" with the totals
+  8. `you`: your own year in the group (see below)
+  9. `outro`: "That's your year together. ❤️" with the totals
 
-  A slide with nothing to show is left out (no reactions means no slides 5 and 6; the collage needs at least 2 photos).
+  A slide with nothing to show is left out (no reactions means no slides 5 and 6; the collage needs at least 2 photos; someone who did nothing that year gets no `you` slide).
+- **Your own card** (`you`). It is the viewer's, built for each person who opens the story: `{ photos, reactionsGiven, commentsWritten, reactionsReceived, commentsReceived, busiestMonth, bestPhoto }`.
+  - **Only theirs.** It holds counts and one photo of their own, nothing about anyone else. It also comes back as `you` in `GET /groups/:groupId/stats/:year`.
+  - **Opting out.** Someone who turned off "Show my name in Wrapped" still sees their own card: the setting only keeps their name off other people's slides.
+  - **What the numbers mean.** `reactionsGiven` and `commentsWritten` are counted in the year, like the rest of Wrapped. `reactionsReceived` and `commentsReceived` are on photos *posted* that year, from anyone and whenever given (as for the most reacted photo). `busiestMonth` is their own busiest month (the earlier on a tie). `bestPhoto` is their most reacted-to photo of the year: only each person's single best is saved, so if it was deleted after the year was saved, the card has no best photo rather than a broken one.
 - **Saved once the year is over.** While a year is in progress (`final: false`), its Wrapped is counted live on every opening.
   - **When it's saved:** once the year has ended in that time zone (and 10 more minutes have passed, so photos still uploading at midnight count), the first opening saves the numbers in the `wrapped` table, keyed by group, year and canonical zone name. If two friends open it at the same moment, the first save stands.
   - **After that:** every later opening shows the same story.
   - **What's stored:** the analytics numbers, with people and photos as ids. Names, avatars and photos are looked up when it's shown, so a photo deleted since simply drops out.
-  - **Format changes:** a format version in the stored JSON means a change to the numbers recounts older saves (version 2 recounted days in zones where clocks skip midnight; version 3 added the per-person counts below). A save in a newer format than the server knows is left alone.
+  - **Format changes:** a format version in the stored JSON means a change to the numbers recounts older saves (version 2 recounted days in zones where clocks skip midnight; version 3 added the per-person counts below; version 4 added each person's busiest month and the reactions and comments their photos received, for the personal card). A save in a newer format than the server knows is left alone.
+  - **What the version 4 bump changes.** The first time a year saved in an older format is opened, it is counted again from the database as it is now and saved as version 4. Its numbers can therefore differ slightly from what friends saw before: a photo, comment, reaction or account deleted since no longer counts. From then on it is fixed again. A year not yet saved is simply counted and saved in version 4.
   - **Speed:** at the spec's full scale, a saved Wrapped loads in about 6 ms, against about 270 ms to count it.
 - **The story (web).** `/wrapped` lists them by year; `/wrapped/:year?group=…` plays one full screen, outside the app shell.
   - **Playback:** each slide plays for 4.5 to 8 seconds behind a progress bar. Slides enter with a transition, numbers count up, and charts and photos animate in.
   - **Controls:** tap the right of the screen (or swipe left, or press →) for the next slide, and the left third (swipe right, ←) for the previous one. Press and hold, or Space, to pause; swipe down or Escape to close.
   - **Wide screens:** the story plays in a phone-shaped frame with arrows either side.
   - **Pausing and motion:** playback pauses while the tab is hidden. With reduced motion, numbers and slides appear without animating.
+- **Share cards.** The share button in the story's top bar (every slide but the intro) turns the slide on screen into a 1080 × 1920 picture and opens the system share sheet with it.
+  - **On the device, and only out through the share sheet.** The card is drawn on the phone or browser (web: a canvas; iPhone: SwiftUI's `ImageRenderer`) and nothing about it goes to the server beyond fetching the photos it shows. Browsers with no share sheet for files (most desktop ones) save the PNG to downloads instead.
+  - **Photos you may not save are colour blocks.** Exporting a card counts as saving, so a photo whose uploader turned off photo saving (`canSave` is false for you) is replaced by a block of the uploader's colour, and its image is never even requested. Your own photos always show. The decision is plain data (`card-plan.ts`, `ShareCard.swift`) with tests.
+  - **Written for whoever it's sent to.** A card says "We took 120 photos" and names people by first name rather than "You", and always looks the same, whatever theme the sender uses. People who left themselves out of Wrapped are left off, as in the story. Your own card says "{Name}'s 2026".
 
 ## Polish (Phase 10)
 
@@ -474,27 +553,31 @@ The web app's look, chosen from two design directions. Everyone in a group has t
   - **Group settings:** your colour, the group photo, members (report, block, remove), name and emoji, mute, invite links, leave.
 - **Settings** (`/settings/*`):
   - **Account:** profile photo, display name, username, password (signs out your other devices), signed-in devices, download your photos (zip), delete account.
-  - **Notifications:** turn on push for this device, a master switch, photos, reactions, comments, new members, On this day, Wrapped, quiet hours, and mute per group.
+  - **Notifications:** turn on push for this device, a master switch, photos, reactions, comments, new members, moments, On this day, Wrapped, gentle reminders, quiet hours, and mute per group.
   - **Appearance:** theme, app icon (the browser tab icon; the iPhone app can change its Home Screen icon), reduce motion (Match device, On or Off; it also overrides the `motion-reduce:` variant), haptics (where the browser can vibrate).
   - **Privacy & safety:** location is always removed; let friends save your photos; show my name in Wrapped; blocked people; invite links you've made; report a problem.
   - **Photos & data:** which camera opens first, mirror the front camera, grid lines, save a copy of what you post, photo quality (standard 1920 px or high 2560 px), upload on mobile data (where the browser can tell), data saver (never the full-size photo), and the photos saved on this device (with Clear).
 
   Appearance and Photos & data are per device (`lib/device-settings.ts`, in localStorage). Account, notification and privacy settings are stored with your account.
 - **Service worker** (`client/public/sw.js`): shows push notifications and opens the right page when you tap one, and keeps photo images you've seen in a cache (photos never change once posted). Signing out empties it and unsubscribes the device.
-- **API additions.** All additive, so older app builds keep working. The iOS app uses them all except push (the iPhone app can't receive notifications yet; its notification settings still apply to the web app).
+- **API additions.** All additive, so older app builds keep working. The iOS app uses them all.
   - **Colours:** `PATCH /api/groups/:groupId/members/me` `{ color?, muted? }` (`409 COLOR_TAKEN`). `color` on members, and `myColor`, `muted` and `avatarUrl` on groups.
   - **Group photo:** `PUT`, `DELETE` and `GET /api/groups/:groupId/avatar` (owner sets it; members see it).
   - **Photos:** `reactions.reactors` (`{ userId, type }[]`), `canSave`, `GET /api/photos/:id/images/full?download=1`, `GET /api/groups/:groupId/photos?uploaderId=…`.
   - **Settings:** `GET` and `PATCH /api/users/me/settings` (deep partial).
   - **Account:** `PATCH /api/users/me` also takes `username` (`409 USERNAME_TAKEN`). `PUT /api/users/me/password`. `GET /api/users/me/sessions`, `DELETE /api/users/me/sessions/:sessionId`, `DELETE /api/users/me/sessions` (all others). `GET /api/users/me/photos/archive` (zip). `GET /api/users/me/invites`, `DELETE /api/users/me/invites/:inviteId`.
   - **Safety:** `GET /api/users/me/blocks`, `PUT` and `DELETE /api/users/me/blocks/:userId`. A block hides photos, comments and reactions both ways, everywhere, and stops notifications between the two people. `POST /api/reports` (stored; rate limited).
-  - **Wrapped:** `byUser` on the photos and busiest-month slides, and `color` on every person. People who turn off "Show my name in Wrapped" count in the totals but are left off person slides. Saved Wrapped are format version 3.
-  - **Push:** `GET /api/notifications/push-key`, and `POST` and `DELETE /api/notifications/subscriptions`.
-- **Push notifications** (Web Push, `web-push`). New photos, reactions to your photos, comments, new members, On this day (09:00 your time) and Wrapped (1 January, 10:00).
+  - **Wrapped:** `byUser` on the photos and busiest-month slides, and `color` on every person. People who turn off "Show my name in Wrapped" count in the totals but are left off person slides. Saved Wrapped are format version 4 (3 when this was added; see Wrapped).
+  - **Push:** `GET /api/notifications/push-key` (`{ publicKey, apns }`: the VAPID key for browsers, and whether the server can notify iPhones), `POST` and `DELETE /api/notifications/subscriptions` (browsers), and `POST` and `DELETE /api/notifications/devices` (the iPhone app: `{ token, environment: "sandbox" | "production" }`, and `{ token }`).
+- **Push notifications** (Web Push with `web-push`, and Apple push for the iPhone app). New photos, reactions to your photos, comments, new members, moments, gentle reminders, On this day (09:00 your time) and Wrapped (1 January, 10:00).
   - **Never sent:** to the person who did it, between blocked people, or from a group you've muted.
   - **Quiet hours:** notifications are queued and sent when quiet hours end (only the latest per kind).
-  - **Scheduler:** runs every minute in the server process, only when push is configured. It needs `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT`; without them push is simply off.
-  - **On iPhone:** web push only works once the app is added to the Home Screen.
+  - **Scheduler:** runs every minute in the server process, only when at least one kind of push is configured.
+  - **Browsers** need `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT`; without them web push is simply off. On iPhone, web push only works once the web app is added to the Home Screen.
+  - **The iPhone app** is reached through Apple's push service (`lib/apns.ts`: HTTP/2 and an ES256 provider token, from Node's built-ins). It needs `APNS_KEY` or `APNS_KEY_PATH`, `APNS_KEY_ID` and `APNS_TEAM_ID` (and `APNS_TOPIC` if the bundle ID differs); setting only some of them stops the server starting. A person gets a notification on every browser and every iPhone they're signed in on, under the same settings, quiet hours and mutes.
+  - **A phone belongs to a session** (`apns_devices.session_id`, deleted with the session). Signing out, being signed out elsewhere, changing the password and deleting the account all stop its notifications, and a phone whose session has run out is skipped even before the row is swept up. Signing in as someone else on the same phone moves its token (it is unique) to them.
+  - **Apple's answers.** A token Apple says is dead (`410`, `BadDeviceToken`, `DeviceTokenNotForTopic`) is deleted; anything else is logged and tried again with the next notification. A connection Apple has closed is replaced and the request retried once; the notification's tag is its collapse ID, so a duplicate replaces the first on the phone.
+  - **Sandbox or production** is stored per phone (Xcode builds use the sandbox, TestFlight and the App Store production), so one server serves both.
 
 ## Local machine notes
 

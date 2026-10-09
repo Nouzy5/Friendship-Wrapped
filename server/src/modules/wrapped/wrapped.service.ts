@@ -13,8 +13,12 @@ import * as wrappedRepository from "./wrapped.repository.js";
  * format are counted again (and saved again).
  * - 2: days start at the right moment where clocks skip midnight (Chile, Cuba, the Azores).
  * - 3: the busiest month's people and each photographer's best photo.
+ * - 4: each person's busiest month and the reactions and comments their photos received, for
+ *   the personal card. A year saved before this is counted again from what is in the database
+ *   now, so its numbers can differ slightly from what friends saw (a photo or an account
+ *   deleted since no longer counts).
  */
-const FORMAT_VERSION = 3;
+const FORMAT_VERSION = 4;
 
 type SavedNumbers = YearNumbers & { version: number };
 

@@ -1,4 +1,5 @@
 const monthYear = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" });
+const monthName = new Intl.DateTimeFormat(undefined, { month: "long" });
 const dateTime = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 const dayMonth = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" });
 const dayMonthYear = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" });
@@ -13,6 +14,11 @@ const DAY = 24 * HOUR;
 /** e.g. "October 2026" in the viewer's locale. */
 export function formatMonthYear(isoDate: string): string {
   return monthYear.format(new Date(isoDate));
+}
+
+/** The name of a month (1–12) in the viewer's locale, e.g. "October". */
+export function formatMonthName(month: number): string {
+  return monthName.format(new Date(2000, month - 1, 1));
 }
 
 /** e.g. "12 Oct" in the viewer's locale. */
@@ -48,6 +54,12 @@ export function formatRelativeTime(isoDate: string, now = new Date()): string {
 /** e.g. "8,421" in the viewer's locale. */
 export function formatNumber(count: number): string {
   return wholeNumber.format(count);
+}
+
+/** A clip's length as a player shows it: 7 seconds is "0:07", a minute is "1:00". Rounded up, so a clip is never "0:00". */
+export function formatDuration(milliseconds: number): string {
+  const seconds = Math.max(1, Math.ceil(milliseconds / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 /** The word to follow a count: nounFor(1, "photo") is "photo", nounFor(3, "photo") is "photos". */

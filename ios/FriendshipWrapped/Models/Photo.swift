@@ -12,6 +12,17 @@ struct Photo: Codable, Identifiable, Hashable {
         let thumbnail: String
     }
 
+    /// How to play a video post. The file is served through the API like the images: with the
+    /// session cookie, and in pieces (`Range`), so it starts at once and can be scrubbed.
+    struct Video: Codable, Hashable {
+        /// A server path, e.g. `/api/photos/<id>/video`.
+        let url: String
+        let durationMs: Int
+        let sizeBytes: Int
+        /// A Live Photo's motion: plays by itself, muted and looping.
+        let isLive: Bool
+    }
+
     struct GroupInfo: Codable, Hashable {
         let id: String
         let name: String
@@ -20,6 +31,11 @@ struct Photo: Codable, Identifiable, Hashable {
 
     let id: String
     let groupId: String
+    /// The moment it was posted into, if any.
+    let momentId: String?
+    /// Set for a video. The three images are then its poster frame, so everything that shows
+    /// photos shows a video too.
+    let video: Video?
     let caption: String?
     /// Pixel size of the full rendition, so space can be reserved before it loads.
     let width: Int
@@ -49,8 +65,17 @@ struct Photo: Codable, Identifiable, Hashable {
         CGFloat(width) / CGFloat(max(height, 1))
     }
 
+    var isVideo: Bool {
+        video != nil
+    }
+
+    /// "photo" or "video", for labels.
+    var noun: String {
+        isVideo ? "video" : "photo"
+    }
+
     var altText: String {
-        caption ?? "Photo by \(uploader.displayName)"
+        caption ?? "\(isVideo ? "Video" : "Photo") by \(uploader.displayName)"
     }
 
     enum Variant {

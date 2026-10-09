@@ -36,6 +36,23 @@ const envSchema = z.object({
   VAPID_PRIVATE_KEY: optional(z.string().regex(/^[A-Za-z0-9_-]+$/, "VAPID_PRIVATE_KEY must be base64url")),
   /** A contact for push services: a mailto: or https: URL. */
   VAPID_SUBJECT: optional(z.string().regex(/^(mailto:|https:\/\/)\S+$/, "VAPID_SUBJECT must be a mailto: or https: URL")),
+
+  // Apple Push Notifications for the iPhone app. Optional: without a key, ID and team, the iPhone
+  // app gets no notifications. The key is the .p8 file from Apple Developer → Keys (the
+  // contents, with line breaks as \n if the host wants one line), or a path to the file.
+  APNS_KEY: optional(z.string().min(1)),
+  APNS_KEY_PATH: optional(z.string().min(1)),
+  /** The 10-character ID of that key. */
+  APNS_KEY_ID: optional(z.string().regex(/^[A-Z0-9]{10}$/, "APNS_KEY_ID must be the key's 10-character ID")),
+  /** The 10-character Apple Developer Team ID. */
+  APNS_TEAM_ID: optional(z.string().regex(/^[A-Z0-9]{10}$/, "APNS_TEAM_ID must be the 10-character Team ID")),
+  /** The app's bundle identifier, which Apple calls the notification's topic. Defaults to this app's. */
+  APNS_TOPIC: optional(z.string().min(1)),
+
+  // Video. Posting a video needs ffmpeg and ffprobe: on the PATH, or at these paths. Without them
+  // the server runs as before and refuses videos (503 VIDEO_UNAVAILABLE).
+  FFMPEG_PATH: optional(z.string().min(1)),
+  FFPROBE_PATH: optional(z.string().min(1)),
 });
 
 const parsed = envSchema.safeParse(process.env);

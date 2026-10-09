@@ -147,7 +147,42 @@ struct PhotoDetailView: View {
 
     /// The photo at its own shape across the screen, at most 70% of it tall, with the poster's
     /// name tag and arrows to the photos either side.
-    private func photoView(_ photo: Photo, in container: CGSize) -> some View {
+    @ViewBuilder private func photoView(_ photo: Photo, in container: CGSize) -> some View {
+        if let video = photo.video {
+            videoView(photo, video: video, in: container)
+        } else {
+            stillView(photo, in: container)
+        }
+    }
+
+    /// A video: its poster frame, then the player. No swiping through the feed on top of it (that
+    /// would fight with scrubbing); the arrows step instead.
+    private func videoView(_ photo: Photo, video: Photo.Video, in container: CGSize) -> some View {
+        let width = max(container.width - 16, 1)
+        let height = min(width / max(photo.aspectRatio, 0.01), max(container.height * 0.7, 160))
+
+        return Color.black
+            .frame(width: width, height: height)
+            .overlay {
+                PhotoVideoPlayer(photo: photo, video: video)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(alignment: .topLeading) {
+                NameTag(name: photo.uploader.displayName, color: groups.colorOf(photo.uploader.id, in: photo.groupId))
+                    .padding(12)
+                    .padding(.trailing, 24)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            .overlay(alignment: .leading) {
+                stepButton(to: photo.feed?.newerId, direction: .newer)
+            }
+            .overlay(alignment: .trailing) {
+                stepButton(to: photo.feed?.olderId, direction: .older)
+            }
+    }
+
+    private func stillView(_ photo: Photo, in container: CGSize) -> some View {
         let width = max(container.width - 16, 1)
         let height = min(width / max(photo.aspectRatio, 0.01), max(container.height * 0.7, 160))
 
@@ -208,7 +243,7 @@ struct PhotoDetailView: View {
             }
             .buttonStyle(PressScaleButtonStyle())
             .padding(8)
-            .accessibilityLabel(direction == .newer ? "Newer photo" : "Older photo")
+            .accessibilityLabel(direction == .newer ? "Newer post" : "Older post")
         }
     }
 

@@ -168,6 +168,7 @@ export function NotificationSettingsPage() {
             <SettingsSwitch label="Reactions" description="When someone reacts to your photo" checked={notifications.reactions} disabled={off} onChange={(reactions) => set({ reactions })} />
             <SettingsSwitch label="Comments" description="On your photos, and on ones you've commented on" checked={notifications.comments} disabled={off} onChange={(comments) => set({ comments })} />
             <SettingsSwitch label="New members" description="When someone joins one of your groups" checked={notifications.members} disabled={off} onChange={(members) => set({ members })} />
+            <SettingsSwitch label="Moments" description="When someone starts a moment in one of your groups" checked={notifications.moments} disabled={off} onChange={(moments) => set({ moments })} />
           </SettingsGroup>
         </SettingsSection>
 
@@ -175,6 +176,12 @@ export function NotificationSettingsPage() {
           <SettingsGroup>
             <SettingsSwitch label="On this day" description="In the morning, when there are photos from this date" checked={notifications.onThisDay} disabled={off} onChange={(onThisDay) => set({ onThisDay })} />
             <SettingsSwitch label="Wrapped is ready" description="Once a year, when your group's Wrapped is out" checked={notifications.wrapped} disabled={off} onChange={(wrapped) => set({ wrapped })} />
+          </SettingsGroup>
+        </SettingsSection>
+
+        <SettingsSection title="Reminders" footnote="Never more than one every two weeks, and never about anyone else: it only says it has been a while since you posted.">
+          <SettingsGroup>
+            <SettingsSwitch label="Gentle reminders" description="In the early evening, when you haven't posted for a while" checked={notifications.nudges} disabled={off} onChange={(nudges) => set({ nudges })} />
           </SettingsGroup>
         </SettingsSection>
 

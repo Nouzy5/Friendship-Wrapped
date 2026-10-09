@@ -7,6 +7,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { env } from "../config/env.js";
 import { logger } from "./logger.js";
@@ -39,10 +40,34 @@ export async function putObject(key: string, body: Buffer, contentType: string):
   await client.send(new PutObjectCommand({ Bucket, Key: key, Body: body, ContentType: contentType }));
 }
 
-/** The object's contents as a stream, or null if there is no object with that key. */
-export async function getObject(key: string): Promise<StoredObject | null> {
+/** Stores a file from disk without reading it all into memory (videos). `size` is its length in bytes. */
+export async function putObjectFromFile(key: string, path: string, size: number, contentType: string): Promise<void> {
+  const body = createReadStream(path);
   try {
-    const res = await client.send(new GetObjectCommand({ Bucket, Key: key }));
+    await client.send(new PutObjectCommand({ Bucket, Key: key, Body: body, ContentLength: size, ContentType: contentType }));
+  } finally {
+    body.destroy();
+  }
+}
+
+/** Both ends included, as in an HTTP `Range: bytes=start-end` header. */
+export type StoredRange = { start: number; end: number };
+
+/** The object's contents as a stream, or null if there is no object with that key. */
+export function getObject(key: string): Promise<StoredObject | null> {
+  return read(key);
+}
+
+/** Just `range` of the object (videos are fetched in pieces), or null if there is no object with that key. */
+export function getObjectRange(key: string, range: StoredRange): Promise<StoredObject | null> {
+  return read(key, range);
+}
+
+async function read(key: string, range?: StoredRange): Promise<StoredObject | null> {
+  try {
+    const res = await client.send(
+      new GetObjectCommand({ Bucket, Key: key, ...(range && { Range: `bytes=${range.start}-${range.end}` }) }),
+    );
     if (!(res.Body instanceof Readable)) throw new Error(`Unexpected body type for object ${key}`);
     return { body: res.Body, contentType: res.ContentType, contentLength: res.ContentLength };
   } catch (error) {

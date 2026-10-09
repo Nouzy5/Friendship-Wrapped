@@ -5,6 +5,7 @@ import { Spinner } from "../components/ui/Spinner";
 import { StateMessage } from "../components/ui/StateMessage";
 import { useSession } from "../features/auth/hooks";
 import { GroupAvatar } from "../features/groups/components/GroupAvatar";
+import { expiredInviteFrom } from "../features/invites/api";
 import { useAcceptInvite, useInvitePreview } from "../features/invites/hooks";
 import { ApiError } from "../lib/api-client";
 import { getFormError } from "../lib/form-errors";
@@ -31,18 +32,40 @@ export function InvitePage() {
   }
 
   if (preview.isLoadingError) {
-    const invalid = preview.error instanceof ApiError && preview.error.status === 404;
-    return invalid ? (
+    const expired = expiredInviteFrom(preview.error);
+    const gone = preview.error instanceof ApiError && preview.error.status === 404;
+    const home = (
+      <Link to="/" className={buttonClasses("secondary")}>
+        Go to Friendship Wrapped
+      </Link>
+    );
+
+    if (expired) {
+      return (
+        <StateMessage
+          headingLevel="h1"
+          emoji="⌛"
+          title="This invite has expired"
+          description={
+            <>
+              <span className="wrap-anywhere">{expired.invitedBy}</span> invited you to join{" "}
+              <span className="wrap-anywhere">
+                {expired.groupEmoji} {expired.groupName}
+              </span>
+              , but the link has run out. Ask <span className="wrap-anywhere">{expired.invitedBy}</span> for a new one.
+            </>
+          }
+          action={home}
+        />
+      );
+    }
+    return gone ? (
       <StateMessage
         headingLevel="h1"
         emoji="🔗"
-        title="This invite has expired"
-        description="Invite links last 7 days, and the group owner can reset them. Ask your friend for a new one."
-        action={
-          <Link to="/" className={buttonClasses("secondary")}>
-            Go to Friendship Wrapped
-          </Link>
-        }
+        title="This invite doesn't work"
+        description="The link may have been turned off, or it wasn't copied in full. Ask your friend for a new one."
+        action={home}
       />
     ) : (
       <StateMessage
@@ -55,13 +78,15 @@ export function InvitePage() {
     );
   }
 
-  const { group, memberOfGroupId } = preview.data;
+  const { group, invitedBy, memberOfGroupId } = preview.data;
   // After signing up or logging in, people come straight back here.
   const returnHere = { from: location.pathname };
 
   return (
     <div className="flex flex-col items-center gap-2 text-center">
-      <p className="text-sm text-sub">You've been invited to join</p>
+      <p className="text-sm text-sub wrap-anywhere">
+        {invitedBy ? `${invitedBy} invited you to join` : "You've been invited to join"}
+      </p>
       <div className="my-3">
         <GroupAvatar group={group} size={80} memberColors={false} />
       </div>

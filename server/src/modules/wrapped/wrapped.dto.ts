@@ -1,4 +1,4 @@
-import type { PersonCount, YearStats } from "../analytics/analytics.service.js";
+import type { PersonCount, YearStats, YourYear } from "../analytics/analytics.service.js";
 import type { PhotoView } from "../photos/photo.dto.js";
 
 /** A collage needs a few photos to be a selection. */
@@ -34,6 +34,8 @@ export type WrappedSlide =
   | { type: "mostReactedPhoto"; photo: PhotoView; count: number }
   | { type: "reactions"; total: number; comments: number; topReactor: PersonCount | null }
   | { type: "collage"; photos: PhotoView[] }
+  /** The viewer's own year in the group. Everyone gets their own; it holds nothing about anyone else. */
+  | ({ type: "you" } & YourYear)
   | { type: "outro"; photos: number; reactions: number; comments: number; people: number };
 
 type GroupRef = { id: string; name: string; emoji: string };
@@ -54,8 +56,11 @@ export type WrappedView = WrappedSummary & {
   slides: WrappedSlide[];
 };
 
-/** The story in order: intro, photos, top photographer, busiest month, most reacted photo, reactions, collage, outro. */
-export function toSlides({ photos, reactions, comments, highlights, activeUserCount }: YearStats): WrappedSlide[] {
+/**
+ * The story in order: intro, photos, top photographer, busiest month, most reacted photo,
+ * reactions, collage, the viewer's own year, outro.
+ */
+export function toSlides({ photos, reactions, comments, highlights, activeUserCount, you }: YearStats): WrappedSlide[] {
   const slides: WrappedSlide[] = [
     { type: "intro" },
     { type: "photos", total: photos.total, photographerCount: photos.photographerCount, byUser: photos.byUser },
@@ -86,6 +91,7 @@ export function toSlides({ photos, reactions, comments, highlights, activeUserCo
     });
   }
   if (highlights.length >= MIN_COLLAGE_PHOTOS) slides.push({ type: "collage", photos: highlights });
+  if (you) slides.push({ type: "you", ...you });
   slides.push({
     type: "outro",
     photos: photos.total,

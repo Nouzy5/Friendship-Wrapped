@@ -66,7 +66,7 @@ final class APIClient {
         return try await execute(request)
     }
 
-    /// Uploads a multipart form (photos, profile pictures) and decodes the JSON response.
+    /// Uploads a multipart form (photos, videos, profile pictures) and decodes the JSON response.
     /// `progress` gets the fraction sent so far (0–1), on a background queue.
     func upload<Response: Decodable>(
         _ method: HTTPMethod,
@@ -76,6 +76,22 @@ final class APIClient {
     ) async throws -> Response {
         var request = try makeRequest(method, url: apiURL(path))
         request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
+
+        if form.containsFile {
+            // A video: the body is written to a file and sent from it, so it never sits in memory.
+            // The server converts the video before it answers, which can take a while.
+            request.timeoutInterval = 300
+            let bodyFile = FileManager.default.temporaryDirectory.appendingPathComponent("upload-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: bodyFile) }
+            do {
+                try form.write(to: bodyFile)
+            } catch {
+                throw APIError.unexpected
+            }
+            let data = try await execute(request, uploadingFile: bodyFile, progress: progress)
+            return try decode(Response.self, from: data)
+        }
+
         request.timeoutInterval = 120
         let data = try await execute(request, uploading: form.encoded(), progress: progress)
         return try decode(Response.self, from: data)
@@ -83,18 +99,27 @@ final class APIClient {
 
     /// Downloads an image the API serves at a server path, e.g. `/api/photos/<id>/images/thumbnail`.
     func imageData(atServerPath path: String) async throws -> Data {
-        guard let baseURL = AppConfig.apiBaseURL else { throw APIError.notConfigured }
-        // Only follow paths on the API's own host: the session cookie must never go anywhere else.
-        guard
-            path.hasPrefix("/"),
-            !path.hasPrefix("//"),
-            let url = URL(string: path, relativeTo: baseURL)?.absoluteURL,
-            url.host() == baseURL.host()
-        else { throw APIError.unexpected }
-
-        var request = makeRequest(.get, url: url)
+        var request = makeRequest(.get, url: try serverURL(forServerPath: path))
         request.setValue("image/*", forHTTPHeaderField: "Accept")
         return try await execute(request)
+    }
+
+    /// Where to stream a video the API serves from, and the headers to send with it. `AVPlayer`
+    /// doesn't send the session cookie by itself, so the player is given it by hand.
+    func mediaSource(atServerPath path: String) throws -> (url: URL, headers: [String: String]) {
+        let url = try serverURL(forServerPath: path)
+        var headers: [String: String] = [:]
+        if let cookie = tokens.cookieHeader { headers["Cookie"] = cookie }
+        return (url, headers)
+    }
+
+    /// Downloads a file the API serves at a server path (a video, to play it from disk or to keep
+    /// it) to a temporary file with this name.
+    func downloadFile(atServerPath path: String, named filename: String) async throws -> URL {
+        var request = makeRequest(.get, url: try serverURL(forServerPath: path))
+        request.setValue("*/*", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 600
+        return try await download(request, named: filename)
     }
 
     /// Downloads a file the API serves (your photo archive) to a temporary file with this name,
@@ -103,6 +128,10 @@ final class APIClient {
         var request = try makeRequest(.get, url: apiURL(path))
         request.setValue("*/*", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 600
+        return try await download(request, named: filename)
+    }
+
+    private func download(_ request: URLRequest, named filename: String) async throws -> URL {
         let result: (URL, URLResponse)
         do {
             result = try await session.download(for: request)
@@ -134,6 +163,19 @@ final class APIClient {
         return url
     }
 
+    /// A server path such as `/api/photos/<id>/video` as an address on the API's own host: the
+    /// session cookie must never go anywhere else.
+    private func serverURL(forServerPath path: String) throws -> URL {
+        guard let baseURL = AppConfig.apiBaseURL else { throw APIError.notConfigured }
+        guard
+            path.hasPrefix("/"),
+            !path.hasPrefix("//"),
+            let url = URL(string: path, relativeTo: baseURL)?.absoluteURL,
+            url.host() == baseURL.host()
+        else { throw APIError.unexpected }
+        return url
+    }
+
     private func makeRequest(_ method: HTTPMethod, url: URL) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method.rawValue
@@ -149,11 +191,15 @@ final class APIClient {
     private func execute(
         _ request: URLRequest,
         uploading body: Data? = nil,
+        uploadingFile bodyFile: URL? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> Data {
         let result: (Data, URLResponse)
         do {
-            if let body {
+            if let bodyFile {
+                let delegate = progress.map { UploadProgressDelegate(onProgress: $0) }
+                result = try await session.upload(for: request, fromFile: bodyFile, delegate: delegate)
+            } else if let body {
                 let delegate = progress.map { UploadProgressDelegate(onProgress: $0) }
                 result = try await session.upload(for: request, from: body, delegate: delegate)
             } else {
@@ -221,7 +267,8 @@ final class APIClient {
             status: status,
             code: body.code ?? "HTTP_ERROR",
             message: body.message ?? "Request failed with status \(status)",
-            issues: body.details ?? []
+            issues: body.details ?? [],
+            info: body.info ?? [:]
         )
     }
 }
@@ -251,6 +298,7 @@ private struct ErrorEnvelope: Decodable {
         let code: String?
         let message: String?
         let details: [FieldIssue]?
+        let info: [String: String]?
 
         enum CodingKeys: String, CodingKey {
             case code, message, details
@@ -260,8 +308,10 @@ private struct ErrorEnvelope: Decodable {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             code = try container.decodeIfPresent(String.self, forKey: .code)
             message = try container.decodeIfPresent(String.self, forKey: .message)
-            // `details` is only a list of field issues for validation errors; ignore any other shape.
+            // `details` is a list of field issues for validation errors, or an object of strings
+            // (who sent an expired invite); ignore any other shape.
             details = try? container.decodeIfPresent([FieldIssue].self, forKey: .details)
+            info = try? container.decodeIfPresent([String: String].self, forKey: .details)
         }
     }
 

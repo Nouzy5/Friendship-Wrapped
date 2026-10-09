@@ -26,6 +26,12 @@ targets:
     platform: iOS
     sources:
       - path: FriendshipWrapped
+    # Apple push notifications. This says "development"; Xcode swaps in "production" when it signs
+    # a TestFlight or App Store build. The App ID needs the Push Notifications capability (ios/README.md).
+    entitlements:
+      path: FriendshipWrapped/FriendshipWrapped.entitlements
+      properties:
+        aps-environment: development
     settings:
       base:
         PRODUCT_NAME: FriendshipWrapped

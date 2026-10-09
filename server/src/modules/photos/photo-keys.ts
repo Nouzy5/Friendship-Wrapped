@@ -6,12 +6,13 @@ export function groupStoragePrefix(groupId: string): string {
   return `groups/${groupId}/`;
 }
 
-/** Fresh, unguessable object keys for one photo's renditions. */
-export function newPhotoKeys(groupId: string): Record<PhotoVariant, string> {
+/** Fresh, unguessable object keys for one post: its renditions, and the video if it is one. */
+export function newPhotoKeys(groupId: string): Record<PhotoVariant, string> & { video: string } {
   const folder = `${groupStoragePrefix(groupId)}photos/${generateToken(16)}/`;
   return {
     full: `${folder}full.webp`,
     medium: `${folder}medium.webp`,
     thumbnail: `${folder}thumbnail.webp`,
+    video: `${folder}video.mp4`,
   };
 }

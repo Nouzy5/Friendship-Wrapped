@@ -42,6 +42,32 @@ struct Wrapped: Decodable {
 enum WrappedSlide: Decodable, Hashable {
     typealias PersonCount = YearStats.PersonCount
 
+    /// The numbers on the personal card.
+    struct Yours: Decodable, Hashable {
+        struct Month: Decodable, Hashable {
+            /// 1–12.
+            let month: Int
+            let count: Int
+        }
+
+        struct BestPhoto: Decodable, Hashable {
+            let photo: Photo
+            let count: Int
+        }
+
+        let photos: Int
+        /// Reactions you sent during the year.
+        let reactionsGiven: Int
+        let commentsWritten: Int
+        /// Reactions your photos of the year received.
+        let reactionsReceived: Int
+        let commentsReceived: Int
+        /// The month you posted the most in.
+        let busiestMonth: Month?
+        /// Your photo of the year with the most reactions, if any got one.
+        let bestPhoto: BestPhoto?
+    }
+
     case intro
     /// `byUser`: everyone who posted, most first (people who turned off "Show my name in
     /// Wrapped" count in the total but aren't listed).
@@ -54,6 +80,8 @@ enum WrappedSlide: Decodable, Hashable {
     case reactions(total: Int, comments: Int, topReactor: PersonCount?)
     /// Up to 9 highlights, at least 2.
     case collage(photos: [Photo])
+    /// Your own year in the group. Everyone gets their own, with nothing about anyone else.
+    case you(Yours)
     case outro(photos: Int, reactions: Int, comments: Int, people: Int)
     /// A slide from a newer server that this version of the app can't show.
     case unknown
@@ -105,6 +133,9 @@ enum WrappedSlide: Decodable, Hashable {
             )
         case "collage":
             self = try .collage(photos: container.decode([Photo].self, forKey: .photos))
+        case "you":
+            // The slide's own fields sit beside its type, so it decodes from the same object.
+            self = try .you(Yours(from: decoder))
         case "outro":
             self = try .outro(
                 photos: container.decode(Int.self, forKey: .photos),

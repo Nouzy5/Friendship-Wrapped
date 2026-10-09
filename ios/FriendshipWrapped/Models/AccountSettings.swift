@@ -21,7 +21,26 @@ struct NotificationSettings: Codable, Equatable {
     var members: Bool
     var onThisDay: Bool
     var wrapped: Bool
+    /// A gentle reminder to post, at most one every two weeks. On unless switched off.
+    var nudges: Bool
+    /// When someone in a group starts a moment. On unless switched off.
+    var moments: Bool
     var quietHours: QuietHours
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabled = try container.decode(Bool.self, forKey: .enabled)
+        photos = try container.decode(Bool.self, forKey: .photos)
+        reactions = try container.decode(Bool.self, forKey: .reactions)
+        comments = try container.decode(Bool.self, forKey: .comments)
+        members = try container.decode(Bool.self, forKey: .members)
+        onThisDay = try container.decode(Bool.self, forKey: .onThisDay)
+        wrapped = try container.decode(Bool.self, forKey: .wrapped)
+        // A server from before reminders doesn't send it.
+        nudges = try container.decodeIfPresent(Bool.self, forKey: .nudges) ?? true
+        moments = try container.decodeIfPresent(Bool.self, forKey: .moments) ?? true
+        quietHours = try container.decode(QuietHours.self, forKey: .quietHours)
+    }
 }
 
 struct QuietHours: Codable, Equatable {
@@ -47,6 +66,8 @@ struct UserSettingsChange: Encodable {
         var members: Bool?
         var onThisDay: Bool?
         var wrapped: Bool?
+        var nudges: Bool?
+        var moments: Bool?
         var quietHours: QuietHoursChange?
     }
 
@@ -72,6 +93,8 @@ extension UserSettings {
             if let value = notifications.members { next.notifications.members = value }
             if let value = notifications.onThisDay { next.notifications.onThisDay = value }
             if let value = notifications.wrapped { next.notifications.wrapped = value }
+            if let value = notifications.nudges { next.notifications.nudges = value }
+            if let value = notifications.moments { next.notifications.moments = value }
             if let quiet = notifications.quietHours {
                 if let value = quiet.enabled { next.notifications.quietHours.enabled = value }
                 if let value = quiet.start { next.notifications.quietHours.start = value }

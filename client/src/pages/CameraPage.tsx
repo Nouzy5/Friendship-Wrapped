@@ -8,16 +8,17 @@ import { headerIconClasses } from "../components/ui/PageHeader";
 import { Spinner } from "../components/ui/Spinner";
 import { StateMessage } from "../components/ui/StateMessage";
 import { useCurrentUser } from "../features/auth/hooks";
+import { useMoment } from "../features/moments/hooks";
 import { CameraViewfinder } from "../features/camera/components/CameraViewfinder";
 import { setCurrentGroupId, useCurrentGroup } from "../features/groups/current-group";
 import { GroupPicker } from "../features/groups/components/GroupPicker";
 import { useGroupMembers, useMyGroups } from "../features/groups/hooks";
 import type { Group } from "../features/groups/types";
 import { PhotoComposer } from "../features/photos/components/PhotoComposer";
-import { imageFileError } from "../lib/image-files";
+import { isVideoFile, mediaFileError, videoLengthError } from "../lib/media-files";
 import { usePageTitle } from "../lib/usePageTitle";
 
-type Shot = { image: Blob; source: "camera" | "file" };
+type Shot = { image?: Blob; video?: Blob; source: "camera" | "file" };
 
 function listNames(names: string[]): string {
   if (names.length <= 1) return names[0] ?? "";
@@ -63,14 +64,19 @@ export function CameraPage() {
   const group = chosen ?? requested ?? current ?? null;
   const [shot, setShot] = useState<Shot | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
-  usePageTitle(shot ? "Share photo" : "Camera");
+  usePageTitle(shot ? (shot.video ? "Share video" : "Share photo") : "Camera");
+
+  // ?moment=…: the moment this photo is meant for. It only counts while it's open, in this group.
+  const requestedMoment = useMoment(searchParams.get("moment"));
+  const moment = requestedMoment.data && requestedMoment.data.isOpen && requestedMoment.data.groupId === group?.id ? requestedMoment.data : null;
 
   const closeTo = group ? `/groups/${group.id}` : "/home";
 
-  function pickFile(file: File) {
-    const error = imageFileError(file);
+  async function pickFile(file: File) {
+    const error = mediaFileError(file) ?? (isVideoFile(file) ? await videoLengthError(file) : null);
     setFileError(error);
-    if (!error) setShot({ image: file, source: "file" });
+    if (error) return;
+    setShot(isVideoFile(file) ? { video: file, source: "file" } : { image: file, source: "file" });
   }
 
   let content;
@@ -106,8 +112,10 @@ export function CameraPage() {
     content = (
       <PhotoComposer
         image={shot.image}
+        video={shot.video}
         group={group}
         discardLabel={shot.source === "camera" ? "Retake" : "Choose another"}
+        moment={moment}
         onDiscard={() => setShot(null)}
         // Replace the camera in history, so "back" from the feed doesn't reopen it.
         onPosted={(photo) => void navigate(`/groups/${photo.groupId}`, { replace: true })}
@@ -122,8 +130,14 @@ export function CameraPage() {
             setFileError(null);
             setShot({ image, source: "camera" });
           }}
-          onPickFile={pickFile}
+          onPickFile={(file) => void pickFile(file)}
         />
+        {moment && (
+          <p className="text-center text-sm font-medium">
+            <span aria-hidden>{moment.emoji ?? "✨"} </span>
+            Posting into {moment.title}
+          </p>
+        )}
         <Audience group={group} />
       </div>
     );
@@ -131,7 +145,7 @@ export function CameraPage() {
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md animate-sheet-up flex-col gap-6 px-2 pt-[calc(0.75rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-      <h1 className="sr-only">{shot ? "Share photo" : "Camera"}</h1>
+      <h1 className="sr-only">{shot ? (shot.video ? "Share video" : "Share photo") : "Camera"}</h1>
       <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-center">
         <Link to={closeTo} aria-label="Close camera" className={headerIconClasses}>
           <CloseIcon className="size-6" />

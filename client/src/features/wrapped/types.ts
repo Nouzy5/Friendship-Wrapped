@@ -28,6 +28,21 @@ export type WrappedSlide =
   | { type: "mostReactedPhoto"; photo: Photo; count: number }
   | { type: "reactions"; total: number; comments: number; topReactor: PersonCount | null }
   | { type: "collage"; photos: Photo[] }
+  /** Your own year in the group. Everyone gets their own, with nothing about anyone else. */
+  | {
+      type: "you";
+      photos: number;
+      /** Reactions you sent during the year. */
+      reactionsGiven: number;
+      commentsWritten: number;
+      /** Reactions your photos of the year received. */
+      reactionsReceived: number;
+      commentsReceived: number;
+      /** The month you posted the most in (1–12). */
+      busiestMonth: { month: number; count: number } | null;
+      /** Your photo of the year with the most reactions, if any got one. */
+      bestPhoto: { photo: Photo; count: number } | null;
+    }
   | { type: "outro"; photos: number; reactions: number; comments: number; people: number };
 
 export type WrappedSlideType = WrappedSlide["type"];

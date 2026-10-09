@@ -143,7 +143,7 @@ describe("uploading", () => {
     const { owner, group } = await groupWith(app, "alice");
     const res = await postPhoto(owner.agent, group.id, undefined, { caption: "No photo" });
     expect(res.status).toBe(400);
-    expect(res.body.error.message).toBe("Choose a photo to upload");
+    expect(res.body.error.message).toBe("Choose a photo or video to upload");
   });
 
   it("rejects files that aren't images, whatever they claim to be", async () => {

@@ -12,6 +12,7 @@ import { HomePage } from "./pages/HomePage";
 import { InvitePage } from "./pages/InvitePage";
 import { LoginPage } from "./pages/LoginPage";
 import { MemoriesPage } from "./pages/MemoriesPage";
+import { MomentPage } from "./pages/MomentPage";
 import { NewGroupPage } from "./pages/NewGroupPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
@@ -67,6 +68,7 @@ export const router = createBrowserRouter([
               { path: "photos/:photoId", element: <PhotoPage /> },
               { path: "memories", element: <MemoriesPage /> },
               { path: "memories/albums/:albumId", element: <AlbumPage /> },
+              { path: "memories/moments/:momentId", element: <MomentPage /> },
               { path: "wrapped", element: <WrappedListPage /> },
               { path: "groups/:groupId", element: <GroupRoute />, children: [{ index: true, element: <GroupPage /> }] },
             ],

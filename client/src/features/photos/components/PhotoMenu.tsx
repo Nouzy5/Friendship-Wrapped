@@ -27,15 +27,18 @@ export function PhotoMenu({ photo, groupName, triggerClassName, onDeleted }: Pho
   const [dialog, setDialog] = useState<"albums" | "report" | "block" | "delete" | null>(null);
   const mine = photo.uploader.id === me.id;
   const firstName = photo.uploader.displayName.split(/\s+/)[0];
+  const noun = photo.kind === "video" ? "video" : "photo";
 
   const items: MenuItem[] = [];
   if (photo.canInteract) items.push({ label: "Add to an album", icon: AlbumIcon, onSelect: () => setDialog("albums") });
-  if (photo.canSave) items.push({ label: "Save photo", icon: DownloadIcon, href: `${photo.imageUrls.full}?download=1`, download: true });
+  if (photo.canSave) {
+    items.push({ label: `Save ${noun}`, icon: DownloadIcon, href: `${photo.video?.url ?? photo.imageUrls.full}?download=1`, download: true });
+  }
   if (!mine) {
-    items.push({ label: "Report photo", icon: FlagIcon, onSelect: () => setDialog("report") });
+    items.push({ label: `Report ${noun}`, icon: FlagIcon, onSelect: () => setDialog("report") });
     items.push({ label: `Block ${firstName}`, icon: BlockIcon, onSelect: () => setDialog("block") });
   }
-  if (photo.canDelete) items.push({ label: "Delete photo", icon: TrashIcon, onSelect: () => setDialog("delete") });
+  if (photo.canDelete) items.push({ label: `Delete ${noun}`, icon: TrashIcon, onSelect: () => setDialog("delete") });
 
   if (items.length === 0) return null;
 
@@ -44,7 +47,7 @@ export function PhotoMenu({ photo, groupName, triggerClassName, onDeleted }: Pho
       <Menu label="More options" trigger={<MoreIcon className="size-[1.375rem]" />} triggerClassName={triggerClassName} items={items} />
 
       <PhotoAlbumsDialog photo={photo} open={dialog === "albums"} onClose={() => setDialog(null)} />
-      <ReportDialog open={dialog === "report"} onClose={() => setDialog(null)} photoId={photo.id} title="Report this photo" />
+      <ReportDialog open={dialog === "report"} onClose={() => setDialog(null)} photoId={photo.id} title={`Report this ${noun}`} />
 
       <ConfirmDialog
         open={dialog === "block"}
@@ -71,9 +74,9 @@ export function PhotoMenu({ photo, groupName, triggerClassName, onDeleted }: Pho
 
       <ConfirmDialog
         open={dialog === "delete"}
-        title="Delete this photo?"
+        title={`Delete this ${noun}?`}
         description={`It will be removed for everyone in ${groupName}. This can't be undone.`}
-        confirmLabel="Delete photo"
+        confirmLabel={`Delete ${noun}`}
         pendingLabel="Deleting…"
         variant="danger"
         isPending={remove.isPending}
@@ -81,7 +84,7 @@ export function PhotoMenu({ photo, groupName, triggerClassName, onDeleted }: Pho
         onConfirm={() =>
           remove.mutate(undefined, {
             onSuccess: () => {
-              toast("Photo deleted");
+              toast(photo.kind === "video" ? "Video deleted" : "Photo deleted");
               setDialog(null);
               onDeleted?.();
             },

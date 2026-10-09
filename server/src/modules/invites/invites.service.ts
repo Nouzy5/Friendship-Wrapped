@@ -6,51 +6,85 @@ import * as groupsRepository from "../groups/groups.repository.js";
 import * as groupsService from "../groups/groups.service.js";
 import * as notifications from "../notifications/notifications.service.js";
 import * as invitesRepository from "./invites.repository.js";
-import { INVITE_TOKEN_PATTERN, publicInviteId } from "./invites.schemas.js";
+import { DEFAULT_INVITE_LIFETIME_DAYS, INVITE_TOKEN_PATTERN, publicInviteId } from "./invites.schemas.js";
 
-const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How long an expired invite is kept. Its link then says who sent it ("Ask Sam for a new
+ * one"); after this it is deleted and the link is simply invalid.
+ */
+const EXPIRED_INVITE_KEPT_MS = 30 * DAY_MS;
 
 export type CreatedInvite = { token: string; expiresAt: Date };
 
 /** What someone holding an invite link may see before joining. */
 export type InvitePreview = {
   group: { name: string; emoji: string; memberCount: number };
+  /** Who made the link. */
+  invitedBy: string;
   expiresAt: Date;
   /** The group id, only revealed to people who are already members. */
   memberOfGroupId: string | null;
 };
 
-const invalidInvite = () => new AppError(404, "INVITE_INVALID", "This invite link is invalid or has expired");
+const invalidInvite = () => new AppError(404, "INVITE_INVALID", "This invite link is invalid or has been turned off");
+
+/**
+ * A link that ran out. It's a 404 like any dead link (older apps only look at the status), but
+ * with its own code and who sent it, so the page can say who to ask for a new one.
+ */
+const expiredInvite = (invite: { createdBy: { displayName: string }; group: { name: string; emoji: string } }) =>
+  new AppError(404, "INVITE_EXPIRED", "This invite link has expired", {
+    invitedBy: invite.createdBy.displayName,
+    groupName: invite.group.name,
+    groupEmoji: invite.group.emoji,
+  });
 
 async function findValidInvite(token: string) {
   if (!INVITE_TOKEN_PATTERN.test(token)) throw invalidInvite();
 
   const invite = await invitesRepository.findInviteWithGroup(sha256Hex(token));
-  if (!invite || invite.expiresAt.getTime() <= Date.now()) throw invalidInvite();
+  if (!invite) throw invalidInvite();
+
+  const now = Date.now();
+  if (invite.expiresAt.getTime() <= now) {
+    // Past the retention it counts as gone, whether or not a new link has swept it up yet.
+    if (invite.expiresAt.getTime() + EXPIRED_INVITE_KEPT_MS <= now) throw invalidInvite();
+    throw expiredInvite(invite);
+  }
   return invite;
 }
 
-/** Any member can create a link. Only its hash is stored, so it can't be shown again later. */
-export async function createInvite(groupId: string, userId: string): Promise<CreatedInvite> {
+/**
+ * Any member can create a link, lasting 1, 7 (the default) or 30 days. Only its hash is
+ * stored, so it can't be shown again later.
+ */
+export async function createInvite(
+  groupId: string,
+  userId: string,
+  lifetimeDays: number = DEFAULT_INVITE_LIFETIME_DAYS,
+): Promise<CreatedInvite> {
   const token = generateToken(16);
-  const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
+  const expiresAt = new Date(Date.now() + lifetimeDays * DAY_MS);
 
   // Checked and written together, so someone being removed at this moment can't keep a fresh link.
   await withTransaction(async (tx) => {
     await groupsService.requireMembership(groupId, userId, tx);
     await invitesRepository.createInvite({ id: sha256Hex(token), groupId, createdById: userId, expiresAt }, tx);
   });
-  await invitesRepository.deleteExpiredInvites(groupId, new Date());
+  await invitesRepository.deleteInvitesExpiredBefore(groupId, new Date(Date.now() - EXPIRED_INVITE_KEPT_MS));
 
   return { token, expiresAt };
 }
 
 export async function previewInvite(token: string, viewerId: string | null): Promise<InvitePreview> {
-  const { group, expiresAt } = await findValidInvite(token);
+  const { group, createdBy, expiresAt } = await findValidInvite(token);
   const membership = viewerId ? await groupsRepository.findMembership(group.id, viewerId) : null;
 
   return {
     group: { name: group.name, emoji: group.emoji, memberCount: group._count.members },
+    invitedBy: createdBy.displayName,
     expiresAt,
     memberOfGroupId: membership ? group.id : null,
   };

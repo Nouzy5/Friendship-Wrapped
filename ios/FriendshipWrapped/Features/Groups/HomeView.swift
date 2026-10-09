@@ -175,6 +175,22 @@ private struct HomeFeed: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
                         .padding(.bottom, 16)
+                } else {
+                    if PushRegistrar.shared.shouldOffer {
+                        // Friends are here: now notifications are worth asking for.
+                        PushPromptCard()
+                            .padding(.horizontal, 16)
+                            .padding(.top, 8)
+                            .padding(.bottom, 16)
+                    }
+                    OpenMomentCard(group: group)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .padding(.bottom, 8)
+                    GroupPulseCard(group: group, latestPhotoID: shownIDs.first)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .padding(.bottom, 16)
                 }
 
                 feedContent

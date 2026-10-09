@@ -43,9 +43,10 @@ struct InviteView: View {
     private func content(_ preview: InvitePreview) -> some View {
         ScrollView {
             VStack(spacing: 0) {
-                Text("You've been invited to join")
+                Text(preview.invitedBy.map { "\($0) invited you to join" } ?? "You've been invited to join")
                     .font(.subheadline)
                     .foregroundStyle(.sub)
+                    .multilineTextAlignment(.center)
                     .riseIn()
 
                 // You can't see into the group yet, so its emoji sits on a plain tile.
@@ -109,11 +110,19 @@ struct InviteView: View {
     }
 
     @ViewBuilder private func failureView(_ failure: APIError) -> some View {
-        if failure.status == 404 {
+        if let expired = ExpiredInvite(failure) {
+            // Says who to ask, since the link can't be used any more.
+            let group = [expired.groupEmoji, expired.groupName].filter { !$0.isEmpty }.joined(separator: " ")
+            EmptyStateView(
+                emoji: "⌛",
+                title: "This invite has expired",
+                message: "\(expired.invitedBy) invited you to join \(group), but the link has run out. Ask \(expired.invitedBy) for a new one."
+            )
+        } else if failure.status == 404 {
             EmptyStateView(
                 emoji: "🔗",
-                title: "This invite has expired",
-                message: "Invite links last 7 days, and the group owner can reset them. Ask your friend for a new one."
+                title: "This invite doesn't work",
+                message: "The link may have been turned off, or it wasn't copied in full. Ask your friend for a new one."
             )
         } else {
             EmptyStateView(

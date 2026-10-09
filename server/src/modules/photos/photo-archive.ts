@@ -42,8 +42,8 @@ function photoFileName(createdAt: Date, timeZone: string): string {
 }
 
 /**
- * Streams a zip of the full rendition of every photo the person posted, in any group,
- * as `<group name>/<YYYY-MM-DD HH.mm.ss>.webp` (times in their own zone, or UTC). Photos
+ * Streams a zip of the full rendition of every photo the person posted (the video itself for
+ * a video), in any group, as `<group name>/<YYYY-MM-DD HH.mm.ss>.webp` (`.mp4`) (times in their own zone, or UTC). Photos
  * are fetched from storage one at a time as the zip is written, so memory stays flat
  * however many there are. The images are already compressed, so they're stored as they are.
  */
@@ -72,10 +72,12 @@ export async function writePhotoArchive(userId: string, out: Writable): Promise<
         folderOf.set(photo.groupId, folder);
       }
 
-      current = await storage.getObject(photo.storageKey);
+      // A video is exported as the video itself, not its poster frame.
+      current = await storage.getObject(photo.videoKey ?? photo.storageKey);
       if (!current) continue; // a missing file shouldn't spoil the rest
 
-      const name = `${folder.name}/${folder.files.take(photoFileName(photo.createdAt, timeZone), ".webp")}`;
+      const extension = photo.videoKey ? ".mp4" : ".webp";
+      const name = `${folder.name}/${folder.files.take(photoFileName(photo.createdAt, timeZone), extension)}`;
       zip.addReadStream(current.body, name, { mtime: photo.createdAt, compress: false });
       // One photo at a time; stop waiting if the download fails or is abandoned.
       await Promise.race([finished(current.body), written]);

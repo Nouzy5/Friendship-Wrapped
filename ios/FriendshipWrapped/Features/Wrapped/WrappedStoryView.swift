@@ -99,6 +99,7 @@ extension WrappedSlide {
         case .mostReactedPhoto: return 7
         case .reactions: return 7
         case .collage: return 8
+        case .you: return 8
         case .outro, .unknown: return 6
         }
     }
@@ -114,6 +115,8 @@ extension WrappedSlide {
             return topReactor?.user.avatarUrl.map { [$0] } ?? []
         case .collage(let photos):
             return photos.map { $0.imageUrls.thumbnail }
+        case .you(let yours):
+            return yours.bestPhoto.map { [$0.photo.imageUrls.medium] } ?? []
         default:
             return []
         }
@@ -197,13 +200,20 @@ private struct StoryPlayer: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.fwReduceMotion) private var reduceMotion
     @Environment(GroupsStore.self) private var groups
+    @Environment(SessionStore.self) private var session
 
     @State private var position = StoryPosition()
     @State private var clock = StoryClock()
     @State private var userPaused = false
+    /// Whether it was paused before the share sheet paused it, so closing the sheet puts it back.
+    @State private var pausedBeforeShare = false
     @State private var holding = false
     @State private var press = Press()
     @GestureState private var touching = false
+    /// A share card is being made, or is waiting in the share sheet.
+    @State private var sharing = false
+    @State private var sharedFile: SharedCardFile?
+    @State private var shareFailed = false
 
     private var slides: [WrappedSlide] { wrapped.slides }
     private var index: Int { min(position.index, slides.count - 1) }
@@ -213,7 +223,15 @@ private struct StoryPlayer: View {
     private var pauseLabel: String { userPaused ? "Play" : "Pause" }
 
     private var tone: StoryTone {
-        StoryTone.of(slide) { userID in groups.colorOf(userID, in: wrapped.group.id) }
+        StoryTone.of(slide, me: session.user?.id) { userID in groups.colorOf(userID, in: wrapped.group.id) }
+    }
+
+    /// The slide as a card to share, or nil for the intro.
+    private var sharePlan: ShareCardPlan? {
+        guard let me = session.user else { return nil }
+        return ShareCardPlan.make(for: slide, wrapped: wrapped, meID: me.id, meName: me.displayName) { userID in
+            groups.colorOf(userID, in: wrapped.group.id)
+        }
     }
 
     var body: some View {
@@ -277,6 +295,41 @@ private struct StoryPlayer: View {
             if !isTouching { endPress() }
         }
         .accessibilityAction(.escape) { onClose() }
+        .sheet(item: $sharedFile, onDismiss: {
+            sharing = false
+            userPaused = pausedBeforeShare
+        }) { file in
+            CardShareSheet(url: file.url)
+                .ignoresSafeArea()
+                .presentationDetents([.medium, .large])
+        }
+        .alert("Couldn’t make that card", isPresented: $shareFailed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Try again in a moment.")
+        }
+    }
+
+    /// Draws this slide as a card on this phone and opens the share sheet with it. It leaves
+    /// only through that sheet: nothing is sent to the server.
+    private func shareCurrentSlide() async {
+        guard let plan = sharePlan, !sharing else { return }
+        sharing = true
+        pausedBeforeShare = userPaused
+        userPaused = true
+
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(plan.filename)
+        guard
+            let image = await ShareCardRenderer.render(plan),
+            let png = image.pngData(),
+            (try? png.write(to: url, options: .atomic)) != nil
+        else {
+            sharing = false
+            userPaused = pausedBeforeShare
+            shareFailed = true
+            return
+        }
+        sharedFile = SharedCardFile(url: url)
     }
 
     /// The progress bars, then the group, pause and close, in the slide's ink.
@@ -313,6 +366,20 @@ private struct StoryPlayer: View {
                 .allowsHitTesting(false)
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isHeader)
+
+                if sharePlan != nil {
+                    Button { Task { await shareCurrentSlide() } } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(tone.ink)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PressScaleButtonStyle())
+                    .disabled(sharing)
+                    .opacity(sharing ? 0.4 : 1)
+                    .accessibilityLabel("Share this slide as an image")
+                }
 
                 Button { userPaused.toggle() } label: {
                     Image(systemName: userPaused ? "play.fill" : "pause.fill")

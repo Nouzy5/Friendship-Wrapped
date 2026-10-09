@@ -3,9 +3,9 @@ import Observation
 import Photos
 import UIKit
 
-/// Posts the photo from the camera screen (the web app's PhotoComposer): scales it for Settings →
-/// Photos & data → Photo quality, waits for a connection (and for Wi-Fi, when uploading on mobile
-/// data is off), then uploads it with progress.
+/// Posts the photo (or video) from the camera screen (the web app's PhotoComposer): scales a photo for
+/// Settings → Photos & data → Photo quality, waits for a connection (and for Wi-Fi, when uploading on
+/// mobile data is off), then uploads it with progress.
 @MainActor
 @Observable
 final class CapturePoster {
@@ -17,6 +17,13 @@ final class CapturePoster {
         case waitingForWifi
         /// The fraction sent so far, once known.
         case uploading(Double?)
+    }
+
+    /// What is being posted.
+    enum Payload {
+        case photo(UIImage)
+        /// An MP4 on disk and, for a Live Photo, its still picture.
+        case video(file: URL, still: UIImage?, isLive: Bool)
     }
 
     private(set) var phase: Phase = .idle
@@ -44,9 +51,10 @@ final class CapturePoster {
 
     /// Posts, then calls `onPosted` (unless cancelled first). Errors end up in `failure`.
     func post(
-        image: UIImage,
+        _ payload: Payload,
         caption: String,
         to groupID: String,
+        momentID: String? = nil,
         photos: PhotosStore,
         network: NetworkMonitor,
         settings: DeviceSettings,
@@ -61,9 +69,10 @@ final class CapturePoster {
         task = Task {
             await self.perform(
                 attempt,
-                image: image,
+                payload: payload,
                 caption: caption,
                 groupID: groupID,
+                momentID: momentID,
                 photos: photos,
                 network: network,
                 settings: settings,
@@ -91,23 +100,35 @@ final class CapturePoster {
 
     private func perform(
         _ attempt: Int,
-        image: UIImage,
+        payload: Payload,
         caption: String,
         groupID: String,
+        momentID: String?,
         photos: PhotosStore,
         network: NetworkMonitor,
         settings: DeviceSettings,
         onPosted: @MainActor (Photo) -> Void
     ) async {
-        // The server takes JPEG (not the camera's HEIC) and keeps 2560 px at most.
+        // The server takes JPEG (not the camera's HEIC) and keeps 2560 px at most. A video goes up as the
+        // MP4 that was made when it was chosen; a Live Photo's still goes with it.
+        let image: UIImage?
+        switch payload {
+        case .photo(let photo): image = photo
+        case .video(_, let still, _): image = still
+        }
         let quality = settings.values.photoQuality
         let maxDimension = quality.maxDimension
         let jpegQuality: CGFloat = quality == .high ? 0.9 : 0.85
-        let jpeg = await Task.detached(priority: .userInitiated) {
-            image.jpegForUpload(maxDimension: maxDimension, quality: jpegQuality)
-        }.value
+        let jpeg: Data?
+        if let image {
+            jpeg = await Task.detached(priority: .userInitiated) {
+                image.jpegForUpload(maxDimension: maxDimension, quality: jpegQuality)
+            }.value
+        } else {
+            jpeg = nil
+        }
         guard isCurrent(attempt) else { return }
-        guard let jpeg else {
+        if image != nil, jpeg == nil {
             fail(APIError(status: -1, code: "ENCODE_FAILED", message: "Couldn't prepare that photo. Try another one."))
             return
         }
@@ -130,10 +151,26 @@ final class CapturePoster {
 
         phase = .uploading(nil)
         do {
-            let photo = try await photos.upload(jpeg, caption: caption, to: groupID) { fraction in
+            let report: @Sendable (Double) -> Void = { fraction in
                 Task { @MainActor in
                     self.progressed(fraction, attempt: attempt)
                 }
+            }
+            let photo: Photo
+            switch payload {
+            case .photo:
+                guard let jpeg else { return }
+                photo = try await photos.upload(jpeg, caption: caption, to: groupID, momentID: momentID, progress: report)
+            case .video(let file, _, let isLive):
+                photo = try await photos.uploadVideo(
+                    file,
+                    still: jpeg,
+                    isLive: isLive,
+                    caption: caption,
+                    to: groupID,
+                    momentID: momentID,
+                    progress: report
+                )
             }
             guard isCurrent(attempt) else { return }
             task = nil
@@ -185,6 +222,32 @@ enum PostedPhotoSaver {
             do {
                 try await PHPhotoLibrary.shared().performChanges {
                     PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: nil)
+                }
+            } catch {
+                await PostedPhotoSaver.report("Couldn't save a copy to your photos.")
+            }
+        }
+    }
+
+    /// A copy of a video you posted. `file` is the MP4 that was sent.
+    @MainActor
+    static func saveCopy(ofVideoAt file: URL) {
+        // The file is deleted once the post has gone, so the library gets its own copy now.
+        let copy = FileManager.default.temporaryDirectory
+            .appendingPathComponent("save-\(UUID().uuidString)")
+            .appendingPathExtension("mp4")
+        guard (try? FileManager.default.copyItem(at: file, to: copy)) != nil else { return }
+
+        Task.detached(priority: .utility) {
+            defer { try? FileManager.default.removeItem(at: copy) }
+            let access = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+            guard access == .authorized || access == .limited else {
+                await PostedPhotoSaver.report("Couldn't save a copy to your photos. Allow adding photos in Settings.")
+                return
+            }
+            do {
+                try await PHPhotoLibrary.shared().performChanges {
+                    _ = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: copy)
                 }
             } catch {
                 await PostedPhotoSaver.report("Couldn't save a copy to your photos.")

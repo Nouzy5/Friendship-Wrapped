@@ -13,7 +13,7 @@
     "dev": "concurrently --names storage,server,client --prefix-colors yellow,blue,magenta --kill-others-on-fail \"npm run storage -w server\" \"npm run dev -w server\" \"npm run dev -w client\"",
     "build": "npm run build -w server && npm run build -w client",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
-    "test": "npm run test -w server",
+    "test": "npm run test -w server && npm run test -w client",
     "db:generate": "npm run db:generate -w server",
     "db:migrate": "npm run db:migrate -w server",
     "db:studio": "npm run db:studio -w server"

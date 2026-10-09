@@ -9,16 +9,18 @@ import { GroupPicker } from "../features/groups/components/GroupPicker";
 import { useMyGroups } from "../features/groups/hooks";
 import { AlbumsTab } from "../features/memories/components/AlbumsTab";
 import { FavoritesTab } from "../features/memories/components/FavoritesTab";
+import { MomentsTab } from "../features/memories/components/MomentsTab";
 import { OnThisDay } from "../features/memories/components/OnThisDay";
 import { PeopleFilter } from "../features/memories/components/PeopleFilter";
 import { Timeline } from "../features/memories/components/Timeline";
 import { formatMonthParam, parseMonthParam, type Month } from "../features/memories/months";
 import { usePageTitle } from "../lib/usePageTitle";
 
-type Tab = "timeline" | "albums" | "favorites";
+type Tab = "timeline" | "moments" | "albums" | "favorites";
 
 const tabs: { value: Tab; label: string }[] = [
   { value: "timeline", label: "Timeline" },
+  { value: "moments", label: "Moments" },
   { value: "albums", label: "Albums" },
   { value: "favorites", label: "Favorites" },
 ];
@@ -99,6 +101,7 @@ export function MemoriesPage() {
             onJump={(next: Month | null) => update({ month: next && formatMonthParam(next) }, true)}
           />
         )}
+        {tab === "moments" && <MomentsTab groupId={group.id} />}
         {tab === "albums" && <AlbumsTab groupId={group.id} />}
         {tab === "favorites" && <FavoritesTab groupId={group.id} />}
         </div>

@@ -6,6 +6,7 @@ import { CheckIcon } from "../../../components/ui/icons";
 import { LoadMore } from "../../../components/ui/LoadMore";
 import { Spinner } from "../../../components/ui/Spinner";
 import { getFieldErrors, getFormError } from "../../../lib/form-errors";
+import { MediaBadge } from "../../photos/components/MediaBadge";
 import { PhotoImage, photoAlt } from "../../photos/components/PhotoImage";
 import { useGroupFeed } from "../../photos/hooks";
 import type { Photo } from "../../photos/types";
@@ -112,6 +113,7 @@ function SelectablePhoto({ photo, selected, onToggle }: { photo: Photo; selected
       className="relative block w-full"
     >
       <PhotoImage photo={photo} variant="thumbnail" className="aspect-square" />
+      <MediaBadge photo={photo} className="bottom-1.5 left-1.5" />
       {selected && <span aria-hidden className="absolute inset-0 bg-accent/25 ring-4 ring-accent ring-inset" />}
       <span
         aria-hidden

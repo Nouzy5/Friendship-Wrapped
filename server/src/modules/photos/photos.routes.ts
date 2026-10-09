@@ -4,7 +4,7 @@ import { requireAuth } from "../auth/auth.middleware.js";
 import { addComment, listComments } from "../comments/comments.controller.js";
 import { addFavorite, removeFavorite } from "../favorites/favorites.controller.js";
 import { listReactions, removeReaction, setReaction } from "../reactions/reactions.controller.js";
-import { deletePhoto, getPhoto, getPhotoImage } from "./photos.controller.js";
+import { deletePhoto, getPhoto, getPhotoImage, getPhotoVideo } from "./photos.controller.js";
 
 export const photosRouter = Router();
 
@@ -12,6 +12,7 @@ photosRouter.use(requireAuth);
 
 photosRouter.get("/:photoId", getPhoto);
 photosRouter.get("/:photoId/images/:variant", getPhotoImage);
+photosRouter.get("/:photoId/video", getPhotoVideo);
 photosRouter.delete("/:photoId", deletePhoto);
 
 photosRouter.get("/:photoId/reactions", listReactions);

@@ -120,6 +120,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             FW_API_BASE_URL="$FW_API_BASE_URL" \
             FW_WEB_BASE_URL="$FW_WEB_BASE_URL"

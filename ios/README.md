@@ -13,10 +13,10 @@ The same design as the web app ([technical reference](../docs/REFERENCE.md#redes
 | `/home`, `/groups/:id` | **Home** tab is the current group's feed. The group's name opens a list of your groups (+ New group); the header also has the grid/feed switch, group settings and your avatar (→ Settings). Alone in a group, the invite card comes first |
 | Feed post | The photo with a name tag in the poster's colour, a "…" menu (add to an album, save photo when allowed, report, block, delete your own), reactions as pills with the people who reacted as dots in their colours (yours outlined in your colour), comments, favourite star, caption |
 | `/photos/:id` | Photo viewer: swipe through the feed, pinch or double-tap to zoom, reactions, comments in each person's colour, the same menu |
-| Shutter, `/camera` | Full-screen camera: square viewfinder, flash, switch camera, grid lines, the group you're posting to and who'll see it; then a caption and "Post to …" with progress. Library photos work too |
+| Shutter, `/camera` | Full-screen camera: square viewfinder, flash, switch camera, grid lines, the group you're posting to and who'll see it; then a caption and "Post to …" with progress. Library photos, videos (up to a minute) and Live Photos work too |
 | `/memories` | **Memories** tab: On this day, then Timeline (months, jump to a month, "Taken by" one person), Albums and Favorites |
 | `/groups/:id/settings` | Group settings: your colour (12; taken ones show who has them), group photo, members (report, block, remove), name and emoji, mute, invite links, leave |
-| `/settings/*` | Settings: Account (photo, name, username, password, signed-in devices, download your photos as a zip, delete account), Notifications (saved with your account; the iPhone app itself can't receive push yet), Appearance (Match device / Light / Dark, app icon, reduce motion, haptics), Privacy & safety (photo saving, your name in Wrapped, blocked people, your invite links), Photos & data (camera, quality, mobile data, data saver), Terms |
+| `/settings/*` | Settings: Account (photo, name, username, password, signed-in devices, download your photos as a zip, delete account), Notifications (saved with your account; this iPhone's own switch turns Apple push on, see [Push notifications](#push-notifications)), Appearance (Match device / Light / Dark, app icon, reduce motion, haptics), Privacy & safety (photo saving, your name in Wrapped, blocked people, your invite links), Photos & data (camera, quality, mobile data, data saver), Terms |
 | `/wrapped`, `/wrapped/:year` | **Wrapped** tab and the full-screen story, with everyone's share of the year in their colours |
 
 - **App icon.** Settings → Appearance → App icon switches the Home Screen icon between Classic, Night and "Your colour" (one alternate icon per member colour; `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES` in `project.yml`). iOS confirms each change with an alert of its own, so the icon only changes when you choose it.
@@ -84,6 +84,24 @@ Then, for each build: **Actions → iOS → Run workflow**, tick **Upload to Tes
 
 > macOS runner minutes count 10× against the free allowance for private repos (2,000 min/month). A build takes roughly 5–10 minutes.
 
+## Push notifications
+
+The iPhone app receives the same notifications as the web app: new photos, reactions, comments, new members, On this day and Wrapped. The server sends them through Apple's push service (APNs), using Node's built-in HTTP/2 and a signing key, so it needs no extra service. The app asks iOS for permission from Home's "Know when friends post" card (once there are friends in the group) or from Settings → Notifications → This iPhone. The switches below that decide *which* ones, as they do for the web.
+
+Setup, once:
+
+1. **Enable the capability.** The app declares `aps-environment` in `FriendshipWrapped.entitlements` (written by XcodeGen from `project.yml`). Push Notifications must also be on for the App ID: in [developer.apple.com](https://developer.apple.com/account/resources/identifiers/list) → Identifiers → `com.nouzy5.friendshipwrapped` → tick **Push Notifications**. The TestFlight workflow signs with `-allowProvisioningUpdates` and an Admin API key, which normally switches the capability on by itself.
+2. **Create an APNs key.** Keys → **+** → tick *Apple Push Notifications service (APNs)* → download the `.p8` once. Note its **Key ID**. One key works for the sandbox and for production.
+3. **Give the server the key.** Set `APNS_KEY` (the `.p8` contents, with line breaks written as `\n` if your host wants one line) or `APNS_KEY_PATH`, plus `APNS_KEY_ID` and `APNS_TEAM_ID` ([server/.env.example](../server/.env.example)). Without them the app's switch says the server isn't set up for iPhones.
+
+How it behaves:
+
+- **Sandbox and production.** Builds run from Xcode (Debug) get sandbox tokens; TestFlight and App Store builds get production ones. The app tells the server which, and the server uses the matching Apple server. Xcode swaps `development` for `production` in the entitlement when it signs for distribution.
+- **Signing out stops them.** The server ties a phone's token to the session that registered it. Signing out, being signed out from another device, changing your password, or deleting your account all end the notifications for that session at once. Someone else signing in on the same phone takes the token over.
+- **Tapping one** opens the photo, group, Memories or Wrapped it is about, also when the tap launches the app.
+- **Not covered.** The Sideloadly and Appetize test builds can't receive push (Apple only allows it for paid developer accounts, and a simulator has no token). The unsigned `.ipa` is built without the push entitlement for that reason.
+- **Testing needs a real iPhone.** Run a Debug build from Xcode on a device (see above for pointing it at your dev API), set the `APNS_*` variables in `server/.env`, turn the switch on, and post a photo from another account. A simulator can show a notification dragged in as an `.apns` file, but it never gets a real token.
+
 ## How it fits together
 
 ```text
@@ -103,6 +121,7 @@ FriendshipWrapped/
 - **Validation** stays on the server. Field messages from `details` are shown under each field.
 - **Photos.** The server rejects HEIC, the iPhone camera's default format. So the app re-encodes every photo as a JPEG before uploading, scaled to at most 2560 px (the server's largest rendition) or 1024 px for profile pictures. The server then re-encodes to WebP and strips metadata such as GPS location, as it does for the web.
 - **Images load through `APIClient`**, not `AsyncImage`, because photo and avatar URLs are access-checked and need the session cookie. Decoded images are kept in memory (`ImageCache`) and dropped on sign-out. The app only sends the cookie to paths on the API's own host.
+- **Videos and Live Photos.** The picker offers photos, videos and Live Photos. A video is converted on the phone to a 720p H.264 MP4 first (`VideoPreparation`, `AVAssetExportSession`), because HEVC and 4K recordings from the camera can be hundreds of megabytes and the server takes 100 MB; it is sent from a file on disk, never held in memory. A Live Photo posts its still and its motion (the paired video), which reading from the library needs permission for (`NSPhotoLibraryUsageDescription`; without it the still is posted alone). A video shows its poster frame in the feed and grids with a play badge and its length, and plays in the viewer. **Playback sends the session cookie to AVPlayer by hand** (`AVURLAssetHTTPHeaderFieldsKey`), because AVPlayer doesn't send cookies itself; this is the first thing to test on a real phone. If streaming doesn't start, the app downloads the video and plays it from disk. See [Videos and Live Photos](../docs/REFERENCE.md#videos-and-live-photos).
 - **Camera.** A full-screen AVFoundation camera (`Features/Photos/Camera/`), square like the web one. The Simulator has no camera, so it offers the photo library only. The library uses `PhotosPicker`, which needs no photo-library permission; saving photos asks for add-only access.
 - **Invite links** are still the web URLs (`https://<web>/invite/<token>`), so they work for everyone. The app also opens `friendshipwrapped://invite/<token>`, and **Join with an invite link** (Home without groups, or onboarding) accepts a pasted link.
 - **Universal links** (web invite links opening the app directly) need an `apple-app-site-association` file on the deployed web domain plus the Associated Domains capability. That's for once the web client is deployed.

@@ -10,6 +10,8 @@ struct SegmentedPicker<Value: Hashable>: View {
 
     let options: [Option]
     @Binding var selection: Value
+    /// The track behind the options. Grey on the page; on a grey panel it takes the page's colour.
+    var track: Color = Theme.surface
     @Namespace private var marker
 
     var body: some View {
@@ -40,7 +42,7 @@ struct SegmentedPicker<Value: Hashable>: View {
             }
         }
         .padding(3)
-        .background(.surface, in: Capsule())
+        .background(track, in: Capsule())
     }
 }
 

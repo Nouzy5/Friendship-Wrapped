@@ -100,7 +100,12 @@ export async function deleteAccount(userId: string, password: string): Promise<v
     await photosRepository.deletePhotosByUploader(userId, tx);
     const { avatarKey } = await usersRepository.deleteUser(userId, tx);
 
-    const storageKeys = photos.flatMap((photo) => [photo.storageKey, photo.mediumKey, photo.thumbnailKey]);
+    const storageKeys = photos.flatMap((photo) => [
+      photo.storageKey,
+      photo.mediumKey,
+      photo.thumbnailKey,
+      ...(photo.videoKey ? [photo.videoKey] : []),
+    ]);
     if (avatarKey) storageKeys.push(avatarKey);
     return { storageKeys, deletedGroupIds };
   });

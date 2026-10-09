@@ -80,7 +80,7 @@ async function subscribedGroup(...usernames: string[]) {
 
 describe("push subscriptions", () => {
   it("hands out the public key (none in tests), and subscribes browsers by endpoint", async () => {
-    expect((await request(app).get("/api/notifications/push-key")).body).toEqual({ publicKey: null });
+    expect((await request(app).get("/api/notifications/push-key")).body).toEqual({ publicKey: null, apns: false });
 
     const alice = await signUp(app, "alice");
     const bob = await signUp(app, "bob");

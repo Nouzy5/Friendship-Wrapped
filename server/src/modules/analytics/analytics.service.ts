@@ -37,6 +37,8 @@ export type YearNumbers = {
     /** Who posted in the busiest month. */
     mostActiveMonthByUser: IdCount[];
     mostActiveDay: { date: string; count: number } | null;
+    /** Each person's own busiest month (the earlier one on a tie), for their personal card. Format 4. */
+    busiestMonthByUser: { userId: string; month: number; count: number }[];
   };
   reactions: {
     total: number;
@@ -47,9 +49,34 @@ export type YearNumbers = {
      * Wrapped, the next person's best photo takes the slide.
      */
     mostReactedByUploader: PhotoCount[];
+    /** Reactions each person's photos of the year received, from anyone and whenever given. Format 4. */
+    receivedByUser: IdCount[];
   };
-  comments: { total: number; byUser: IdCount[] };
+  comments: {
+    total: number;
+    byUser: IdCount[];
+    /** Comments each person's photos of the year received. Format 4. */
+    receivedByUser: IdCount[];
+  };
   highlightIds: string[];
+};
+
+/**
+ * The viewer's own year in the group, for their personal card: counts and a best photo,
+ * nothing about anyone else. Null when they did nothing that year.
+ */
+export type YourYear = {
+  photos: number;
+  /** Reactions you gave during the year. */
+  reactionsGiven: number;
+  commentsWritten: number;
+  /** Reactions your photos of the year received. */
+  reactionsReceived: number;
+  commentsReceived: number;
+  /** The month you posted the most in (the earlier one on a tie). */
+  busiestMonth: { month: number; count: number } | null;
+  /** Your photo of the year with the most reactions, if any got one. */
+  bestPhoto: { photo: PhotoView; count: number } | null;
 };
 
 /**
@@ -105,6 +132,8 @@ export type YearStats = {
   };
   /** The year's most reacted-to and commented-on photos, for the collage (on a tie, the earlier photo). */
   highlights: PhotoView[];
+  /** The viewer's own year (see YourYear). Everyone sees only their own. */
+  you: YourYear | null;
 };
 
 /** The index of the largest value (the first, on a tie), or -1 when every value is zero. */
@@ -199,6 +228,23 @@ export async function computeYearNumbers(groupId: string, year: number, timeZone
     }
   });
 
+  // For each person: their own busiest month, and what their photos of the year received.
+  const monthsByUser = new Map<string, number[]>();
+  const reactionsReceived = new Map<string, number>();
+  const commentsReceived = new Map<string, number>();
+  photos.forEach((photo, index) => {
+    const months = monthsByUser.get(photo.uploaderId) ?? Array.from({ length: 12 }, () => 0);
+    months[monthOf[index]!]! += 1;
+    monthsByUser.set(photo.uploaderId, months);
+    reactionsReceived.set(photo.uploaderId, (reactionsReceived.get(photo.uploaderId) ?? 0) + (reactionsByPhoto.get(photo.id) ?? 0));
+    commentsReceived.set(photo.uploaderId, (commentsReceived.get(photo.uploaderId) ?? 0) + (commentsByPhoto.get(photo.id) ?? 0));
+  });
+  const ownBusiestMonths = [...monthsByUser].map(([userId, months]) => {
+    const best = indexOfMax(months); // someone with photos has a month; the earlier one on a tie
+    return { userId, month: best + 1, count: months[best]! };
+  });
+  const withoutZeros = (counts: Map<string, number>) => new Map([...counts].filter(([, count]) => count > 0));
+
   return {
     activeUserCount: activeIds.size,
     photos: {
@@ -208,16 +254,19 @@ export async function computeYearNumbers(groupId: string, year: number, timeZone
       mostActiveMonth: busiestMonth === -1 ? null : { month: busiestMonth + 1, count: photosByMonth[busiestMonth]! },
       mostActiveMonthByUser: rank(busiestMonthByUser, () => 0),
       mostActiveDay: busiestDay === -1 ? null : { date: dateOfDay(year, busiestDay), count: photosByDay[busiestDay]! },
+      busiestMonthByUser: ownBusiestMonths,
     },
     reactions: {
       total: sum(reactionsByUser.values()),
       byUser: rank(reactionsByUser, byName),
       mostReactedPhoto: mostReacted,
       mostReactedByUploader,
+      receivedByUser: rank(withoutZeros(reactionsReceived), byName),
     },
     comments: {
       total: sum(commentsByUser.values()),
       byUser: rank(commentsByUser, byName),
+      receivedByUser: rank(withoutZeros(commentsReceived), byName),
     },
     highlightIds,
   };
@@ -260,6 +309,26 @@ export async function toYearStats(
   // A photo the viewer can't see (deleted, or a block) drops out, and the next best takes its place.
   const mostReacted = candidates.find(({ userId, photoId }) => !hidden.has(userId) && viewOf.has(photoId));
 
+  // The viewer's own year. It's theirs alone, so opting out of appearing in Wrapped doesn't hide it from them.
+  const countOf = (ranked: IdCount[]) => ranked.find(({ userId }) => userId === viewerId)?.count ?? 0;
+  const mine = {
+    photos: countOf(numbers.photos.byUser),
+    reactionsGiven: countOf(numbers.reactions.byUser),
+    commentsWritten: countOf(numbers.comments.byUser),
+    reactionsReceived: countOf(numbers.reactions.receivedByUser),
+    commentsReceived: countOf(numbers.comments.receivedByUser),
+  };
+  const myBusiestMonth = numbers.photos.busiestMonthByUser.find(({ userId }) => userId === viewerId);
+  const myBest = candidates.find(({ userId, photoId }) => userId === viewerId && viewOf.has(photoId));
+  const you: YourYear | null =
+    mine.photos + mine.reactionsGiven + mine.commentsWritten === 0
+      ? null
+      : {
+          ...mine,
+          busiestMonth: myBusiestMonth ? { month: myBusiestMonth.month, count: myBusiestMonth.count } : null,
+          bestPhoto: myBest ? { photo: viewOf.get(myBest.photoId)!, count: myBest.count } : null,
+        };
+
   return {
     group: { id: group.id, name: group.name, emoji: group.emoji },
     year,
@@ -287,6 +356,7 @@ export async function toYearStats(
       byUser: withPeople(numbers.comments.byUser),
     },
     highlights: numbers.highlightIds.flatMap((id) => viewOf.get(id) ?? []),
+    you,
   };
 }
 

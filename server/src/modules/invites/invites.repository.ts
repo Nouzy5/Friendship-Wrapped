@@ -11,7 +11,11 @@ export function createInvite(
 export function findInviteWithGroup(id: string, db: DbClient = prisma) {
   return db.inviteToken.findUnique({
     where: { id },
-    select: { expiresAt: true, group: { select: groupSummarySelect } },
+    select: {
+      expiresAt: true,
+      createdBy: { select: { displayName: true } },
+      group: { select: groupSummarySelect },
+    },
   });
 }
 
@@ -42,6 +46,7 @@ export function deleteInviteCreatedBy(createdById: string, publicId: string, db:
   return db.inviteToken.deleteMany({ where: { createdById, id: { startsWith: publicId } } });
 }
 
-export function deleteExpiredInvites(groupId: string, now: Date, db: DbClient = prisma) {
-  return db.inviteToken.deleteMany({ where: { groupId, expiresAt: { lte: now } } });
+/** Invites that expired before `cutoff`. Newer expired ones stay so their link can say who sent it. */
+export function deleteInvitesExpiredBefore(groupId: string, cutoff: Date, db: DbClient = prisma) {
+  return db.inviteToken.deleteMany({ where: { groupId, expiresAt: { lte: cutoff } } });
 }

@@ -54,15 +54,17 @@ extension APIClient {
         return response.photo
     }
 
-    /// Multipart: `caption`, then the image in `photo`. The server re-encodes it and strips metadata such as GPS.
+    /// Multipart: `caption`, `momentId` (to post into a moment that's open), then the image in `photo`. The server re-encodes it and strips metadata such as GPS.
     func uploadPhoto(
         toGroup groupID: String,
         jpeg: Data,
         caption: String,
+        momentID: String? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> Photo {
         var form = MultipartForm()
         form.addField("caption", value: caption)
+        if let momentID { form.addField("momentId", value: momentID) }
         form.addFile("photo", filename: "photo.jpg", mimeType: "image/jpeg", data: jpeg)
         let response: PhotoResponse = try await upload(
             .post,
@@ -71,6 +73,38 @@ extension APIClient {
             progress: progress
         )
         return response.photo
+    }
+
+    /// Multipart: `caption`, `momentId`, `live`, then the video (an MP4 file on disk) in `video` and, for a
+    /// Live Photo, its still picture in `photo`. Without a still the server uses a frame of the video.
+    func uploadVideo(
+        toGroup groupID: String,
+        video: URL,
+        still: Data? = nil,
+        isLive: Bool = false,
+        caption: String,
+        momentID: String? = nil,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> Photo {
+        var form = MultipartForm()
+        form.addField("caption", value: caption)
+        if let momentID { form.addField("momentId", value: momentID) }
+        if isLive { form.addField("live", value: "true") }
+        if let still { form.addFile("photo", filename: "still.jpg", mimeType: "image/jpeg", data: still) }
+        form.addFile("video", filename: "video.mp4", mimeType: "video/mp4", fileURL: video)
+        let response: PhotoResponse = try await upload(
+            .post,
+            "/groups/\(groupID.pathSegment)/photos",
+            form: form,
+            progress: progress
+        )
+        return response.photo
+    }
+
+    /// The video as a file to keep (`canSave` videos only; others get a 403).
+    func downloadVideo(of photo: Photo) async throws -> URL {
+        guard let video = photo.video else { throw APIError.unexpected }
+        return try await downloadFile(atServerPath: video.url + "?download=1", named: "friendship-wrapped-\(photo.id).mp4")
     }
 
     /// Only the uploader can delete a photo.

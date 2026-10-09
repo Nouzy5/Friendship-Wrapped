@@ -64,6 +64,21 @@ export function listAlbumPhotos(
   });
 }
 
+/** A moment's photos, oldest first, so it reads like how it went. */
+export function listMomentPhotos(
+  momentId: string,
+  viewerId: string,
+  { cursor, take }: { cursor?: Cursor; take: number },
+  db: DbClient = prisma,
+) {
+  return db.photo.findMany({
+    where: { momentId, ...unblocked(viewerId), ...(cursor && after(cursor)) },
+    orderBy: oldestFirst,
+    take,
+    select: photoSelect(viewerId),
+  });
+}
+
 /** Specific photos of a group, in no particular order. */
 export function findGroupPhotosByIds(groupId: string, photoIds: string[], viewerId: string, db: DbClient = prisma) {
   return db.photo.findMany({
@@ -157,6 +172,9 @@ export function findVisiblePhotoKeys(photoId: string, viewerId: string, db: DbCl
       storageKey: true,
       mediumKey: true,
       thumbnailKey: true,
+      kind: true,
+      videoKey: true,
+      videoSizeBytes: true,
       createdAt: true,
       uploader: { select: { id: true, settings: { select: { allowPhotoSaving: true } } } },
     },
@@ -172,7 +190,7 @@ export function deletePhoto(photoId: string, db: DbClient = prisma) {
 export function listPhotoKeysByUploader(uploaderId: string, db: DbClient = prisma) {
   return db.photo.findMany({
     where: { uploaderId },
-    select: { storageKey: true, mediumKey: true, thumbnailKey: true },
+    select: { storageKey: true, mediumKey: true, thumbnailKey: true, videoKey: true },
   });
 }
 
@@ -181,7 +199,7 @@ export function listArchivePhotos(uploaderId: string, db: DbClient = prisma) {
   return db.photo.findMany({
     where: { uploaderId },
     orderBy: [{ groupId: "asc" }, { createdAt: "asc" }, { id: "asc" }],
-    select: { storageKey: true, createdAt: true, groupId: true, group: { select: { name: true } } },
+    select: { storageKey: true, videoKey: true, createdAt: true, groupId: true, group: { select: { name: true } } },
   });
 }
 

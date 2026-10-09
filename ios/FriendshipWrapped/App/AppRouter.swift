@@ -17,13 +17,14 @@ enum AppRoute: Hashable {
     /// The photo viewer, scrolled to its comments (a feed card's comment button).
     case photoComments(String)
     case album(String)
+    case moment(String)
     case groupSettings(String)
     case settings(SettingsRoute)
 
     /// Whether the tab bar shows over this screen.
     var showsTabBar: Bool {
         switch self {
-        case .photo, .photoComments, .album: return true
+        case .photo, .photoComments, .album, .moment: return true
         case .groupSettings, .settings: return false
         }
     }
@@ -57,6 +58,8 @@ struct PendingInvite: Identifiable, Hashable {
 struct CameraRequest: Identifiable {
     let id = UUID()
     let groupID: String?
+    /// A moment to post into (one of that group's, and open).
+    var momentID: String?
 }
 
 /// App-wide navigation state: tabs, stacks, deep links and the post-login detour back to an invite.
@@ -113,20 +116,70 @@ final class AppRouter {
     /// Handles `friendshipwrapped://invite/<token>` and web invite links.
     func open(_ url: URL) {
         guard let token = InviteLink.token(from: url) else { return }
+        afterClosingPresentations {
+            self.presentedInvite = PendingInvite(token: token)
+        }
+    }
 
-        // SwiftUI shows one presentation at a time, so close whatever is open first.
+    /// A tapped notification. Its `url` is a path of the web app: `/photos/<id>`, `/groups/<id>`,
+    /// `/memories`, `/memories/moments/<id>`, `/wrapped/<year>?group=<id>` or `/camera?group=<id>`. Anything else is ignored.
+    func openNotification(path: String, wrapped: [WrappedSummary]) {
+        guard let components = URLComponents(string: path) else { return }
+        let parts = components.path.split(separator: "/").map(String.init)
+        var query: [String: String] = [:]
+        for item in components.queryItems ?? [] where query[item.name] == nil {
+            if let value = item.value { query[item.name] = value }
+        }
+        guard let first = parts.first else { return }
+
+        switch (first, parts.count) {
+        case ("photos", 2):
+            let photoID = parts[1]
+            afterClosingPresentations {
+                self.visitedTabs.insert(.home)
+                self.selectedTab = .home
+                self.homePath = [.photo(photoID)]
+            }
+        case ("groups", 2):
+            let groupID = parts[1]
+            afterClosingPresentations { self.openGroup(groupID) }
+        case ("memories", 3) where parts[1] == "moments":
+            let momentID = parts[2]
+            afterClosingPresentations {
+                self.visitedTabs.insert(.memories)
+                self.selectedTab = .memories
+                self.memoriesPath = [.moment(momentID)]
+            }
+        case ("memories", _):
+            afterClosingPresentations { self.selectTab(.memories) }
+        case ("wrapped", 2):
+            guard let year = Int(parts[1]), let groupID = query["group"] else { return }
+            // The story only needs the ids; the list has the group's name when it has loaded.
+            let summary = wrapped.first { $0.group.id == groupID && $0.year == year }
+                ?? WrappedSummary(group: Photo.GroupInfo(id: groupID, name: "", emoji: ""), year: year, final: false)
+            afterClosingPresentations { self.playingWrapped = summary }
+        case ("camera", _):
+            let groupID = query["group"]
+            afterClosingPresentations { self.openCamera(groupID: groupID) }
+        default:
+            return
+        }
+    }
+
+    /// SwiftUI shows one presentation at a time, so whatever is open closes first and `action`
+    /// runs once that animation has finished.
+    private func afterClosingPresentations(_ action: @escaping () -> Void) {
         let somethingOpen = cameraRequest != nil || showOnboarding || showingNewGroup || showingJoin
             || presentedInvite != nil || playingWrapped != nil
         closePresentations()
 
         guard somethingOpen else {
-            presentedInvite = PendingInvite(token: token)
+            action()
             return
         }
         Task {
-            // Let the closing animation finish before presenting the invite.
             try? await Task.sleep(for: .milliseconds(600))
-            self.presentedInvite = PendingInvite(token: token)
+            action()
         }
     }
 
@@ -148,8 +201,8 @@ final class AppRouter {
         push(.settings(route))
     }
 
-    func openCamera(groupID: String?) {
-        cameraRequest = CameraRequest(groupID: groupID)
+    func openCamera(groupID: String?, momentID: String? = nil) {
+        cameraRequest = CameraRequest(groupID: groupID, momentID: momentID)
     }
 
     /// Shows a group's feed: it becomes the current group, on the Home tab.

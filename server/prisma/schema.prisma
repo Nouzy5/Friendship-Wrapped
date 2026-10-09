@@ -30,12 +30,14 @@ model User {
   comments            Comment[]
   favorites           Favorite[]
   albums              Album[]
+  moments             Moment[]
   settings            UserSettings?
   blocksMade          Block[]              @relation("BlocksMade")
   blocksReceived      Block[]              @relation("BlocksReceived")
   reportsMade         Report[]             @relation("ReportsMade")
   reportsReceived     Report[]             @relation("ReportsReceived")
   pushSubscriptions   PushSubscription[]
+  apnsDevices         ApnsDevice[]
   queuedNotifications QueuedNotification[]
 
   @@map("users")
@@ -52,6 +54,8 @@ model Session {
   /// Refreshed at most every few minutes while the session is in use.
   lastActiveAt DateTime @default(now()) @map("last_active_at")
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The iPhone this session is on, if the app registered it for push.
+  apnsDevices  ApnsDevice[]
 
   @@index([userId])
   @@index([expiresAt])
@@ -77,6 +81,7 @@ model Group {
   invites   InviteToken[]
   photos    Photo[]
   albums    Album[]
+  moments   Moment[]
   wrapped   Wrapped[]
 
   @@map("groups")
@@ -133,6 +138,13 @@ model InviteToken {
   @@map("invite_tokens")
 }
 
+/// What a post is. A video is still a Photo row: its three image renditions are the video's poster
+/// frame, so reactions, comments, albums, moments and Wrapped treat it like any other post.
+enum MediaKind {
+  PHOTO
+  VIDEO
+}
+
 /// A photo shared with one group. The image bytes live in object storage; only their keys are stored here.
 model Photo {
   id           String       @id @default(uuid(7)) @db.Char(36)
@@ -148,8 +160,19 @@ model Photo {
   height       Int
   /// Byte size of the full-size rendition.
   sizeBytes    Int          @map("size_bytes")
+  kind         MediaKind    @default(PHOTO)
+  /// Object-storage key of the video (an H.264 MP4 the server made), for a video; null for a photo.
+  videoKey        String?   @map("video_key") @db.VarChar(255)
+  videoDurationMs Int?      @map("video_duration_ms")
+  videoSizeBytes  Int?      @map("video_size_bytes")
+  /// A Live Photo's motion: it plays by itself, muted and looping, rather than on tap.
+  videoIsLive     Boolean   @default(false) @map("video_is_live")
   /// Upload time.
   createdAt    DateTime     @default(now()) @map("created_at")
+  /// The moment this photo was posted into, if the poster chose one while it was open. A photo is
+  /// in at most one; deleting the moment leaves the photo in the group.
+  momentId     String?      @map("moment_id") @db.Char(36)
+  moment       Moment?      @relation(fields: [momentId], references: [id], onDelete: SetNull)
   group        Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
   /// Restrict: deleting an account deletes the person's photos first (users.service deleteAccount), so none is left orphaned.
   uploader     User         @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
@@ -162,6 +185,8 @@ model Photo {
   /// Newest-first group listing with a (createdAt, id) keyset cursor.
   @@index([groupId, createdAt, id])
   @@index([uploaderId, createdAt])
+  /// A moment's photos, oldest first with the same cursor.
+  @@index([momentId, createdAt, id])
   @@map("photos")
 }
 
@@ -253,6 +278,31 @@ model PhotoAlbum {
   @@map("photo_albums")
 }
 
+/// Something the group is doing right now, or did: "Friday at the lake". Anyone in the group can
+/// start one; for a few hours it is open, and photos posted into it are collected on its page.
+/// A group has at most one open at a time. Not an album: an album is a collection of photos that
+/// already exist, picked by hand afterwards; a moment is open while it happens and closes by itself.
+model Moment {
+  id          String   @id @default(uuid(7)) @db.Char(36)
+  groupId     String   @map("group_id") @db.Char(36)
+  /// Null once the creator's account is gone: a moment belongs to the group, like an album.
+  createdById String?  @map("created_by_id") @db.Char(36)
+  title       String   @db.VarChar(60)
+  /// One emoji, or none.
+  emoji       String?  @db.VarChar(16)
+  /// When it started: also its place in the group's list, with a (createdAt, id) keyset cursor.
+  createdAt   DateTime @default(now()) @map("created_at")
+  /// When it closes to new photos. Ending it early moves this to that moment.
+  endsAt      DateTime @map("ends_at")
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  photos      Photo[]
+
+  @@index([groupId, createdAt, id])
+  @@index([createdById])
+  @@map("moments")
+}
+
 /// A finished year's Wrapped, saved the first time it's opened after the year ends, so it
 /// always tells the same story. A year still in progress is counted live and not saved.
 model Wrapped {
@@ -285,6 +335,10 @@ model UserSettings {
   notifyMembers        Boolean  @default(false) @map("notify_members")
   notifyOnThisDay      Boolean  @default(true) @map("notify_on_this_day")
   notifyWrapped        Boolean  @default(true) @map("notify_wrapped")
+  /// A gentle reminder to post, at most one per fortnight (see notification-scheduler).
+  notifyNudges         Boolean  @default(true) @map("notify_nudges")
+  /// When someone in a group starts a moment.
+  notifyMoments        Boolean  @default(true) @map("notify_moments")
   quietHoursEnabled    Boolean  @default(true) @map("quiet_hours_enabled")
   /// "HH:MM" (24-hour) in timeZone. A window may run past midnight.
   quietHoursStart      String   @default("23:00") @map("quiet_hours_start") @db.Char(5)
@@ -293,6 +347,11 @@ model UserSettings {
   onThisDayCheckedOn   String?  @map("on_this_day_checked_on") @db.Char(10)
   /// Scheduler bookkeeping: the last year whose Wrapped was announced.
   wrappedAnnouncedYear Int?     @map("wrapped_announced_year") @db.SmallInt
+  /// Scheduler bookkeeping: when the person was last nudged. At most one nudge per fortnight, whatever the group.
+  nudgedAt             DateTime? @map("nudged_at")
+  /// Scheduler bookkeeping: the local day ("YYYY-MM-DD") the person was last considered for a nudge,
+  /// so the check runs once a day rather than every minute.
+  nudgeCheckedOn       String?  @map("nudge_checked_on") @db.Char(10)
   updatedAt            DateTime @updatedAt @map("updated_at")
   user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -346,6 +405,33 @@ model PushSubscription {
 
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+/// Which Apple push server a device token belongs to: Xcode and debug builds use the sandbox,
+/// TestFlight and App Store builds production. A token only works on its own.
+enum ApnsEnvironment {
+  SANDBOX
+  PRODUCTION
+}
+
+/// One iPhone's Apple Push Notification token. It belongs to the session that registered it, so
+/// signing out (here, from another device, or by a session running out) stops the notifications
+/// at once, and the next person to sign in on that phone registers it afresh.
+model ApnsDevice {
+  id          String          @id @default(uuid(7)) @db.Char(36)
+  userId      String          @map("user_id") @db.Char(36)
+  sessionId   String          @map("session_id") @db.Char(64)
+  /// The hex device token iOS hands the app (up to 100 bytes). One phone is one row, whoever is signed in.
+  token       String          @unique @db.VarChar(200)
+  environment ApnsEnvironment
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  session     Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@map("apns_devices")
 }
 
 /// A push notification held back by the recipient's quiet hours, sent by the scheduler once

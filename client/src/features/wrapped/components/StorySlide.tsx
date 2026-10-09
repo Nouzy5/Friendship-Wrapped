@@ -25,8 +25,10 @@ const person = (color: MemberColor | null): SlideTone => {
 };
 
 /** The slide's colours, so the story's progress bar and buttons can match. */
-export function slideTone(slide: WrappedSlide, colorOf: (userId: string) => MemberColor | null): SlideTone {
+export function slideTone(slide: WrappedSlide, colorOf: (userId: string) => MemberColor | null, meId: string): SlideTone {
   switch (slide.type) {
+    case "you":
+      return person(colorOf(meId));
     case "topPhotographer":
       return person(slide.top.color ?? colorOf(slide.top.user.id));
     case "mostReactedPhoto":
@@ -398,6 +400,57 @@ function CollageSlide({ photos, year }: { photos: Photo[]; year: number }) {
   );
 }
 
+/** Your own year in the group, in your colour. Only you see it, and it holds nothing about anyone else. */
+function YouSlide({ year, groupId, ...you }: Extract<WrappedSlide, { type: "you" }> & { year: number; groupId: string }) {
+  const { photos, reactionsGiven, commentsWritten, reactionsReceived, busiestMonth, bestPhoto } = you;
+  const me = useCurrentUser();
+  const { colorOf } = useGroupPeople(groupId);
+  const tiles = [
+    photos > 0 && { value: photos, label: nounFor(photos, "photo") },
+    reactionsReceived > 0 && { value: reactionsReceived, label: `${nounFor(reactionsReceived, "reaction")} on your photos` },
+    reactionsGiven > 0 && { value: reactionsGiven, label: `${nounFor(reactionsGiven, "reaction")} sent` },
+    commentsWritten > 0 && { value: commentsWritten, label: `${nounFor(commentsWritten, "comment")} written` },
+  ].filter((tile): tile is { value: number; label: string } => tile !== false);
+
+  return (
+    <SlideFrame tone={person(colorOf(me.id))} center>
+      <h2 className={headline}>
+        <Rise>Your {year}, just you.</Rise>
+      </h2>
+      <Rise delay={250} as="div" className="w-full">
+        <dl className="grid grid-cols-2 gap-3 text-left">
+          {tiles.map(({ value, label }, index) => (
+            <div key={label} className="flex flex-col-reverse rounded-3xl bg-current/10 px-4 py-3">
+              <dt className="text-sm opacity-80">{label}</dt>
+              <dd className="text-3xl font-bold font-stretch-112%">
+                <AnimatedNumber value={value} delayMs={250 + index * 120} durationMs={1000} />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </Rise>
+      {bestPhoto && (
+        <Rise delay={900} as="div" className="flex w-full items-center gap-4 text-left">
+          <span className="block w-[34%] shrink-0 -rotate-3 rounded-[1.5rem] bg-white p-1.5">
+            <PhotoImage photo={bestPhoto.photo} variant="medium" className="aspect-square rounded-[1.125rem]" />
+          </span>
+          <span className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-lg font-semibold">Your most loved photo</span>
+            <span className="text-base">
+              {formatNumber(bestPhoto.count)} {nounFor(bestPhoto.count, "reaction")}
+            </span>
+          </span>
+        </Rise>
+      )}
+      {busiestMonth && (
+        <Rise delay={1200} className="text-base">
+          You posted the most in {monthName(busiestMonth.month)}: {formatNumber(busiestMonth.count)} {nounFor(busiestMonth.count, "photo")}.
+        </Rise>
+      )}
+    </SlideFrame>
+  );
+}
+
 type OutroProps = Extract<WrappedSlide, { type: "outro" }> & { wrapped: Wrapped; onRestart: () => void; onClose: () => void };
 
 function OutroSlide({ photos, reactions, comments, people, wrapped, onRestart, onClose }: OutroProps) {
@@ -464,6 +517,8 @@ export function StorySlide({ slide, wrapped, onRestart, onClose }: StorySlidePro
       return <ReactionsSlide {...slide} />;
     case "collage":
       return <CollageSlide photos={slide.photos} year={wrapped.year} />;
+    case "you":
+      return <YouSlide {...slide} year={wrapped.year} groupId={wrapped.group.id} />;
     case "outro":
       return <OutroSlide {...slide} wrapped={wrapped} onRestart={onRestart} onClose={onClose} />;
   }
@@ -473,5 +528,6 @@ export function StorySlide({ slide, wrapped, onRestart, onClose }: StorySlidePro
 export function slideImageUrls(slide: WrappedSlide): string[] {
   if (slide.type === "mostReactedPhoto") return [slide.photo.imageUrls.medium];
   if (slide.type === "collage") return slide.photos.map((photo) => photo.imageUrls.thumbnail);
+  if (slide.type === "you" && slide.bestPhoto) return [slide.bestPhoto.photo.imageUrls.medium];
   return [];
 }

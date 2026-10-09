@@ -3,6 +3,7 @@ import { memberFill } from "../../../lib/member-colors";
 import { useGroupPeople } from "../../groups/hooks";
 import type { Photo } from "../types";
 import { fromFeedState, photoPath } from "../viewer-link";
+import { MediaBadge } from "./MediaBadge";
 import { photoAlt, PhotoImage } from "./PhotoImage";
 
 /** Square thumbnails, lazy-loaded, each with a dot in the poster's colour, each opening the photo viewer. */
@@ -20,6 +21,7 @@ export function PhotoGrid({ photos }: { photos: Photo[] }) {
             className="relative block overflow-hidden rounded-[0.875rem] transition hover:opacity-90"
           >
             <PhotoImage photo={photo} variant="thumbnail" className="aspect-square" />
+            <MediaBadge photo={photo} className="right-2 bottom-1.5" />
             <span
               aria-hidden
               className="absolute bottom-2 left-2 size-3.5 rounded-full ring-2 ring-bg"

@@ -2,10 +2,13 @@ import SwiftUI
 
 @main
 struct FriendshipWrappedApp: App {
+    /// Receives Apple's push callbacks, which SwiftUI has no hooks for.
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var session = SessionStore()
     @State private var groups = GroupsStore()
     @State private var photos = PhotosStore()
     @State private var albums = AlbumsStore()
+    @State private var moments = MomentsStore()
     @State private var wrapped = WrappedStore()
     @State private var account = AccountStore()
     @State private var settings = DeviceSettings.shared
@@ -23,6 +26,7 @@ struct FriendshipWrappedApp: App {
                 .environment(groups)
                 .environment(photos)
                 .environment(albums)
+                .environment(moments)
                 .environment(wrapped)
                 .environment(account)
                 .environment(settings)

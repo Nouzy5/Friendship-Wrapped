@@ -10,13 +10,14 @@ A private social memory app for friend groups. Capture photos together through t
 
 ## Features
 
-- **Groups and invites.** Create a group, share an invite link, and every member gets their own colour.
-- **Photos.** In-app camera or gallery upload, with captions, thumbnails and object storage.
+- **Groups and invites.** Create a group, share an invite link or QR code (valid for a day, a week or a month), and every member gets their own colour. An expired link says who sent it.
+- **Photos and videos.** In-app camera or gallery upload, with captions, thumbnails and object storage. Short videos (up to a minute) and Live Photos work too, and behave like any other post.
 - **Feed.** A group feed and grid with infinite scroll, a swipeable full-screen viewer and lazy-loaded images.
 - **Reactions, comments and favourites.** Five reactions, comments, and private favourites.
-- **Memories.** On This Day, a timeline by month, shared albums and favourites.
-- **Wrapped.** The group's year as a full-screen story, saved once the year is over.
-- **Push notifications, themes and privacy controls.** Light/dark mode, blocking and reporting, account deletion, installable to the home screen.
+- **Memories and Moments.** On This Day, a timeline by month, shared albums and favourites, and Moments: a few hours in which the group posts into one shared place.
+- **Group pulse.** A "this month" card and a weekly group streak for the whole group, plus at most one gentle reminder per person per fortnight. Nothing ever names who hasn't posted.
+- **Wrapped.** The group's year as a full-screen story, saved once the year is over, with a personal slide and share cards drawn on your own device.
+- **Push notifications, themes and privacy controls.** Web push and Apple push on iPhone, light/dark mode, blocking and reporting, account deletion, installable to the home screen.
 - **Native iOS app.** A SwiftUI client in [`ios/`](ios/README.md) that uses the same API.
 
 ## Tech stack
@@ -25,7 +26,7 @@ A private social memory app for friend groups. Capture photos together through t
 | --- | --- |
 | Web client | React 19, Vite, Tailwind 4, React Router, TanStack Query |
 | iOS client | SwiftUI (iOS 17+) |
-| API | Node.js, Express 5, Zod, sharp, multer |
+| API | Node.js, Express 5, Zod, sharp, ffmpeg, multer |
 | Database | MySQL 8.4 with Prisma 7 |
 | Storage | S3-compatible object storage (MinIO locally) |
 | Tests | Vitest and Supertest |
@@ -43,6 +44,7 @@ A private social memory app for friend groups. Capture photos together through t
   ```
 
   Set `MINIO_BIN` if the binary isn't on your `PATH`.
+- [ffmpeg](https://ffmpeg.org/download.html) (with ffprobe), optional, to post videos. Without it everything else works and videos are turned away with a clear message. Set `FFMPEG_PATH` and `FFPROBE_PATH` if they aren't on your `PATH`.
 
 ### Setup
 

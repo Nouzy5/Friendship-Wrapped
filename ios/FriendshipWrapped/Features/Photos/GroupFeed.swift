@@ -84,8 +84,15 @@ struct PhotoCard: View {
                 .contentShape(shape)
         }
         .buttonStyle(PressScaleButtonStyle(scale: 0.98))
-        .accessibilityLabel("Photo by \(photo.uploader.displayName), \(Format.relative(photo.createdAt))")
-        .accessibilityHint("Opens the photo")
+        .accessibilityLabel("\(photo.isVideo ? "Video" : "Photo") by \(photo.uploader.displayName), \(Format.relative(photo.createdAt))")
+        .accessibilityHint(photo.isVideo ? "Opens the video" : "Opens the photo")
+        .overlay(alignment: .bottomTrailing) {
+            if let video = photo.video {
+                VideoBadge(video: video)
+                    .padding(14)
+                    .allowsHitTesting(false)
+            }
+        }
         .overlay(alignment: .topLeading) {
             NameTag(
                 name: photo.uploader.displayName,

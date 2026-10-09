@@ -7,13 +7,14 @@ import { Spinner } from "../../../components/ui/Spinner";
 import { useDeviceSettings } from "../../../lib/device-settings";
 import { haptic } from "../../../lib/haptics";
 import { IMAGE_ACCEPT } from "../../../lib/image-files";
+import { MEDIA_ACCEPT } from "../../../lib/media-files";
 import { usePageHidden } from "../../../lib/usePageHidden";
 import { captureFrame } from "../capture";
 import { useCamera, type CameraProblem } from "../useCamera";
 
 type CameraViewfinderProps = {
   onCapture: (photo: Blob) => void;
-  /** A photo from the gallery, or from the phone's own camera app (fallback). */
+  /** A photo or video from the gallery, or a photo from the phone's own camera app (fallback). */
   onPickFile: (file: File) => void;
 };
 
@@ -117,7 +118,7 @@ export function CameraViewfinder({ onCapture, onPickFile }: CameraViewfinderProp
       {captureError && <Alert>{captureError}</Alert>}
 
       <div className="flex items-center justify-between px-8">
-        <FileButton accept={IMAGE_ACCEPT} onFile={onPickFile} aria-label="Choose from your photos" className={roundButtonClasses}>
+        <FileButton accept={MEDIA_ACCEPT} onFile={onPickFile} aria-label="Choose from your photos and videos" className={roundButtonClasses}>
           <ImagesIcon className="size-6" />
         </FileButton>
 

@@ -20,6 +20,8 @@ export async function updateSettings(userId: string, input: UpdateSettingsInput)
     notifyMembers: n?.members,
     notifyOnThisDay: n?.onThisDay,
     notifyWrapped: n?.wrapped,
+    notifyNudges: n?.nudges,
+    notifyMoments: n?.moments,
     quietHoursEnabled: n?.quietHours?.enabled,
     quietHoursStart: n?.quietHours?.start,
     quietHoursEnd: n?.quietHours?.end,
