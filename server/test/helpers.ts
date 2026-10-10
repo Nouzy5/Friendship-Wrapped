@@ -95,6 +95,13 @@ export function verificationTokenIn(mail: SentMail): string {
   return token;
 }
 
+/** The token in the link of a password reset email, as the person would open it. */
+export function resetTokenIn(mail: SentMail): string {
+  const token = /\/reset-password\?token=([A-Za-z0-9_-]{43})/.exec(mail.text)?.[1];
+  if (!token) throw new Error(`No password reset link in: ${mail.text}`);
+  return token;
+}
+
 export type Agent = ReturnType<typeof request.agent>;
 
 export async function createGroup(agent: Agent, body: object = { name: "The Boys", emoji: "🍻" }) {

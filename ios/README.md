@@ -10,6 +10,7 @@ The same design as the web app ([technical reference](../docs/REFERENCE.md#redes
 | --- | --- |
 | `/auth/login`, `/auth/register` | Welcome screen (the colour-stripe mark) → Log in (email or username) / Create account (email, name, username, password) |
 | `/verify-email` | The link in the confirmation email opens the web app. Until it is confirmed the app shows only a "Check your inbox" screen (accounts from before email was required are asked to add one); it looks for the confirmation by itself and when the app comes back to the front |
+| `/auth/forgot-password`, `/reset-password` | "Forgot your password?" under the login form asks for an email or username and emails a link (the same answer whether or not an account matched, "send it again" after a minute). The link opens the web page, where the new password is chosen; every device is signed out, and you log in here again |
 | `/onboarding` | "Welcome!" screen after sign-up: create your first group or join with a link |
 | `/home`, `/groups/:id` | **Home** tab is the current group's feed. The group's name opens a list of your groups (+ New group); the header also has the grid/feed switch, group settings and your avatar (→ Settings). Alone in a group, the invite card comes first |
 | Feed post | The photo with a name tag in the poster's colour, a "…" menu (add to an album, save photo when allowed, report, block, delete your own), reactions as pills with the people who reacted as dots in their colours (yours outlined in your colour), comments, favourite star, caption |

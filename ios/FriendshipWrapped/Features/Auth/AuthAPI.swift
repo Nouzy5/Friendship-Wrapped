@@ -18,6 +18,11 @@ struct ChangeEmailInput: Encodable {
     let password: String
 }
 
+struct ForgotPasswordInput: Encodable {
+    /// The email address, or the username.
+    let identifier: String
+}
+
 struct UpdateProfileInput: Encodable {
     let displayName: String
 }
@@ -62,6 +67,14 @@ extension APIClient {
     /// Emails the confirmation link again. `429 EMAIL_COOLDOWN` if one went out in the last minute.
     func resendVerificationEmail() async throws {
         try await perform(.post, "/auth/email/resend")
+    }
+
+    /// Emails a link to choose a new password, to the address on the account the email or username
+    /// names. Succeeds whether or not there is such an account: the server won't say who has one.
+    /// `429` when this phone (or this name) has asked too often. The link opens in the browser, where
+    /// the new password is chosen.
+    func requestPasswordReset(identifier: String) async throws {
+        try await perform(.post, "/auth/forgot-password", body: ForgotPasswordInput(identifier: identifier))
     }
 
     func updateProfile(_ input: UpdateProfileInput) async throws -> User {

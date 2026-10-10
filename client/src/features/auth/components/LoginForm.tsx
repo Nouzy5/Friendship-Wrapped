@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link, useLocation } from "react-router";
 import { Alert } from "../../../components/ui/Alert";
 import { Button } from "../../../components/ui/Button";
 import { TextField } from "../../../components/ui/TextField";
@@ -8,6 +9,7 @@ import { useLogin } from "../hooks";
 /** On success the session updates and the auth guard redirects; no navigation needed here. */
 export function LoginForm() {
   const login = useLogin();
+  const location = useLocation();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
 
@@ -44,6 +46,14 @@ export function LoginForm() {
         onChange={(e) => setPassword(e.target.value)}
         error={fieldErrors.password}
       />
+      {/* Carries the "return to" page along, like the link to registration. */}
+      <Link
+        to="/auth/forgot-password"
+        state={location.state}
+        className="-mt-1 self-start text-sm font-semibold text-fg underline underline-offset-2 hover:underline"
+      >
+        Forgot your password?
+      </Link>
 
       <Button type="submit" className="mt-2" disabled={login.isPending}>
         {login.isPending ? "Logging in…" : "Log in"}

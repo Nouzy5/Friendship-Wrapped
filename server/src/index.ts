@@ -7,6 +7,7 @@ import { describeMail, settleMail } from "./lib/mail.js";
 import { prisma } from "./lib/prisma.js";
 import { sweepStaleUploads } from "./lib/upload.js";
 import { sweepExpiredVerificationTokens } from "./modules/auth/email-verification.service.js";
+import { sweepExpiredResetTokens } from "./modules/auth/password-reset.service.js";
 import { checkDatabase, checkStorage } from "./modules/health/health.service.js";
 import { startNotificationScheduler } from "./modules/notifications/notification-scheduler.js";
 import { settleNotifications } from "./modules/notifications/notifications.service.js";
@@ -52,9 +53,10 @@ void sweepStaleUploads();
 const uploadSweep = setInterval(() => void sweepStaleUploads(), 60 * 60 * 1000);
 uploadSweep.unref();
 
-// Confirmation links nobody opened in time.
-void sweepExpiredVerificationTokens();
-const tokenSweep = setInterval(() => void sweepExpiredVerificationTokens(), 60 * 60 * 1000);
+// Confirmation and password reset links nobody opened in time.
+const sweepEmailLinks = () => void Promise.all([sweepExpiredVerificationTokens(), sweepExpiredResetTokens()]);
+sweepEmailLinks();
+const tokenSweep = setInterval(sweepEmailLinks, 60 * 60 * 1000);
 tokenSweep.unref();
 
 let shuttingDown = false;

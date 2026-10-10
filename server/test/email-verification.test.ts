@@ -235,6 +235,32 @@ describe("who holds an address", () => {
     expect((await prisma.user.findUniqueOrThrow({ where: { username: "bob" } })).emailVerifiedAt).not.toBeNull();
   });
 
+  it("is kept by an account waiting for its link when a sign-up for it is turned away", async () => {
+    const waiting = await register({ ...testUser, username: "carol", email: "carol@example.com" });
+    const link = verificationTokenIn((await sentMail())[0]!);
+    await register({ ...testUser, username: "bob", email: "bob@example.com" });
+
+    // Someone asks for carol's address with a username that is taken: no account is made, so nothing is taken.
+    const turnedAway = await register({ ...testUser, username: "bob", email: "carol@example.com" });
+    expect(turnedAway.status).toBe(409);
+    expect(turnedAway.body.error.code).toBe("USERNAME_TAKEN");
+
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: waiting.body.user.id } })).email).toBe("carol@example.com");
+    expect(await prisma.user.count()).toBe(2);
+    // ...and her link still works.
+    expect((await request(app).post("/api/auth/verify-email").send({ token: link })).status).toBe(200);
+  });
+
+  it("is kept when a sign-up for it fails on the display name or the password, too", async () => {
+    const waiting = await register({ ...testUser, username: "carol", email: "carol@example.com" });
+
+    for (const bad of [{ displayName: "" }, { password: "short" }, { username: "no" }]) {
+      expect((await register({ ...testUser, email: "carol@example.com", ...bad })).status).toBe(400);
+    }
+
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: waiting.body.user.id } })).email).toBe("carol@example.com");
+  });
+
   it("works the same when an account changes to an address someone only claimed", async () => {
     const claimed = await register({ ...testUser, username: "bob", email: "shared@example.com" });
     const { agent } = await signedUpAgent();

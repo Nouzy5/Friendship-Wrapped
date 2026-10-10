@@ -562,6 +562,25 @@ describe("GET /api/admin/system", () => {
   const checkOf = (body: { checks: { id: string; status: string; detail: string }[] }, id: string) =>
     body.checks.find((check) => check.id === id)!;
 
+  it("counts expired confirmation links and expired password reset links alike", async () => {
+    const admin = await signUpAdmin();
+    const { user } = await signUp(app, "alice");
+    const past = new Date(Date.now() - 60_000);
+    await prisma.emailVerificationToken.create({ data: { id: "a".repeat(64), userId: user.id, email: "alice@example.com", expiresAt: past } });
+    await prisma.passwordResetToken.createMany({
+      data: [
+        { id: "b".repeat(64), userId: user.id, email: "alice@example.com", expiresAt: past },
+        { id: "c".repeat(64), userId: user.id, email: "alice@example.com", expiresAt: past },
+        // Still good: not counted.
+        { id: "d".repeat(64), userId: user.id, email: "alice@example.com", expiresAt: new Date(Date.now() + 60_000) },
+      ],
+    });
+
+    const res = await admin.agent.get("/api/admin/system");
+
+    expect(checkOf(res.body, "expired").detail).toBe("0 expired sessions and 3 expired links waiting to be swept away.");
+  });
+
   it("checks the database, storage, mail, features and data", async () => {
     const { agent } = await signUpAdmin();
     const res = await agent.get("/api/admin/system");
@@ -589,6 +608,7 @@ describe("GET /api/admin/system", () => {
     expect(checkOf(res.body, "mail").status).toBe("ok");
     expect(checkOf(res.body, "admins")).toMatchObject({ status: "ok", detail: "1 address in ADMIN_EMAILS." });
     expect(checkOf(res.body, "group-owners").status).toBe("ok");
+    expect(checkOf(res.body, "expired").detail).toBe("0 expired sessions and 0 expired links waiting to be swept away.");
     expect(res.body.status).toBe("ok");
     expect(res.body.server).toMatchObject({
       environment: "test",

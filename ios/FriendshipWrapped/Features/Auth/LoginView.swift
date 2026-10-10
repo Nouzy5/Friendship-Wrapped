@@ -45,6 +45,20 @@ struct LoginView: View {
             )
             .focused($focusedField, equals: .password)
 
+            Button {
+                focusedField = nil
+                router.authPath.append(.forgotPassword)
+            } label: {
+                Text("Forgot your password?")
+                    .font(.subheadline.weight(.semibold))
+                    .underline()
+                    .foregroundStyle(Theme.fg)
+                    .frame(minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.top, -12)
+
             PrimaryButton(title: "Log in", pendingTitle: "Logging in…", isPending: isPending, action: submit)
                 .padding(.top, 8)
         } footer: {
