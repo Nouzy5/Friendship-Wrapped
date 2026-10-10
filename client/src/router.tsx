@@ -8,6 +8,7 @@ import { CardLayout } from "./layouts/CardLayout";
 import { RootLayout } from "./layouts/RootLayout";
 import { AlbumPage } from "./pages/AlbumPage";
 import { CameraPage } from "./pages/CameraPage";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { GroupPage } from "./pages/GroupPage";
 import { GroupSettingsPage } from "./pages/GroupSettingsPage";
 import { HomePage } from "./pages/HomePage";
@@ -20,6 +21,7 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PhotoPage } from "./pages/PhotoPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { RouteErrorPage } from "./pages/RouteErrorPage";
 import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { AccountSettingsPage } from "./pages/settings/AccountSettingsPage";
@@ -53,6 +55,7 @@ export const router = createBrowserRouter([
             children: [
               { path: "login", element: <LoginPage /> },
               { path: "register", element: <RegisterPage /> },
+              { path: "forgot-password", element: <ForgotPasswordPage /> },
             ],
           },
         ],
@@ -64,6 +67,8 @@ export const router = createBrowserRouter([
           { path: "invite/:token", element: <InvitePage /> },
           // The link in the confirmation email: open to anyone, signed in or not.
           { path: "verify-email", element: <VerifyEmailPage /> },
+          // The link in the password reset email: open to anyone too, since whoever has it can't log in.
+          { path: "reset-password", element: <ResetPasswordPage /> },
         ],
       },
       {

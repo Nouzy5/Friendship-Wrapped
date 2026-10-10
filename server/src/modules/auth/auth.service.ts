@@ -2,16 +2,17 @@ import { AppError, notFound } from "../../lib/errors.js";
 import { logger } from "../../lib/logger.js";
 import { queueMail } from "../../lib/mail.js";
 import { hashPassword, verifyDummyPassword, verifyPassword } from "../../lib/password.js";
-import { isUniqueConstraintError } from "../../lib/prisma.js";
+import { isUniqueConstraintError, withTransaction } from "../../lib/prisma.js";
 import { generateToken } from "../../lib/tokens.js";
 import { toPublicUser, type PublicUser } from "../users/user.dto.js";
 import * as usersRepository from "../users/users.repository.js";
-import { emailSchema, usernameSchema } from "../users/users.schemas.js";
 import { newSignInMessage } from "./auth-emails.js";
 import * as emailVerificationRepository from "./email-verification.repository.js";
 import type { ChangePasswordInput, LoginInput, RegisterInput } from "./auth.schemas.js";
+import { credentialLookup } from "./credential-lookup.js";
 import { recordSignIn, type DeviceHint } from "./devices.js";
 import { sendVerificationEmail } from "./email-verification.service.js";
+import * as passwordResetRepository from "./password-reset.repository.js";
 import {
   issueSession,
   pruneExpiredSessions,
@@ -61,16 +62,16 @@ export async function register(input: RegisterInput, device: DeviceHint): Promis
 
   let user: PublicUser;
   try {
-    // An address belongs to whoever confirmed it: an account that only claimed it lets go.
-    await emailVerificationRepository.releaseUnconfirmedEmail(input.email);
-    user = toPublicUser(
-      await usersRepository.createUser({
-        email: input.email,
-        username: input.username,
-        displayName: input.displayName,
-        passwordHash,
-      }),
-    );
+    // An address belongs to whoever confirmed it: an account that only claimed it lets go. Together
+    // with creating the account, so a sign-up that's turned away (the username is taken) takes nothing.
+    user = await withTransaction(async (tx) => {
+      await emailVerificationRepository.releaseUnconfirmedEmail(input.email, tx);
+      const created = await usersRepository.createUser(
+        { email: input.email, username: input.username, displayName: input.displayName, passwordHash },
+        tx,
+      );
+      return toPublicUser(created);
+    });
   } catch (error) {
     if (isUniqueConstraintError(error)) throw (await conflictFor(input)) ?? error;
     throw error;
@@ -81,19 +82,6 @@ export async function register(input: RegisterInput, device: DeviceHint): Promis
   await sendVerificationEmail({ id: user.id, displayName: user.displayName, email: input.email });
 
   return { user, session: await issueSession(user.id, device.userAgent), deviceId: signIn.deviceId };
-}
-
-/** The account a login names, by email address or by username; null when it can't be anyone's. */
-function credentialLookup(identifier: string): { email: string } | { username: string } | null {
-  if (identifier.includes("@")) {
-    const email = emailSchema.safeParse(identifier);
-    return email.success ? { email: email.data } : null;
-  }
-  // Only a name that could have been registered can match an account. MySQL's collation
-  // ignores accents, so "álice" would find "alice", and each such spelling would get its
-  // own allowance of attempts from the rate limiter. Anything else is an unknown user.
-  const username = usernameSchema.safeParse(identifier);
-  return username.success ? { username: username.data } : null;
 }
 
 export async function login(input: LoginInput, device: DeviceHint): Promise<AuthResult> {
@@ -145,4 +133,6 @@ export async function changePassword(
 
   await usersRepository.setPasswordHash(userId, await hashPassword(newPassword));
   await revokeOtherSessions(userId, currentSessionId);
+  // A reset link that was sent before is no longer needed, and shouldn't be able to undo this.
+  await passwordResetRepository.deleteTokensForUser(userId);
 }

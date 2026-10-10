@@ -46,6 +46,7 @@ enum SettingsRoute: Hashable {
 enum AuthRoute: Hashable {
     case login
     case register
+    case forgotPassword
 }
 
 /// An invite to show in a sheet. Identifiable for `.sheet(item:)`.

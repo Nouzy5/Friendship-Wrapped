@@ -85,6 +85,7 @@ struct AuthFlowView: View {
                     switch route {
                     case .login: LoginView()
                     case .register: RegisterView()
+                    case .forgotPassword: ForgotPasswordView()
                     }
                 }
         }

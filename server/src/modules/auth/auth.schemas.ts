@@ -39,6 +39,22 @@ export const changePasswordSchema = z.object({
   newPassword: passwordSchema,
 });
 
+/** POST /auth/forgot-password: whoever forgot, by the email address or the username. Lenient like login: nothing here says what an account looks like. */
+export const forgotPasswordSchema = z.object({
+  identifier: z.string().trim().toLowerCase().min(1, "Enter your email address or username").max(254),
+});
+
+/** The token in a password reset link: the same shape as the other emailed links. */
+export const resetTokenSchema = z.object({
+  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/, "This link isn't valid"),
+});
+
+/** POST /auth/reset-password: the link's token and the new password (which follows the registration rules). */
+export const resetPasswordSchema = z.object({
+  token: resetTokenSchema.shape.token,
+  newPassword: passwordSchema,
+});
+
 /** PUT /auth/email: the new address, confirmed with the password. */
 export const changeEmailSchema = z.object({
   email: emailSchema,
@@ -56,3 +72,4 @@ export type RegisterInput = z.infer<typeof registerSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type ChangeEmailInput = z.infer<typeof changeEmailSchema>;
 export type LoginInput = z.output<typeof loginSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;

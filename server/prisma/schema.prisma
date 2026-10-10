@@ -30,6 +30,7 @@ model User {
   updatedAt           DateTime             @updatedAt @map("updated_at")
   sessions            Session[]
   emailTokens         EmailVerificationToken[]
+  passwordResetTokens PasswordResetToken[]
   knownDevices        KnownDevice[]
   memberships         GroupMember[]
   invites             InviteToken[]
@@ -86,6 +87,25 @@ model EmailVerificationToken {
   @@index([userId, createdAt])
   @@index([expiresAt])
   @@map("email_verification_tokens")
+}
+
+/// A one-time link that lets someone who forgot their password choose a new one. Only the hash is
+/// stored, like a session token; the raw token lives in the emailed link alone. Several can be live
+/// at once (asking again doesn't cancel the earlier email), and using one deletes them all.
+model PasswordResetToken {
+  /// SHA-256 (hex) of the token.
+  id        String   @id @db.Char(64)
+  userId    String   @map("user_id") @db.Char(36)
+  /// The address the link was sent to. If the account's address changes afterwards, the link no
+  /// longer matches and does nothing.
+  email     String   @db.VarChar(254)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
 }
 
 /// A browser or phone a person has signed in from, so that a sign-in from one we haven't seen
