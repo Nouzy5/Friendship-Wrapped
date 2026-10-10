@@ -17,6 +17,8 @@ A private social memory app for friend groups. Capture photos together through t
 - **Memories and Moments.** On This Day, a timeline by month, shared albums and favourites, and Moments: a few hours in which the group posts into one shared place.
 - **Group pulse.** A "this month" card and a weekly group streak for the whole group, plus at most one gentle reminder per person per fortnight. Nothing ever names who hasn't posted.
 - **Wrapped.** The group's year as a full-screen story, saved once the year is over, with a personal slide and share cards drawn on your own device.
+- **Email you can trust.** Every account has an email address and has to confirm it before getting in, and a sign-in from a new phone or browser is emailed to the account's owner.
+- **Admin panel.** For whoever runs the server: search people and groups, see statistics, and check that the database, storage, email and everything else work. Set `ADMIN_EMAILS` and `SMTP_*` in `server/.env`; see [Email and sign-in alerts](docs/REFERENCE.md#email-and-sign-in-alerts) (without a mail server nobody can confirm their address, so set it up before deploying this to an existing group).
 - **Push notifications, themes and privacy controls.** Web push and Apple push on iPhone, light/dark mode, blocking and reporting, account deletion, installable to the home screen.
 - **Native iOS app.** A SwiftUI client in [`ios/`](ios/README.md) that uses the same API.
 

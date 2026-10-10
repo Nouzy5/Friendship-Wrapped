@@ -6,7 +6,7 @@ import {
   revokeOtherSessions,
   revokeSession,
 } from "../auth/auth.controller.js";
-import { currentUser, requireAuth } from "../auth/auth.middleware.js";
+import { currentUser, requireAuth, requireSession } from "../auth/auth.middleware.js";
 import { blockUser, listBlocked, unblockUser } from "../blocks/blocks.controller.js";
 import { listMyInvites, revokeMyInvite } from "../invites/invites.controller.js";
 import { getSettings, updateSettings } from "../settings/settings.controller.js";
@@ -45,18 +45,22 @@ const archiveRateLimit = rateLimit({
 
 export const usersRouter = Router();
 
+// Keeping the account safe works before its email is confirmed (and for accounts that have none yet):
+// someone who suspects a break-in can change the password and sign the other devices out, and
+// someone who doesn't want to give an email can still leave.
+usersRouter.delete("/me", requireSession, deleteAccountRateLimit, deleteMe);
+usersRouter.put("/me/password", requireSession, changePasswordRateLimit, changePassword);
+usersRouter.get("/me/sessions", requireSession, listSessions);
+usersRouter.delete("/me/sessions", requireSession, revokeOtherSessions);
+usersRouter.delete("/me/sessions/:sessionId", requireSession, revokeSession);
+
 usersRouter.use(requireAuth);
 
 usersRouter.patch("/me", updateMe);
-usersRouter.delete("/me", deleteAccountRateLimit, deleteMe);
 usersRouter.put("/me/avatar", uploadAvatar);
 usersRouter.delete("/me/avatar", removeAvatar);
-usersRouter.put("/me/password", changePasswordRateLimit, changePassword);
 usersRouter.get("/me/settings", getSettings);
 usersRouter.patch("/me/settings", updateSettings);
-usersRouter.get("/me/sessions", listSessions);
-usersRouter.delete("/me/sessions", revokeOtherSessions);
-usersRouter.delete("/me/sessions/:sessionId", revokeSession);
 usersRouter.get("/me/photos/archive", archiveRateLimit, downloadPhotoArchive);
 usersRouter.get("/me/invites", listMyInvites);
 usersRouter.delete("/me/invites/:inviteId", revokeMyInvite);

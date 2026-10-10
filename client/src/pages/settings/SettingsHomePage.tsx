@@ -72,6 +72,12 @@ export function SettingsHomePage() {
         <SettingsLink to="/settings/photos" icon={CameraIcon} label="Photos & data" />
       </SettingsGroup>
 
+      {user.isAdmin && (
+        <SettingsGroup>
+          <SettingsLink to="/admin" icon={ShieldIcon} label="Admin panel" description="Users, groups, statistics and system checks" />
+        </SettingsGroup>
+      )}
+
       <SettingsSection title="Your groups">
         <SettingsGroup>
           {groups.data?.map((group) => (

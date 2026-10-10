@@ -54,6 +54,8 @@ struct AccountSettingsView: View {
                     DisplayNameEditorSheet(user: user)
                 case .username:
                     UsernameEditorSheet(user: user)
+                case .email:
+                    EmailEditorSheet(user: user)
                 case .password:
                     PasswordEditorSheet()
                 }
@@ -75,6 +77,7 @@ struct AccountSettingsView: View {
         SettingsGroup {
             editorRow("Display name", value: user.displayName, kind: .displayName)
             editorRow("Username", value: "@\(user.username)", kind: .username)
+            editorRow("Email", value: user.email ?? "Add", kind: .email)
             editorRow("Password", value: "Change", kind: .password)
         }
     }
@@ -253,7 +256,7 @@ struct AccountSettingsView: View {
 }
 
 private enum AccountEditorKind: String, Identifiable {
-    case displayName, username, password
+    case displayName, username, email, password
 
     var id: String { rawValue }
 }
@@ -488,6 +491,74 @@ private struct UsernameEditorSheet: View {
             try await session.updateUsername(username.trimmingCharacters(in: .whitespacesAndNewlines))
             Haptics.success()
             ToastCenter.shared.show("Username saved")
+            dismiss()
+        } catch {
+            failure = error.asAPIError
+        }
+        isSaving = false
+    }
+}
+
+/// Changing the address means confirming the new one: once it's saved the app goes back to the
+/// screen asking for the emailed link (the web app's EmailDialog).
+private struct EmailEditorSheet: View {
+    let user: User
+
+    @Environment(SessionStore.self) private var session
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var email = ""
+    @State private var password = ""
+    @State private var isSaving = false
+    @State private var failure: APIError?
+
+    private var canSave: Bool {
+        !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !password.isEmpty
+    }
+
+    var body: some View {
+        SettingsFormSheet(title: "Email address", isBusy: isSaving) {
+            Text("Now \(user.email ?? "not set"). We'll send a link to the new address, and you'll need to open it before you can keep using the app.")
+                .font(.callout)
+                .foregroundStyle(.sub)
+                .fixedSize(horizontal: false, vertical: true)
+            if let message = failure?.formMessage {
+                InlineAlert(message: message)
+            }
+            FWTextField(
+                label: "New email",
+                text: $email,
+                error: failure?.fieldErrors["email"],
+                contentType: .emailAddress,
+                keyboard: .emailAddress,
+                autocapitalization: .never,
+                autocorrection: false,
+                submitLabel: .next
+            )
+            FWTextField(
+                label: "Your password",
+                text: $password,
+                error: failure?.fieldErrors["password"],
+                isSecure: true,
+                contentType: .password,
+                submitLabel: .done,
+                onSubmit: { Task { await save() } }
+            )
+            PrimaryButton(title: "Send the link", pendingTitle: "Sending…", isPending: isSaving) {
+                Task { await save() }
+            }
+            .disabled(!canSave)
+        }
+    }
+
+    private func save() async {
+        guard canSave, !isSaving else { return }
+        isSaving = true
+        failure = nil
+        do {
+            try await session.updateEmail(email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
+            Haptics.success()
+            // The account now waits for the new address: the app shows that screen in place of this one.
             dismiss()
         } catch {
             failure = error.asAPIError

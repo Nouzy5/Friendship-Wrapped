@@ -8,6 +8,7 @@ import { useRegister } from "../hooks";
 /** The server validates everything; its field messages are shown inline. */
 export function RegisterForm() {
   const register = useRegister();
+  const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -17,13 +18,27 @@ export function RegisterForm() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    register.mutate({ displayName, username, password });
+    register.mutate({ email, displayName, username, password });
   }
 
   return (
     <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-4">
       {formError && <Alert>{formError}</Alert>}
 
+      <TextField
+        label="Email"
+        name="email"
+        type="email"
+        autoComplete="email"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        maxLength={254}
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        error={fieldErrors.email}
+        hint="We'll email you a link to confirm it. You can't use the app until you do."
+      />
       <TextField
         label="Display name"
         name="displayName"

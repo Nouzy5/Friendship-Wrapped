@@ -15,6 +15,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:studio": "prisma studio",
+    "admin:verify-email": "node --import tsx scripts/verify-email.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "express": "^5.2.1",
     "helmet": "^8.3.0",
     "multer": "^2.4.0",
+    "nodemailer": "^10.1.0",
     "sharp": "^0.35.5",
     "web-push": "^3.6.7",
     "yazl": "^3.3.1",
@@ -33,6 +35,7 @@
     "@types/express": "^5.0.6",
     "@types/multer": "^2.3.0",
     "@types/node": "^24.19.1",
+    "@types/nodemailer": "^8.0.2",
     "@types/supertest": "^7.2.1",
     "@types/web-push": "^3.6.4",
     "@types/yazl": "^3.3.1",

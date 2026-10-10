@@ -78,6 +78,8 @@ The server validates its environment at startup and refuses to boot with a clear
 
 For push notifications, generate a key pair with `npx web-push generate-vapid-keys` (from `server/`) and set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` (a `mailto:` address); leave them empty to run without push. Tests don't need them.
 
+For email (the confirmation link and the new sign-in notice), set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE` and `MAIL_FROM` to any provider's SMTP settings (Resend, Postmark, Amazon SES, Gmail, …), and `APP_URL` to the web app's public address (required in production once `SMTP_HOST` is set: it is what the links in emails point to). Without `SMTP_HOST` nothing is sent: in development each email is printed in the server's log (so you can open its link from there); in production only the fact that it wasn't sent is logged, since a link in a log is a credential. Set `ADMIN_EMAILS` to your own address (comma-separated for more than one) to open the admin panel. Tests don't need any of these.
+
 Pick your own `S3_SECRET_ACCESS_KEY` (8+ characters). For local MinIO the `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` pair becomes MinIO's root login. Use the same pair in `.env.test`, with `S3_BUCKET=friendship-wrapped-test`. Buckets are created automatically.
 
 ### Run
@@ -131,7 +133,7 @@ server/
   src/
     config/env.ts     Zod-validated environment
     lib/              prisma client + withTransaction, errors (AppError), logger, password hashing, tokens,
-                      storage (S3), images (sharp), upload (multer), send-image,
+                      storage (S3), images (sharp), upload (multer), send-image, mail (SMTP, email layout),
                       pagination (keyset cursors), user-text (caption/comment validation),
                       time-zone (local calendar days and years: On This Day, stats, Wrapped)
     middleware/       error handler, 404, request logging, rate limit, same-origin check
@@ -163,21 +165,24 @@ ios/                  Native SwiftUI app (XcodeGen project.yml); see ios/README.
 
 ## Authentication
 
-- **Accounts.** Username (stored lowercase) + display name + password. Passwords are hashed with Node's built-in scrypt (N=2¹⁵, r=8, p=3). The parameters are stored with each hash so they can be raised later.
+- **Accounts.** Email (stored lowercase, unique) + username (stored lowercase) + display name + password. Passwords are hashed with Node's built-in scrypt (N=2¹⁵, r=8, p=3). The parameters are stored with each hash so they can be raised later. People sign in with their email address or their username (see [Email and sign-in alerts](#email-and-sign-in-alerts)).
 - **Sessions.** Server-side rows in `sessions`. The browser gets a random 256-bit token in an `HttpOnly`, `SameSite=Lax` cookie (`__Host-` prefixed and `Secure` in production). Only the token's SHA-256 is stored, so a database leak can't be replayed. Sessions last 30 days and slide forward while in use. Logout deletes the row.
-- **Protecting an endpoint.** Add `requireAuth` to the route and read the user with `currentUser(req)` in the controller. Never take a user id from the request body.
-- **Hardening.** Login is rate-limited (10 attempts / 15 min per IP + username). Unknown usernames take the same time and get the same response as wrong passwords. State-changing requests from another origin are rejected (CSRF defence in depth). All API responses are `Cache-Control: no-store`.
+- **Protecting an endpoint.** Add `requireAuth` to the route and read the user with `currentUser(req)` in the controller. Never take a user id from the request body. `requireAuth` also answers `403 EMAIL_NOT_VERIFIED` until the account's email is confirmed; only the few routes whose job is confirming it use `requireSession` (signed in, not necessarily confirmed) instead.
+- **Hardening.** Login is rate-limited (10 attempts / 15 min per IP + email or username), and sign-up (every sign-up sends an email) to 30 accounts per hour per IP (`SIGNUP_LIMIT_PER_HOUR`). Unknown usernames take the same time and get the same response as wrong passwords. State-changing requests from another origin are rejected (CSRF defence in depth). All API responses are `Cache-Control: no-store`.
   - **Spelling variants:** login only looks up names that could have been registered. MySQL's collation ignores accents, so without this `álice` would find `alice` and get its own 10 attempts.
   - **Memory:** the limiter's counters are capped, and its key uses at most 64 characters of the username, however long the one sent.
   - **Logs:** invite tokens in URLs are logged as `…`, since an invite link is a credential.
-- **Client.** `useSession()` holds the signed-in user (or `null`). `<RequireAuth>` and `<RedirectIfAuthenticated>` guard routes, and send people back to the page they wanted after login. Any `401 UNAUTHORIZED` response signs the client out.
+- **Client.** `useSession()` holds the signed-in user (or `null`). `<RequireAuth>` and `<RedirectIfAuthenticated>` guard routes, and send people back to the page they wanted after login. Any `401 UNAUTHORIZED` response signs the client out, and any `403 EMAIL_NOT_VERIFIED` makes it look at the session again (which shows the page asking for the email link).
 
 | Method | Endpoint | Auth | Purpose |
 | --- | --- | --- | --- |
-| `POST` | `/api/auth/register` | — | Create an account and sign in |
-| `POST` | `/api/auth/login` | — | Sign in |
+| `POST` | `/api/auth/register` | — | Create an account (`{ email, username, displayName, password }`), sign in, and email the confirmation link |
+| `POST` | `/api/auth/login` | — | Sign in (`{ identifier, password }`: an email address or a username; `username` is the field's older name and still works) |
 | `POST` | `/api/auth/logout` | — | Revoke the current session |
 | `GET` | `/api/auth/session` | — | Current user, or `{ "user": null }` |
+| `POST` | `/api/auth/verify-email` | — | Confirm an address with the token from the emailed link (`{ token }`) |
+| `POST` | `/api/auth/email/resend` | session | Send the confirmation link again (at most one a minute) |
+| `PUT` | `/api/auth/email` | session | Set or change the email (`{ email, password }`); it must be confirmed again |
 | `PATCH` | `/api/users/me` | ✅ | Update display name |
 | `PUT` | `/api/users/me/avatar` | ✅ | Upload a profile picture (multipart field `avatar`) |
 | `DELETE` | `/api/users/me/avatar` | ✅ | Remove it (back to initials) |
@@ -196,6 +201,40 @@ Users come back with an `avatarUrl` (or `null`). The URL changes whenever the pi
 - **Kept:** albums you created stay with their group (`albums.created_by_id` is `SET NULL`).
 - **Wrapped:** saved Wrapped that include you are dropped, so those years are counted again without you.
 - **How it's built:** it all happens in one transaction (files are removed after it commits). `photos.uploader_id` and `comments.author_id` stay `ON DELETE RESTRICT`: deletion removes those rows first, so nothing is ever orphaned.
+
+## Email and sign-in alerts
+
+Every account has an email address, and nobody gets into the app until it is confirmed.
+
+- **Signing up** takes an email, which is lowercased and unique (`409 EMAIL_TAKEN`). The account starts unverified, the person is signed in so they can finish, and a confirmation email goes out. The email says nothing about who signed up (it goes to whatever was typed in, which may not be theirs).
+- **An address belongs to whoever has confirmed it.** An account that only typed an address in and never opened the link lets go of it when someone else signs up with it or changes to it (it is left with no address and is asked for one). Without this anyone could squat on another person's address and keep its owner from using it. A confirmed address is never taken away.
+- **The link** is `<APP_URL>/verify-email?token=…`: 256 random bits, valid for 24 hours, only its SHA-256 stored (`email_verification_tokens`), single use, and tied to the address it was sent to (changing the address makes older links do nothing). Opening the page confirms the address by calling `POST /api/auth/verify-email` from the page's script, so a mail scanner that only fetches the URL can't use it up; one that runs scripts could, and so can anyone who clicks. That is harmless for an ordinary address (whoever opens it just proves the inbox is theirs). **An address on the admin list is the exception:** it is confirmed only by someone signed in to the account that has it (`403 SIGN_IN_TO_CONFIRM` otherwise; the page sends them to log in and back), and the admin panel can't mark one confirmed either. Then no one can become an admin by signing up with the owner's address and waiting for the owner to open a link. A new link is created before the old ones are retired, so a mail server that is down never takes away a link that was working.
+- **The gate.** Until the address is confirmed, `requireAuth` answers every other request `403 EMAIL_NOT_VERIFIED`. The web app then shows only the page asking for the link (`EmailGate`): it checks in the background every few seconds and when the tab comes back, offers "Send the email again" (one a minute, `429 EMAIL_COOLDOWN` with the wait in `details.retryAfterSeconds`), and "Use a different email". The iPhone app shows the same screen (`EmailGateView`; session phase `needsEmail`).
+- **Accounts from before email was required** have no address. They sign in with their username as before and are asked to add one (with their password) before anything else loads. The admin panel lists them (System → "Accounts without an email").
+- **Changing the address** (Settings → Account → Email, `PUT /api/auth/email`, needs the password; 4 tries per 15 minutes, and "send again" 8) makes it unverified again and emails a link to the new one, and the person is held at the gate until it is opened (a typo is fixed from the gate). If the old address was verified it is told, in case it wasn't the owner. Anyone can still make this server send one email to an address they don't own; the per-account limits, the one-a-minute resend and the 30-sign-ups-an-hour limit per IP are what bound it.
+- **Keeping the account safe** works before the email is confirmed: changing the password, seeing and signing out devices, and deleting the account use `requireSession`, not `requireAuth`. Someone who suspects a break-in, or doesn't want to give an email, isn't stuck.
+- **Signing in** takes the email (any case) or the username. Unknown accounts and wrong passwords get the same answer and the same time.
+- **New sign-in email.** When a device the account hasn't signed in from before signs in, the verified address is emailed the device ("Chrome on Windows") and the time, with a link to Settings → Account to see the devices and sign the others out. A device is told apart by a random id it keeps: the `fw_device` cookie in a browser (400 days), or the `X-Device-Id` header the iPhone app sends from its Keychain. Only a hash is stored (`known_devices`, at most 50 per person). A client that sends neither counts as new every time. Signing up is not a "new device" (the confirmation email is that email), and an unverified address gets no such email.
+- **Sending** (`lib/mail.ts`) goes out over SMTP with nodemailer, in the background (a slow mail server never holds up a request, and a failure is logged and goes no further: the person can ask again). `lib/mail-layout.ts` renders each message as HTML and plain text. Tests swap in a fake transport (`captureMail()` in `test/helpers.ts`).
+- **Without a mail server** (`SMTP_HOST` unset) nothing is sent, so **nobody can confirm an address and nobody gets in**: set up SMTP *before* you deploy this to an existing group. If it isn't there yet, an admin marks people by hand in the admin panel (Users → the person → "Mark email as confirmed"), and the first admin, who can't open the panel yet, uses the command line on the server:
+
+  ```bash
+  npm run admin:verify-email -w server -- you@example.com          # an account that already has this address
+  npm run admin:verify-email -w server -- you@example.com yourname # an older account with no email: give it this one, confirmed
+  ```
+
+  The same command rescues anyone locked out by a mail outage. The server logs a loud warning at startup in production when `SMTP_HOST` is missing, and the System page shows it.
+
+## Admin panel
+
+For whoever runs the server: `/admin` in the web app, with the API under `/api/admin`. There is no admin role in the database. An account is an admin when its email is **verified** and listed in `ADMIN_EMAILS` (so nobody can claim an address without owning its inbox). Anyone signed in who isn't an admin gets a 404 for every admin route and the page, as if there were none (signed-out visitors get the usual 401, and an unconfirmed account its 403). The web app shows an "Admin panel" row at the top of Settings for admins.
+
+- **Overview.** People (accounts, active today / this week / this month, confirmed and waiting emails), groups, what's been shared (photos, videos, comments, reactions, storage), reports, notification devices, 30-day charts of new accounts and posts, and a summary of the system checks.
+- **Users.** Search by name, username, email or id (case-insensitive; `%` and `_` are escaped, not wildcards), filter by confirmed / waiting / no email, newest first with a keyset cursor. A person's page shows their account, what they've shared, their groups, the devices they're signed in on and have been seen on, and has the actions: mark the email confirmed, send the confirmation email again, sign out of every device, and delete the account (the person's own deletion, minus the password; you type the username to confirm; not your own, not an admin's).
+- **Groups.** Search by name or id; a group's page shows its members and roles, activity, storage, open moment and saved Wrapped years, with the actions remove a member (as if they'd left: an owner's role passes on, an emptied group is deleted) and delete the group (type its name). It shows who and how much, never what was posted: photos, captions and comments are not readable from here.
+- **Reports.** What people reported, newest first, with who, about whom or which post and group.
+- **System.** Checks that everything works, each marked working / needs attention / broken / not set up: database (version, migrations applied or failed), photo storage, email (a real SMTP login, nothing sent), web push, iPhone push, video (ffmpeg), the web address in emails, admin access, and data (every group has exactly one owner, no empty groups, people waiting over a week to confirm, accounts with no email, overdue queued notifications, expired sessions and links). It also has "Send test email" (to your own address, 5 per 10 minutes, with the mail server's refusal shown if it says no), the server's uptime and memory, and the last 50 warnings and errors the server logged (kept in memory, cleared by a restart).
+- **Audit.** Every change an admin makes (mark verified, resend, sign out, delete, remove) is written to the server log with who did it.
 
 ## Groups
 

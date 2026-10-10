@@ -5,6 +5,7 @@ import { Dialog } from "../../../components/ui/Dialog";
 import { TextField } from "../../../components/ui/TextField";
 import { getFieldErrors, getFormError } from "../../../lib/form-errors";
 import { toast } from "../../../lib/toast";
+import { useChangeEmail } from "../../auth/hooks";
 import type { User } from "../../auth/types";
 import { useUpdateProfile } from "../../profile/hooks";
 import { useChangePassword, useUpdateUsername } from "../hooks";
@@ -87,6 +88,56 @@ export function UsernameDialog({ open, onClose, user }: DialogProps) {
           hint="You sign in with it. Letters, numbers, periods and underscores."
         />
         <DialogButtons pending={update.isPending} pendingLabel="Saving…" label="Save" disabled={!value.trim() || value.trim().toLowerCase() === user.username} onCancel={close} />
+      </form>
+    </Dialog>
+  );
+}
+
+/** The address is confirmed again afterwards, so this ends with the page asking for the new link. */
+export function EmailDialog({ open, onClose, user }: DialogProps) {
+  const change = useChangeEmail();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const errors = getFieldErrors(change.error);
+  const close = () => {
+    setEmail("");
+    setPassword("");
+    change.reset();
+    onClose();
+  };
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    change.mutate({ email, password }, { onSuccess: () => toast("Check your new inbox for the link") });
+  }
+
+  return (
+    <Dialog open={open} onClose={close} title="Email address" busy={change.isPending}>
+      <form noValidate onSubmit={submit} className="mt-3 flex flex-col gap-4">
+        <p className="text-[0.9375rem] text-sub">
+          Now {user.email}. We'll send a link to the new address, and you'll need to open it before you can keep using the app.
+        </p>
+        {getFormError(change.error) && <Alert>{getFormError(change.error)}</Alert>}
+        <TextField
+          label="New email"
+          type="email"
+          autoComplete="email"
+          autoCapitalize="none"
+          spellCheck={false}
+          maxLength={254}
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          error={errors.email}
+        />
+        <TextField
+          label="Your password"
+          type="password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          error={errors.password}
+        />
+        <DialogButtons pending={change.isPending} pendingLabel="Sending…" label="Send the link" disabled={!email.trim() || !password} onCancel={close} />
       </form>
     </Dialog>
   );

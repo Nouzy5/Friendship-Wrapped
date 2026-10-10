@@ -11,6 +11,9 @@ enum HTTPMethod: String {
 extension Notification.Name {
     /// Posted when the API rejects a request because the session is missing or expired.
     static let sessionDidExpire = Notification.Name("FriendshipWrapped.sessionDidExpire")
+
+    /// Posted when the API holds a request because the signed-in account's email isn't confirmed.
+    static let emailNotVerified = Notification.Name("FriendshipWrapped.emailNotVerified")
 }
 
 /// Talks to the same Express API as the web client and throws `APIError` on failure.
@@ -180,6 +183,8 @@ final class APIClient {
         var request = URLRequest(url: url)
         request.httpMethod = method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // Tells the server which phone this is, for its "new sign-in" email.
+        request.setValue(DeviceIdentity.current, forHTTPHeaderField: "X-Device-Id")
         if let cookie = tokens.cookieHeader {
             request.setValue(cookie, forHTTPHeaderField: "Cookie")
         }
@@ -225,6 +230,9 @@ final class APIClient {
             if error.status == 401 && error.code == "UNAUTHORIZED" && sentWithCurrentSession {
                 tokens.clear()
                 NotificationCenter.default.post(name: .sessionDidExpire, object: nil)
+            }
+            if error.status == 403 && error.code == "EMAIL_NOT_VERIFIED" && sentWithCurrentSession {
+                NotificationCenter.default.post(name: .emailNotVerified, object: nil)
             }
             throw error
         }

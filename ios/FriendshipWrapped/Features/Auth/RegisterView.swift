@@ -6,6 +6,7 @@ struct RegisterView: View {
     @Environment(SessionStore.self) private var session
     @Environment(AppRouter.self) private var router
 
+    @State private var email = ""
     @State private var displayName = ""
     @State private var username = ""
     @State private var password = ""
@@ -14,7 +15,7 @@ struct RegisterView: View {
     @FocusState private var focusedField: Field?
 
     private enum Field {
-        case displayName, username, password
+        case email, displayName, username, password
     }
 
     var body: some View {
@@ -22,6 +23,20 @@ struct RegisterView: View {
             if let message = failure?.formMessage {
                 InlineAlert(message: message)
             }
+
+            FWTextField(
+                label: "Email",
+                text: $email,
+                error: failure?.fieldErrors["email"],
+                hint: "We'll email you a link to confirm it. You can't use the app until you do.",
+                contentType: .emailAddress,
+                keyboard: .emailAddress,
+                autocapitalization: .never,
+                autocorrection: false,
+                submitLabel: .next,
+                onSubmit: { focusedField = .displayName }
+            )
+            .focused($focusedField, equals: .email)
 
             FWTextField(
                 label: "Display name",
@@ -84,7 +99,7 @@ struct RegisterView: View {
 
         Task {
             do {
-                try await session.register(displayName: displayName, username: username, password: password)
+                try await session.register(email: email, displayName: displayName, username: username, password: password)
             } catch {
                 failure = error.asAPIError
             }

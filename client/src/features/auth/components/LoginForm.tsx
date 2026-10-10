@@ -8,7 +8,7 @@ import { useLogin } from "../hooks";
 /** On success the session updates and the auth guard redirects; no navigation needed here. */
 export function LoginForm() {
   const login = useLogin();
-  const [username, setUsername] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
 
   const fieldErrors = getFieldErrors(login.error);
@@ -16,7 +16,7 @@ export function LoginForm() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    login.mutate({ username, password });
+    login.mutate({ identifier, password });
   }
 
   return (
@@ -24,15 +24,16 @@ export function LoginForm() {
       {formError && <Alert>{formError}</Alert>}
 
       <TextField
-        label="Username"
-        name="username"
+        label="Email or username"
+        name="identifier"
         autoComplete="username"
         autoCapitalize="none"
         autoCorrect="off"
         spellCheck={false}
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-        error={fieldErrors.username}
+        inputMode="email"
+        value={identifier}
+        onChange={(e) => setIdentifier(e.target.value)}
+        error={fieldErrors.identifier}
       />
       <TextField
         label="Password"

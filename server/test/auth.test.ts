@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/lib/prisma.js";
 import { hashSessionToken } from "../src/modules/auth/session.service.js";
-import { resetDatabase, sessionCookiePair, sessionSetCookie, testUser } from "./helpers.js";
+import { resetDatabase, sessionCookiePair, sessionSetCookie, testUser, verifyEmailNow } from "./helpers.js";
 
 const app = createApp();
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -15,11 +15,12 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-/** Registers `testUser` with a cookie-keeping agent, i.e. a signed-in browser. */
+/** Registers `testUser` with a cookie-keeping agent, i.e. a signed-in browser whose email is verified. */
 async function signedInAgent() {
   const agent = request.agent(app);
   const res = await agent.post("/api/auth/register").send(testUser);
   expect(res.status).toBe(201);
+  await verifyEmailNow(res.body.user.id);
   return { agent, cookie: sessionCookiePair(res) };
 }
 
@@ -35,6 +36,9 @@ describe("POST /api/auth/register", () => {
         displayName: "Alice",
         avatarUrl: null,
         createdAt: expect.any(String),
+        email: "alice@example.com",
+        emailVerified: false,
+        isAdmin: false,
       },
     });
 
@@ -70,7 +74,7 @@ describe("POST /api/auth/register", () => {
     await request(app).post("/api/auth/register").send(testUser);
     const res = await request(app)
       .post("/api/auth/register")
-      .send({ ...testUser, username: "ALICE" });
+      .send({ ...testUser, username: "ALICE", email: "someone.else@example.com" });
 
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe("USERNAME_TAKEN");
@@ -80,12 +84,12 @@ describe("POST /api/auth/register", () => {
   it("returns field-level validation errors", async () => {
     const res = await request(app)
       .post("/api/auth/register")
-      .send({ username: "a!", displayName: "   ", password: "short" });
+      .send({ email: "not an email", username: "a!", displayName: "   ", password: "short" });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("VALIDATION_ERROR");
     const paths = res.body.error.details.map((d: { path: string }) => d.path);
-    expect(paths).toEqual(expect.arrayContaining(["username", "displayName", "password"]));
+    expect(paths).toEqual(expect.arrayContaining(["email", "username", "displayName", "password"]));
   });
 
   it.each([".alice", "alice.", "al..ice", "al ice", "ab"])("rejects the username %j", async (username) => {

@@ -6,8 +6,12 @@ import { useSession } from "../hooks";
 import { postLoginPath } from "../redirect";
 import { signOutReason } from "../sign-out";
 import { SignedInEffects } from "../../settings/SignedInEffects";
+import { EmailGate } from "./EmailGate";
 
-/** Layout route: renders its children only for signed-in users. */
+/**
+ * Layout route: renders its children only for signed-in users whose email is confirmed. A
+ * signed-in account that hasn't confirmed (or added) one sees only the page asking for it.
+ */
 export function RequireAuth() {
   const session = useSession();
   const location = useLocation();
@@ -34,6 +38,8 @@ export function RequireAuth() {
     const from = signOutReason() ? undefined : { from: `${location.pathname}${location.search}` };
     return <Navigate to="/auth/login" replace state={from} />;
   }
+
+  if (!session.data.emailVerified) return <EmailGate user={session.data} />;
 
   return (
     <>

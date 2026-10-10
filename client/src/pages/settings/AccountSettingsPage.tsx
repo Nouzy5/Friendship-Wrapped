@@ -12,7 +12,7 @@ import { useCurrentGroup } from "../../features/groups/current-group";
 import { DeleteAccountDialog } from "../../features/profile/components/DeleteAccountDialog";
 import { useRemoveAvatar, useUploadAvatar } from "../../features/profile/hooks";
 import { PHOTO_ARCHIVE_URL } from "../../features/settings/api";
-import { DisplayNameDialog, PasswordDialog, UsernameDialog } from "../../features/settings/components/AccountDialogs";
+import { DisplayNameDialog, EmailDialog, PasswordDialog, UsernameDialog } from "../../features/settings/components/AccountDialogs";
 import { useSessions, useSignOutDevice, useSignOutOtherDevices } from "../../features/settings/hooks";
 import { getFormError } from "../../lib/form-errors";
 import { formatRelativeTime } from "../../lib/format";
@@ -121,7 +121,7 @@ function SignedInDevices() {
 export function AccountSettingsPage() {
   usePageTitle("Account");
   const user = useCurrentUser();
-  const [dialog, setDialog] = useState<"name" | "username" | "password" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"name" | "username" | "email" | "password" | "delete" | null>(null);
   const close = () => setDialog(null);
 
   return (
@@ -133,6 +133,7 @@ export function AccountSettingsPage() {
       <SettingsGroup>
         <SettingsButtonRow label="Display name" value={user.displayName} onClick={() => setDialog("name")} />
         <SettingsButtonRow label="Username" value={`@${user.username}`} onClick={() => setDialog("username")} />
+        <SettingsButtonRow label="Email" value={user.email ?? "Add"} onClick={() => setDialog("email")} />
         <SettingsButtonRow label="Password" value="Change" onClick={() => setDialog("password")} />
       </SettingsGroup>
 
@@ -156,6 +157,7 @@ export function AccountSettingsPage() {
 
       <DisplayNameDialog open={dialog === "name"} onClose={close} user={user} />
       <UsernameDialog open={dialog === "username"} onClose={close} user={user} />
+      <EmailDialog open={dialog === "email"} onClose={close} user={user} />
       <PasswordDialog open={dialog === "password"} onClose={close} />
       <DeleteAccountDialog open={dialog === "delete"} onClose={close} />
     </div>

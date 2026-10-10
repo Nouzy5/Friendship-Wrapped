@@ -87,3 +87,28 @@ export function formatShortAgo(isoDate: string, now = new Date()): string {
   if (daysAgo < 7) return weekday.format(date);
   return (date.getFullYear() === now.getFullYear() ? dayMonth : dayMonthYear).format(date);
 }
+
+const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
+
+/** "0 B", "840 KB", "1.2 GB": sizes as a person reads them (1 KB is 1024 bytes). */
+export function formatBytes(bytes: number): string {
+  let value = Math.max(0, bytes);
+  let unit = 0;
+  while (value >= 1024 && unit < BYTE_UNITS.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  const digits = unit === 0 || value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: digits }).format(value)} ${BYTE_UNITS[unit]}`;
+}
+
+/** "3 days 4 h", "5 h 12 min", "42 s": how long something has been running. */
+export function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days} ${nounFor(days, "day")} ${hours} h`;
+  if (hours > 0) return `${hours} h ${minutes} min`;
+  if (minutes > 0) return `${minutes} min`;
+  return `${seconds} s`;
+}

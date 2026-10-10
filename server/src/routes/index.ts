@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireSameOrigin } from "../middleware/same-origin.js";
+import { adminRouter } from "../modules/admin/admin.routes.js";
 import { albumsRouter } from "../modules/albums/albums.routes.js";
 import { authRouter } from "../modules/auth/auth.routes.js";
 import { commentsRouter } from "../modules/comments/comments.routes.js";
@@ -25,6 +26,7 @@ apiRouter.use(requireSameOrigin);
 
 apiRouter.use("/health", healthRouter);
 apiRouter.use("/auth", authRouter);
+apiRouter.use("/admin", adminRouter);
 apiRouter.use("/users", usersRouter);
 apiRouter.use("/groups", groupsRouter);
 apiRouter.use("/invites", invitesRouter);

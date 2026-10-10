@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { sessionQueryKey } from "../../lib/query-client";
-import { fetchSessionUser, login, logout, register } from "./api";
+import { changeEmail, fetchSessionUser, login, logout, register, resendVerificationEmail, verifyEmail } from "./api";
 import { forgetCurrentGroup } from "../groups/current-group";
 import { clearSavedPhotos, turnOffPush } from "../notifications/push";
 import { markSignedOut } from "./sign-out";
@@ -35,6 +35,28 @@ export function useRegister() {
   return useMutation({
     mutationFn: register,
     onSuccess: (user) => rememberSignedInUser(queryClient, user),
+  });
+}
+
+/** Adds or changes the email address. The session then says it's unverified, and the app asks for the link. */
+export function useChangeEmail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: changeEmail,
+    onSuccess: (user) => queryClient.setQueryData(sessionQueryKey, user),
+  });
+}
+
+export function useResendVerificationEmail() {
+  return useMutation({ mutationFn: resendVerificationEmail });
+}
+
+/** Opens a link from the confirmation email, then refreshes who's signed in (they may be let in now). */
+export function useVerifyEmail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: verifyEmail,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: sessionQueryKey }),
   });
 }
 

@@ -87,6 +87,11 @@ export async function deleteAccount(userId: string, password: string): Promise<v
     ]);
   }
 
+  await removeAccount(userId);
+}
+
+/** The deletion itself, once whoever asked for it has been confirmed (the person, or the admin panel). */
+export async function removeAccount(userId: string): Promise<void> {
   const { storageKeys, deletedGroupIds } = await withTransaction(async (tx) => {
     const deletedGroupIds: string[] = [];
     for (const { group } of await groupsRepository.listGroupsForUser(userId, tx)) {

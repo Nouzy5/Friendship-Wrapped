@@ -39,6 +39,11 @@ export function deleteSessionByPublicId(userId: string, publicId: string) {
   return prisma.session.deleteMany({ where: { userId, id: { startsWith: publicId } } });
 }
 
+/** Signs the user out everywhere (for the admin panel). */
+export function deleteAllSessions(userId: string) {
+  return prisma.session.deleteMany({ where: { userId } });
+}
+
 /** Signs the user out everywhere except `keepId`. */
 export function deleteOtherSessions(userId: string, keepId: string) {
   return prisma.session.deleteMany({ where: { userId, id: { not: keepId } } });

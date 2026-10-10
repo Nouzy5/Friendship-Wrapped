@@ -53,6 +53,41 @@ const envSchema = z.object({
   // the server runs as before and refuses videos (503 VIDEO_UNAVAILABLE).
   FFMPEG_PATH: optional(z.string().min(1)),
   FFPROBE_PATH: optional(z.string().min(1)),
+
+  // Email: the verification link and the "new sign-in" notice. Optional: without SMTP_HOST nothing is
+  // sent. In development the email is printed to the server log instead, so the link can be
+  // opened from there; in production nothing is printed (a link in a log is a credential) and
+  // the admin panel can mark an address verified by hand.
+  SMTP_HOST: optional(z.string().min(1)),
+  SMTP_PORT: optional(z.coerce.number().int().min(1).max(65_535)),
+  /** True for implicit TLS (usually port 465). Otherwise the connection upgrades with STARTTLS when the server offers it. */
+  SMTP_SECURE: optional(z.stringbool()),
+  SMTP_USER: optional(z.string().min(1)),
+  SMTP_PASSWORD: optional(z.string().min(1)),
+  /** The sender, e.g. `Friendship Wrapped <no-reply@example.com>`. Required with SMTP_HOST. */
+  MAIL_FROM: optional(z.string().min(3).max(200)),
+  /** The web app's public address, for the links in emails (no trailing slash needed). Required with SMTP_HOST in production. */
+  APP_URL: optional(z.url({ protocol: /^https?$/ })),
+
+  /** Accounts one address may create per hour (default 30). Every sign-up sends an email, so this keeps it from being used to flood inboxes. Behind a proxy everyone shares an address: raise it for a big group signing up at once. */
+  SIGNUP_LIMIT_PER_HOUR: optional(z.coerce.number().int().min(1)),
+
+  // The admin panel is for whoever runs the server: a comma-separated list of email addresses.
+  // Only an account whose email is verified, and listed here, gets in.
+  ADMIN_EMAILS: optional(
+    z
+      .string()
+      .transform((list) => list.split(",").map((email) => email.trim().toLowerCase()).filter(Boolean))
+      .pipe(z.array(z.email({ message: "ADMIN_EMAILS must be a comma-separated list of email addresses" }))),
+  ),
+}).superRefine((settings, context) => {
+  if (!settings.SMTP_HOST) return;
+  if (!settings.MAIL_FROM) {
+    context.addIssue({ code: "custom", path: ["MAIL_FROM"], message: "MAIL_FROM is required when SMTP_HOST is set" });
+  }
+  if (settings.NODE_ENV === "production" && !settings.APP_URL) {
+    context.addIssue({ code: "custom", path: ["APP_URL"], message: "APP_URL is required in production when SMTP_HOST is set" });
+  }
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -64,3 +99,9 @@ if (!parsed.success) {
 export const env = parsed.data;
 export const isProduction = env.NODE_ENV === "production";
 export const isTest = env.NODE_ENV === "test";
+
+/** The web app's address, for links in emails (the dev server's, unless APP_URL says otherwise). */
+export const appUrl = (env.APP_URL ?? "http://localhost:5173").replace(/\/+$/, "");
+
+/** The addresses allowed into the admin panel (lowercase). Empty: nobody is. */
+export const adminEmails: ReadonlySet<string> = new Set(env.ADMIN_EMAILS ?? []);

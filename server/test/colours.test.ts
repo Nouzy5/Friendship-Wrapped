@@ -49,7 +49,8 @@ describe("member colours", () => {
     const token = await createInvite(owner.agent, group.id);
     const joined = await late.agent.post(`/api/invites/${token}/accept`);
     expect(joined.body.group.myColor).toBe("SUN");
-  });
+    // Fourteen people sign up here, each with a real password hash: more than the default 5 seconds on a slow machine.
+  }, 30_000);
 
   it("lets you pick any colour nobody else in the group has", async () => {
     const { owner: alice, members, group } = await groupWith(app, "alice", "bob");

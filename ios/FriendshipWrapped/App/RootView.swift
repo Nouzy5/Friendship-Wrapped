@@ -101,6 +101,8 @@ struct RootView: View {
             }
         case .signedOut:
             AuthFlowView()
+        case .needsEmail(let user):
+            EmailGateView(user: user)
         case .signedIn:
             MainTabView()
         }

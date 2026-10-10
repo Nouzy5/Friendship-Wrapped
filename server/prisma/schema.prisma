@@ -18,11 +18,19 @@ model User {
   username            String               @unique @db.VarChar(20)
   displayName         String               @map("display_name") @db.VarChar(40)
   passwordHash        String               @map("password_hash") @db.VarChar(255)
+  /// Always stored lowercase; uniqueness is enforced by the database. Null only for accounts made
+  /// before an email was required: they're asked for one the next time they open the app.
+  email               String?              @unique @db.VarChar(254)
+  /// When the person proved the address is theirs by opening the link we sent it. Null until then,
+  /// and again whenever the address changes. Nobody uses the app without it.
+  emailVerifiedAt     DateTime?            @map("email_verified_at")
   /// Object-storage key of the profile picture; null shows initials instead.
   avatarKey           String?              @map("avatar_key") @db.VarChar(255)
   createdAt           DateTime             @default(now()) @map("created_at")
   updatedAt           DateTime             @updatedAt @map("updated_at")
   sessions            Session[]
+  emailTokens         EmailVerificationToken[]
+  knownDevices        KnownDevice[]
   memberships         GroupMember[]
   invites             InviteToken[]
   photos              Photo[]
@@ -60,6 +68,41 @@ model Session {
   @@index([userId])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+/// A one-time link that proves a person owns an email address. Only the hash is stored, like a
+/// session token; the raw token lives in the emailed link alone.
+model EmailVerificationToken {
+  /// SHA-256 (hex) of the token.
+  id        String   @id @db.Char(64)
+  userId    String   @map("user_id") @db.Char(36)
+  /// The address this link verifies. If the person changes their address afterwards, an older link
+  /// no longer matches and does nothing.
+  email     String   @db.VarChar(254)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("email_verification_tokens")
+}
+
+/// A browser or phone a person has signed in from, so that a sign-in from one we haven't seen
+/// before can be mentioned in an email. A device is told apart by a random id it keeps (a cookie
+/// on the web, a header in the iPhone app); only a hash of that id is stored.
+model KnownDevice {
+  userId      String   @map("user_id") @db.Char(36)
+  /// SHA-256 (hex) of the device's random id.
+  id          String   @db.Char(64)
+  /// "Chrome on Windows": what the person is told in the email.
+  label       String   @db.VarChar(80)
+  firstSeenAt DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, id])
+  @@map("known_devices")
 }
 
 enum GroupRole {

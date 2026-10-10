@@ -13,6 +13,18 @@ export const usernameSchema = z
     message: "Periods can't be at the start, the end, or next to each other",
   });
 
+/**
+ * An email address: trimmed and lowercased (one address is one account), and a real address
+ * shape, since a confirmation link has to reach it.
+ */
+export const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(1, "Enter your email address")
+  .max(254, "Email address must be at most 254 characters")
+  .pipe(z.email("Enter a valid email address"));
+
 export const displayNameSchema = z
   .string()
   .trim()

@@ -16,6 +16,12 @@ struct User: Codable, Identifiable, Hashable {
     let displayName: String
     let avatarUrl: String?
     let createdAt: Date
+    /// Nil for an account made before an email was required: it's asked for one.
+    let email: String?
+    /// Nobody gets into the app until they've opened the link we emailed.
+    let emailVerified: Bool
+    /// Whether the admin panel (a page of the web app) is open to this person.
+    let isAdmin: Bool
 
     /// "Nicolas" from "Nicolas Szántai".
     var firstName: String {

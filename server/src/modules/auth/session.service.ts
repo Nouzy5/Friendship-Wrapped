@@ -99,6 +99,12 @@ export async function revokeSessionById(userId: string, publicId: string): Promi
   if (count === 0) throw notFound("Session not found");
 }
 
+/** Signs the person out of every device, this one too. Returns how many sessions ended. */
+export async function revokeAllSessions(userId: string): Promise<number> {
+  const { count } = await sessionRepository.deleteAllSessions(userId);
+  return count;
+}
+
 /** Signs the person out everywhere but here. */
 export async function revokeOtherSessions(userId: string, currentId: string): Promise<void> {
   await sessionRepository.deleteOtherSessions(userId, currentId);

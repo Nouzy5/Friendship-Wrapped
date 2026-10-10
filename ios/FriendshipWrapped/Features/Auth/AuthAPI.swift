@@ -1,13 +1,20 @@
 import Foundation
 
 struct LoginInput: Encodable {
-    let username: String
+    /// The email address, or the username the account has always had.
+    let identifier: String
     let password: String
 }
 
 struct RegisterInput: Encodable {
+    let email: String
     let username: String
     let displayName: String
+    let password: String
+}
+
+struct ChangeEmailInput: Encodable {
+    let email: String
     let password: String
 }
 
@@ -42,6 +49,19 @@ extension APIClient {
 
     func logout() async throws {
         try await perform(.post, "/auth/logout")
+    }
+
+    /// Sets or changes the address (confirmed with the password). It counts as unconfirmed until the
+    /// emailed link is opened, so the returned user has `emailVerified == false`. `409 EMAIL_TAKEN`
+    /// when another account has it.
+    func changeEmail(email: String, password: String) async throws -> User {
+        let response: UserResponse = try await send(.put, "/auth/email", body: ChangeEmailInput(email: email, password: password))
+        return response.user
+    }
+
+    /// Emails the confirmation link again. `429 EMAIL_COOLDOWN` if one went out in the last minute.
+    func resendVerificationEmail() async throws {
+        try await perform(.post, "/auth/email/resend")
     }
 
     func updateProfile(_ input: UpdateProfileInput) async throws -> User {

@@ -21,11 +21,28 @@ function handleSessionExpiry(error: Error): void {
   }
 }
 
+/**
+ * The server holds every request of an account whose email isn't confirmed (it's signed in, but not
+ * let in). Looking at who's signed in again shows the page asking for the link; if the address
+ * was confirmed meanwhile, it simply lets the person carry on.
+ */
+function handleUnverifiedEmail(error: Error): void {
+  if (error instanceof ApiError && error.status === 403 && error.code === "EMAIL_NOT_VERIFIED") {
+    void queryClient.invalidateQueries({ queryKey: sessionQueryKey });
+  }
+}
+
 export const queryClient = new QueryClient({
-  queryCache: new QueryCache({ onError: handleSessionExpiry }),
+  queryCache: new QueryCache({
+    onError: (error) => {
+      handleSessionExpiry(error);
+      handleUnverifiedEmail(error);
+    },
+  }),
   mutationCache: new MutationCache({
     onError: (error, _variables, _context, mutation) => {
       handleSessionExpiry(error);
+      handleUnverifiedEmail(error);
       const message = mutation.meta?.errorToast;
       if (message) {
         const offline = error instanceof ApiError && error.isNetworkError;

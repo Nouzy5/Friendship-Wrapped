@@ -8,7 +8,8 @@ The same design as the web app ([technical reference](../docs/REFERENCE.md#redes
 
 | Web | iOS |
 | --- | --- |
-| `/auth/login`, `/auth/register` | Welcome screen (the colour-stripe mark) → Log in / Create account |
+| `/auth/login`, `/auth/register` | Welcome screen (the colour-stripe mark) → Log in (email or username) / Create account (email, name, username, password) |
+| `/verify-email` | The link in the confirmation email opens the web app. Until it is confirmed the app shows only a "Check your inbox" screen (accounts from before email was required are asked to add one); it looks for the confirmation by itself and when the app comes back to the front |
 | `/onboarding` | "Welcome!" screen after sign-up: create your first group or join with a link |
 | `/home`, `/groups/:id` | **Home** tab is the current group's feed. The group's name opens a list of your groups (+ New group); the header also has the grid/feed switch, group settings and your avatar (→ Settings). Alone in a group, the invite card comes first |
 | Feed post | The photo with a name tag in the poster's colour, a "…" menu (add to an album, save photo when allowed, report, block, delete your own), reactions as pills with the people who reacted as dots in their colours (yours outlined in your colour), comments, favourite star, caption |
@@ -16,7 +17,7 @@ The same design as the web app ([technical reference](../docs/REFERENCE.md#redes
 | Shutter, `/camera` | Full-screen camera: square viewfinder, flash, switch camera, grid lines, the group you're posting to and who'll see it; then a caption and "Post to …" with progress. Library photos, videos (up to a minute) and Live Photos work too |
 | `/memories` | **Memories** tab: On this day, then Timeline (months, jump to a month, "Taken by" one person), Albums and Favorites |
 | `/groups/:id/settings` | Group settings: your colour (12; taken ones show who has them), group photo, members (report, block, remove), name and emoji, mute, invite links, leave |
-| `/settings/*` | Settings: Account (photo, name, username, password, signed-in devices, download your photos as a zip, delete account), Notifications (saved with your account; this iPhone's own switch turns Apple push on, see [Push notifications](#push-notifications)), Appearance (Match device / Light / Dark, app icon, reduce motion, haptics), Privacy & safety (photo saving, your name in Wrapped, blocked people, your invite links), Photos & data (camera, quality, mobile data, data saver), Terms |
+| `/settings/*` | Settings: Account (photo, name, username, email, password, signed-in devices, download your photos as a zip, delete account), Notifications (saved with your account; this iPhone's own switch turns Apple push on, see [Push notifications](#push-notifications)), Appearance (Match device / Light / Dark, app icon, reduce motion, haptics), Privacy & safety (photo saving, your name in Wrapped, blocked people, your invite links), Photos & data (camera, quality, mobile data, data saver), Terms |
 | `/wrapped`, `/wrapped/:year` | **Wrapped** tab and the full-screen story, with everyone's share of the year in their colours |
 
 - **App icon.** Settings → Appearance → App icon switches the Home Screen icon between Classic, Night and "Your colour" (one alternate icon per member colour; `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES` in `project.yml`). iOS confirms each change with an alert of its own, so the icon only changes when you choose it.

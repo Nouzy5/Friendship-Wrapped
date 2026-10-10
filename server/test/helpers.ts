@@ -8,6 +8,7 @@ import request, { type Response } from "supertest";
 import { expect } from "vitest";
 import { env } from "../src/config/env.js";
 import { videoSupported } from "../src/lib/ffmpeg.js";
+import { setMailTransport, type MailMessage, type MailTransport } from "../src/lib/mail.js";
 import { prisma } from "../src/lib/prisma.js";
 import { deletePrefix } from "../src/lib/storage.js";
 
@@ -34,6 +35,7 @@ export async function resetDatabase(): Promise<void> {
 }
 
 export const testUser = {
+  email: "alice@example.com",
   username: "alice",
   displayName: "Alice",
   password: "correct horse battery staple",
@@ -41,16 +43,56 @@ export const testUser = {
 
 export type TestUser = { id: string; username: string; displayName: string };
 
-/** Registers `username` and returns a cookie-keeping agent signed in as them (a "browser"). */
+/** The address `signUp` gives a user. */
+export const emailOf = (username: string) => `${username}@example.com`;
+
+/** Registers `username` and returns a cookie-keeping agent signed in as them (a "browser"). Their email is already verified. */
 export async function signUp(app: Express, username: string) {
   const agent = request.agent(app);
   const res = await agent.post("/api/auth/register").send({
+    email: emailOf(username),
     username,
     displayName: username[0]!.toUpperCase() + username.slice(1),
     password: testUser.password,
   });
   if (res.status !== 201) throw new Error(`signUp(${username}) failed: ${res.status} ${JSON.stringify(res.body)}`);
-  return { agent, user: res.body.user as TestUser };
+  const user = res.body.user as TestUser;
+  await verifyEmailNow(user.id);
+  return { agent, user };
+}
+
+/** Marks an account's email verified without going through the emailed link. */
+export async function verifyEmailNow(userId: string): Promise<void> {
+  await prisma.user.update({ where: { id: userId }, data: { emailVerifiedAt: new Date() } });
+}
+
+export type SentMail = MailMessage & { from: string };
+
+/** A mail transport that files every message into `sent`. */
+export function mailTransportInto(sent: SentMail[]): MailTransport {
+  return {
+    send: async (message) => {
+      sent.push(message);
+    },
+    verify: async () => {},
+  };
+}
+
+/**
+ * Routes outgoing email into the returned list instead of an SMTP server, for as long as the test
+ * file runs. Call `await settleMail()` before looking: emails are sent in the background.
+ */
+export function captureMail(): SentMail[] {
+  const sent: SentMail[] = [];
+  setMailTransport(mailTransportInto(sent));
+  return sent;
+}
+
+/** The token in the link of a verification email, as the person would open it. */
+export function verificationTokenIn(mail: SentMail): string {
+  const token = /[?&]token=([A-Za-z0-9_-]{43})/.exec(mail.text)?.[1];
+  if (!token) throw new Error(`No verification link in: ${mail.text}`);
+  return token;
 }
 
 export type Agent = ReturnType<typeof request.agent>;

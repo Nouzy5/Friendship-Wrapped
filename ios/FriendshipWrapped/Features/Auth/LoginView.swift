@@ -6,14 +6,14 @@ struct LoginView: View {
     @Environment(SessionStore.self) private var session
     @Environment(AppRouter.self) private var router
 
-    @State private var username = ""
+    @State private var identifier = ""
     @State private var password = ""
     @State private var isPending = false
     @State private var failure: APIError?
     @FocusState private var focusedField: Field?
 
     private enum Field {
-        case username, password
+        case identifier, password
     }
 
     var body: some View {
@@ -23,15 +23,16 @@ struct LoginView: View {
             }
 
             FWTextField(
-                label: "Username",
-                text: $username,
-                error: failure?.fieldErrors["username"],
+                label: "Email or username",
+                text: $identifier,
+                error: failure?.fieldErrors["identifier"] ?? failure?.fieldErrors["username"],
                 contentType: .username,
+                keyboard: .emailAddress,
                 autocapitalization: .never,
                 submitLabel: .next,
                 onSubmit: { focusedField = .password }
             )
-            .focused($focusedField, equals: .username)
+            .focused($focusedField, equals: .identifier)
 
             FWTextField(
                 label: "Password",
@@ -63,7 +64,7 @@ struct LoginView: View {
 
         Task {
             do {
-                try await session.login(username: username, password: password)
+                try await session.login(identifier: identifier, password: password)
             } catch {
                 failure = error.asAPIError
             }
