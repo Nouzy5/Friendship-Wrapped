@@ -1,6 +1,17 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { sessionQueryKey } from "../../lib/query-client";
-import { changeEmail, fetchSessionUser, login, logout, register, resendVerificationEmail, verifyEmail } from "./api";
+import {
+  changeEmail,
+  checkPasswordResetLink,
+  fetchSessionUser,
+  login,
+  logout,
+  register,
+  requestPasswordReset,
+  resendVerificationEmail,
+  resetPassword,
+  verifyEmail,
+} from "./api";
 import { forgetCurrentGroup } from "../groups/current-group";
 import { clearSavedPhotos, turnOffPush } from "../notifications/push";
 import { markSignedOut } from "./sign-out";
@@ -57,6 +68,41 @@ export function useVerifyEmail() {
   return useMutation({
     mutationFn: verifyEmail,
     onSettled: () => queryClient.invalidateQueries({ queryKey: sessionQueryKey }),
+  });
+}
+
+export function useRequestPasswordReset() {
+  return useMutation({ mutationFn: requestPasswordReset });
+}
+
+/**
+ * Whether the link from a reset email still works, asked once when its page opens (so nobody types a
+ * new password for a link that has expired). Not asked again on a refocus: a link that has just been
+ * used would then look broken under the success message.
+ */
+export function useResetLinkCheck(token: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["password-reset", "link", token],
+    queryFn: async () => {
+      await checkPasswordResetLink(token ?? "");
+      return true;
+    },
+    enabled: enabled && Boolean(token),
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * Chooses a new password with a link from an email. Every session of the account ended with it, so
+ * if this browser was signed in to it, it's signed out now: look again at who's signed in.
+ */
+export function useResetPassword() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: resetPassword,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sessionQueryKey }),
   });
 }
 

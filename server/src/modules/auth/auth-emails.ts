@@ -7,6 +7,11 @@ export function verifyEmailUrl(token: string): string {
   return `${appUrl}/verify-email?token=${encodeURIComponent(token)}`;
 }
 
+/** The page in the web app where a new password is chosen, given the token from the link. */
+export function resetPasswordUrl(token: string): string {
+  return `${appUrl}/reset-password?token=${encodeURIComponent(token)}`;
+}
+
 /** Where someone goes to see their signed-in devices and sign the others out. */
 export const securityUrl = () => `${appUrl}/settings/account`;
 
@@ -44,6 +49,41 @@ export function newSignInMessage(input: { to: string; name: string; device: stri
     footnote: "You get this email the first time you sign in on a new phone or browser.",
   });
   return { to: input.to, subject: "New sign-in to your Friendship Wrapped account", ...content };
+}
+
+/**
+ * The link to choose a new password. Says nothing about whose account it is: anyone can ask for it
+ * with a username, and it goes to the address on that account, which may not be the asker's.
+ */
+export function passwordResetMessage(input: { to: string; url: string; validForMinutes: number }): MailMessage {
+  const validFor = input.validForMinutes % 60 === 0
+    ? `${input.validForMinutes / 60} ${input.validForMinutes === 60 ? "hour" : "hours"}`
+    : `${input.validForMinutes} minutes`;
+  const content = renderEmail({
+    preheader: "Choose a new password for your account.",
+    heading: "Reset your password",
+    paragraphs: [
+      "Someone asked to reset the password of the Friendship Wrapped account that uses this email address. If that was you, choose a new password.",
+      `The link works for ${validFor}, and only once. Choosing a new password signs you out of every device.`,
+    ],
+    button: { label: "Choose a new password", url: input.url },
+    footnote: "If you didn't ask for this, you can ignore this email. Your password stays the same.",
+  });
+  return { to: input.to, subject: "Reset your Friendship Wrapped password", ...content };
+}
+
+/** Sent after a reset, in case it wasn't the owner who did it. */
+export function passwordChangedMessage(input: { to: string; name: string; at: Date }): MailMessage {
+  const content = renderEmail({
+    preheader: `Changed ${formatWhen(input.at)}.`,
+    heading: "Your password was changed",
+    paragraphs: [
+      `Hi ${input.name}, the password of your Friendship Wrapped account was reset on ${formatWhen(input.at)}, and every device was signed out.`,
+      "If that was you, there's nothing to do. If it wasn't, someone can read this mailbox: reset your password again, then secure your email account too.",
+    ],
+    button: { label: "Log in", url: `${appUrl}/auth/login` },
+  });
+  return { to: input.to, subject: "Your Friendship Wrapped password was changed", ...content };
 }
 
 /** Sent to the address that is being replaced, in case someone else is changing it. */

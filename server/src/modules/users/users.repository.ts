@@ -7,8 +7,11 @@ export function findUserSummaries(userIds: string[], db: DbClient = prisma) {
 }
 
 /** A new account's email starts unverified: the address is confirmed by the link sent to it. */
-export function createUser(data: { email: string; username: string; displayName: string; passwordHash: string }) {
-  return prisma.user.create({ data, select: publicUserSelect });
+export function createUser(
+  data: { email: string; username: string; displayName: string; passwordHash: string },
+  db: DbClient = prisma,
+) {
+  return db.user.create({ data, select: publicUserSelect });
 }
 
 /** The one query that reads the password hash — used only to verify a login. */
@@ -41,9 +44,17 @@ export function findEmailAccount(id: string) {
   });
 }
 
+/** The account an email address or a username names, with what's needed to write to its owner. */
+export function findEmailAccountBy(where: { username: string } | { email: string }) {
+  return prisma.user.findUnique({
+    where,
+    select: { id: true, username: true, displayName: true, email: true, emailVerifiedAt: true },
+  });
+}
+
 /** Sets the address and clears the verification: the person has to confirm the new one. */
-export function setEmail(id: string, email: string) {
-  return prisma.user.update({ where: { id }, data: { email, emailVerifiedAt: null }, select: publicUserSelect });
+export function setEmail(id: string, email: string, db: DbClient = prisma) {
+  return db.user.update({ where: { id }, data: { email, emailVerifiedAt: null }, select: publicUserSelect });
 }
 
 /**

@@ -3,12 +3,13 @@ import { AppError, badRequest, notFound } from "../../lib/errors.js";
 import { logger } from "../../lib/logger.js";
 import { queueMail, sendMail, type MailMessage } from "../../lib/mail.js";
 import { verifyPassword } from "../../lib/password.js";
-import { isUniqueConstraintError } from "../../lib/prisma.js";
+import { isUniqueConstraintError, withTransaction } from "../../lib/prisma.js";
 import { generateToken, sha256Hex } from "../../lib/tokens.js";
 import { toPublicUser, type PublicUser } from "../users/user.dto.js";
 import * as usersRepository from "../users/users.repository.js";
 import { emailChangedMessage, verifyEmailMessage, verifyEmailUrl } from "./auth-emails.js";
 import * as repository from "./email-verification.repository.js";
+import * as passwordResetRepository from "./password-reset.repository.js";
 import type { ChangeEmailInput } from "./auth.schemas.js";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -158,13 +159,19 @@ export async function changeEmail(userId: string, { email, password }: ChangeEma
 
   let user: PublicUser;
   try {
-    // Someone who only claimed this address, without confirming it, doesn't hold it against us.
-    await repository.releaseUnconfirmedEmail(email);
-    user = toPublicUser(await usersRepository.setEmail(userId, email));
+    // Someone who only claimed this address, without confirming it, doesn't hold it against us
+    // (and keeps it if we can't have it after all).
+    user = await withTransaction(async (tx) => {
+      await repository.releaseUnconfirmedEmail(email, tx);
+      return toPublicUser(await usersRepository.setEmail(userId, email, tx));
+    });
   } catch (error) {
     if (isUniqueConstraintError(error)) throw emailTaken();
     throw error;
   }
+
+  // A reset link was for the old address: it must not come back to life if the person changes back.
+  await passwordResetRepository.deleteTokensForUser(userId);
 
   if (account.email && account.emailVerifiedAt) {
     queueMail(emailChangedMessage({ to: account.email, name: account.displayName, newEmail: email, at: new Date() }));

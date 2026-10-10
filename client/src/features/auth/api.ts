@@ -34,6 +34,24 @@ export async function resendVerificationEmail(): Promise<void> {
   await apiRequest<null>("/auth/email/resend", { method: "POST" });
 }
 
+/**
+ * Emails a link to choose a new password, to the address on the account the email or username names.
+ * Succeeds whether or not there is such an account: the server won't say who has one.
+ */
+export async function requestPasswordReset(identifier: string): Promise<void> {
+  await apiRequest<null>("/auth/forgot-password", { method: "POST", body: { identifier } });
+}
+
+/** Whether a link from a reset email still works. Changes nothing. */
+export async function checkPasswordResetLink(token: string): Promise<void> {
+  await apiRequest<null>("/auth/reset-password/check", { method: "POST", body: { token } });
+}
+
+/** Sets the new password with the link's token and signs every device of the account out. */
+export async function resetPassword(input: { token: string; newPassword: string }): Promise<void> {
+  await apiRequest<null>("/auth/reset-password", { method: "POST", body: input });
+}
+
 /** Sets or changes the address; it's unverified again until the new link is opened. */
 export async function changeEmail(input: { email: string; password: string }): Promise<User> {
   const { user } = await apiRequest<{ user: User }>("/auth/email", { method: "PUT", body: input });

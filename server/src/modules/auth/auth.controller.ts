@@ -4,14 +4,18 @@ import { authenticate, currentSessionId, currentUser } from "./auth.middleware.j
 import {
   changeEmailSchema,
   changePasswordSchema,
+  forgotPasswordSchema,
   loginSchema,
   registerSchema,
+  resetPasswordSchema,
+  resetTokenSchema,
   sessionParamsSchema,
   verifyEmailSchema,
 } from "./auth.schemas.js";
 import * as authService from "./auth.service.js";
 import { deviceHint, setDeviceCookie } from "./devices.js";
 import * as emailVerification from "./email-verification.service.js";
+import * as passwordReset from "./password-reset.service.js";
 import { clearSessionCookie, readSessionCookie, setSessionCookie } from "./session-cookie.js";
 import { publicSessionId } from "./session.dto.js";
 import * as sessionService from "./session.service.js";
@@ -73,6 +77,37 @@ export const changeEmail: RequestHandler = async (req, res) => {
   const input = changeEmailSchema.parse(req.body);
   const user = await emailVerification.changeEmail(currentUser(req).id, input);
   res.json({ user });
+};
+
+/**
+ * POST /auth/forgot-password — `{ identifier }`, an email address or a username. Always 204, whether
+ * or not there is such an account: the answer mustn't tell who has one.
+ */
+export const forgotPassword: RequestHandler = async (req, res) => {
+  const input = forgotPasswordSchema.parse(req.body);
+  await passwordReset.requestPasswordReset(input.identifier);
+  res.status(204).end();
+};
+
+/** POST /auth/reset-password/check — `{ token }`: 204 if the link still works. Changes nothing, so a mail scanner opening it can't spend the link. */
+export const checkPasswordResetLink: RequestHandler = async (req, res) => {
+  const input = resetTokenSchema.safeParse(req.body);
+  if (!input.success) throw new AppError(400, "INVALID_LINK", "This link isn't valid");
+
+  await passwordReset.checkResetLink(input.data.token);
+  res.status(204).end();
+};
+
+/** POST /auth/reset-password — `{ token, newPassword }` from the emailed link. Signs every device out; the person logs in again. */
+export const resetPassword: RequestHandler = async (req, res) => {
+  const link = resetTokenSchema.safeParse(req.body);
+  if (!link.success) throw new AppError(400, "INVALID_LINK", "This link isn't valid");
+  const input = resetPasswordSchema.parse(req.body);
+
+  // A browser signed in to this account has a dead cookie now; the next request clears it. One signed
+  // in to someone else's account keeps working, so the cookie is left alone.
+  await passwordReset.resetPassword(input.token, input.newPassword);
+  res.status(204).end();
 };
 
 /** PUT /users/me/password — `{ currentPassword, newPassword }`; every other session is signed out. */

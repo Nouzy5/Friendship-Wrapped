@@ -286,7 +286,11 @@ export async function integrityCounts(now: Date) {
       prisma.groupMember.groupBy({ by: ["groupId"], where: { role: "OWNER" }, _count: { _all: true } }),
       prisma.group.count({ where: { members: { none: {} } } }),
       prisma.session.count({ where: { expiresAt: { lte: now } } }),
-      prisma.emailVerificationToken.count({ where: { expiresAt: { lte: now } } }),
+      // Confirmation links and password reset links alike: both are swept away once a while after they expire.
+      Promise.all([
+        prisma.emailVerificationToken.count({ where: { expiresAt: { lte: now } } }),
+        prisma.passwordResetToken.count({ where: { expiresAt: { lte: now } } }),
+      ]).then(([confirmation, reset]) => confirmation + reset),
       prisma.user.count({ where: { email: { not: null }, emailVerifiedAt: null, createdAt: { lt: new Date(now.getTime() - 7 * DAY) } } }),
       prisma.user.count({ where: { email: null } }),
       prisma.queuedNotification.count({ where: { deliverAt: { lt: new Date(now.getTime() - 60 * 60 * 1000) } } }),
