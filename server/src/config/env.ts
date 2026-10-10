@@ -11,6 +11,19 @@ if (existsSync(envFilePath)) process.loadEnvFile(envFilePath);
 const optional = <T extends z.ZodType>(schema: T) =>
   z.preprocess((value) => (value === "" ? undefined : value), schema.optional());
 
+/**
+ * How many reverse proxies sit in front of the API: a count, or `false` for none. Never `true`:
+ * that would believe every X-Forwarded-For entry, and anyone can write those.
+ */
+const proxyCount = z
+  .string()
+  .trim()
+  .regex(/^(false|\d{1,2})$/i, {
+    message:
+      'TRUST_PROXY must be the number of reverse proxies in front of the API (e.g. 1), or false. "true" is not accepted: it would trust a forged X-Forwarded-For',
+  })
+  .transform((value) => (value.toLowerCase() === "false" ? 0 : Number(value)));
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   // Namespaced so a generic PORT/HOST exported by other tooling (e.g. a dev
@@ -69,8 +82,11 @@ const envSchema = z.object({
   /** The web app's public address, for the links in emails (no trailing slash needed). Required with SMTP_HOST in production. */
   APP_URL: optional(z.url({ protocol: /^https?$/ })),
 
-  /** Accounts one address may create per hour (default 30). Every sign-up sends an email, so this keeps it from being used to flood inboxes. Behind a proxy everyone shares an address: raise it for a big group signing up at once. */
+  /** Accounts one address may create per hour (default 30). Every sign-up sends an email, so this keeps it from being used to flood inboxes. Raise it for a big group signing up from one address (one Wi-Fi network). */
   SIGNUP_LIMIT_PER_HOUR: optional(z.coerce.number().int().min(1)),
+
+  /** How many reverse proxies (nginx, Caddy, a platform's load balancer, …) the API sits behind. Unset or `false`: none, and X-Forwarded-For is ignored. Set it exactly: too low and every visitor shares the proxy's address (so the per-address limits above become global); too high and a visitor can fake theirs. */
+  TRUST_PROXY: optional(proxyCount),
 
   // The admin panel is for whoever runs the server: a comma-separated list of email addresses.
   // Only an account whose email is verified, and listed here, gets in.
@@ -102,6 +118,9 @@ export const isTest = env.NODE_ENV === "test";
 
 /** The web app's address, for links in emails (the dev server's, unless APP_URL says otherwise). */
 export const appUrl = (env.APP_URL ?? "http://localhost:5173").replace(/\/+$/, "");
+
+/** How many reverse proxies are in front of the API (0: none, the default). */
+export const trustProxyCount = env.TRUST_PROXY ?? 0;
 
 /** The addresses allowed into the admin panel (lowercase). Empty: nobody is. */
 export const adminEmails: ReadonlySet<string> = new Set(env.ADMIN_EMAILS ?? []);
